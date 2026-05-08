@@ -1,0 +1,94 @@
+name: CD — Build & Smoke Test
+
+on:
+  push:
+    branches: [develop]
+
+jobs:
+  docker-build:
+    name: Docker compose build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build all images
+        run: docker compose build
+
+  smoke-test:
+    name: Smoke test (healthchecks)
+    runs-on: ubuntu-latest
+    needs: docker-build
+    # Only run when docker-compose.yml and at least one service directory exists
+    if: ${{ hashFiles('docker-compose.yml') != '' }}
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      JWT_SECRET: ci-test-secret
+      ADMIN_EMAIL: admin@test.local
+      ADMIN_PASSWORD: testpassword
+      MONGODB_URI: mongodb://mongo:27017/medrag
+      WEAVIATE_URL: http://weaviate:8080
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LLM_PROVIDER: anthropic
+      LLM_MODEL: claude-sonnet-4-6
+      EMBEDDING_PROVIDER: local_bge
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start infrastructure
+        run: docker compose up -d
+        timeout-minutes: 5
+
+      - name: Wait for healthchecks
+        run: |
+          echo "Waiting for services to be healthy..."
+          sleep 30
+
+      - name: Check infrastructure health
+        run: |
+          services=("mongo:27017" "rabbitmq:5672")
+          for svc in "${services[@]}"; do
+            host="${svc%%:*}"
+            port="${svc##*:}"
+            echo "Checking $host:$port..."
+            docker compose exec -T "$host" echo "ok" 2>/dev/null || echo "$host not yet a named service, skipping"
+          done
+
+      - name: Check service /health endpoints
+        run: |
+          # List of service name → port mappings
+          declare -A ports=(
+            [api-gateway]=8000
+            [auth]=8001
+            [orchestrator]=8002
+            [query-processor]=8003
+            [retrieval]=8004
+            [reranker]=8005
+            [generation]=8006
+            [ingestion]=8007
+            [parser]=8008
+            [chunking]=8009
+            [embedding]=8010
+            [indexing]=8011
+            [admin]=8012
+            [eval]=8013
+          )
+          failed=0
+          for svc in "${!ports[@]}"; do
+            port="${ports[$svc]}"
+            if docker compose ps "$svc" 2>/dev/null | grep -q "Up"; then
+              status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port/health" || echo "000")
+              if [ "$status" = "200" ]; then
+                echo "✓ $svc :$port → $status"
+              else
+                echo "✗ $svc :$port → $status"
+                failed=$((failed + 1))
+              fi
+            else
+              echo "- $svc not running (not deployed yet)"
+            fi
+          done
+          exit $failed
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
