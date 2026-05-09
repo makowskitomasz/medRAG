@@ -1,10 +1,9 @@
 import json
-from collections.abc import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import aio_pika
 from aio_pika import ExchangeType, Message
-
 
 _connection: aio_pika.abc.AbstractConnection | None = None
 _channel: aio_pika.abc.AbstractChannel | None = None

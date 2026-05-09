@@ -1,8 +1,8 @@
 from datetime import datetime
 from enum import StrEnum
 
-from pydantic import BaseModel, EmailStr, Field
 from bson import ObjectId
+from pydantic import BaseModel, EmailStr, Field
 
 
 class UserRole(StrEnum):
