@@ -18,8 +18,6 @@ jobs:
     name: Smoke test (healthchecks)
     runs-on: ubuntu-latest
     needs: docker-build
-    # Only run when docker-compose.yml and at least one service directory exists
-    if: ${{ hashFiles('docker-compose.yml') != '' }}
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       JWT_SECRET: ci-test-secret
