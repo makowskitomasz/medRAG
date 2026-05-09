@@ -3,7 +3,7 @@
 Format: każde zadanie jest atomowe, da się oszacować, da się delegować.
 Symbol `[C]` = zadanie idealne do delegowania Claude'owi.
 
-Konwencja branchy: `feature/FAZA-X.Y-krotki-opis` → PR → `develop` → merge → `main` (release)
+Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merge → `main` (release)
 
 ---
 
@@ -20,7 +20,7 @@ Konwencja branchy: `feature/FAZA-X.Y-krotki-opis` → PR → `develop` → merge
 - [ ] **0.8** Smoke test lokalny: `docker compose up`, połączenie do każdej bazy z hello-world serwisu
 - [ ] **0.9** `[C]` `.github/PULL_REQUEST_TEMPLATE.md` i podstawowy `.gitignore`
 
-**Branch**: `feature/FAZA-0-setup-infra`
+**Branch**: `feature/phase-0-setup-infra`
 
 ---
 
@@ -34,7 +34,7 @@ Konwencja branchy: `feature/FAZA-X.Y-krotki-opis` → PR → `develop` → merge
 - [ ] **1.6** `[C]` Unit testy Auth: register, login, invalid credentials, expired token
 - [ ] **1.7** Test e2e: rejestracja → login → call do chronionego endpointa przez gateway
 
-**Branch**: `feature/FAZA-1-auth-gateway`
+**Branch**: `feature/phase-1-auth-gateway`
 
 ---
 
@@ -57,7 +57,7 @@ Konwencja branchy: `feature/FAZA-X.Y-krotki-opis` → PR → `develop` → merge
 - [ ] **2.15** `[C]` Testy jednostkowe: chunking strategies, parser (mock pypdf), embedding batch
 - [ ] **2.16** Test e2e: upload PDF → status `indexed` w Mongo, wektory w Weaviate
 
-**Branche**: `feature/FAZA-2.1-shared-models`, `feature/FAZA-2.2-ingestion-api`, `feature/FAZA-2.3-parser-chunking`, `feature/FAZA-2.4-embedding-indexing`
+**Branche**: `feature/phase-2.1-shared-models`, `feature/phase-2.2-ingestion-api`, `feature/phase-2.3-parser-chunking`, `feature/phase-2.4-embedding-indexing`
 
 ---
 
@@ -78,7 +78,7 @@ Konwencja branchy: `feature/FAZA-X.Y-krotki-opis` → PR → `develop` → merge
 - [ ] **3.13** `[C]` Testy jednostkowe: retrieval mock, reranker, citation extraction, pipeline routing
 - [ ] **3.14** Test e2e: pytanie przez gateway → streamowana odpowiedź z cytowaniami
 
-**Branche**: `feature/FAZA-3.1-retrieval-reranker`, `feature/FAZA-3.2-generation-streaming`, `feature/FAZA-3.3-orchestrator-vanilla`, `feature/FAZA-3.4-orchestrator-hyde`
+**Branche**: `feature/phase-3.1-retrieval-reranker`, `feature/phase-3.2-generation-streaming`, `feature/phase-3.3-orchestrator-vanilla`, `feature/phase-3.4-orchestrator-hyde`
 
 ---
 
@@ -89,7 +89,7 @@ Konwencja branchy: `feature/FAZA-X.Y-krotki-opis` → PR → `develop` → merge
 - [ ] **4.3** Decyzja: które architektury agentowe (MARAG/MADAM) implementować — **TWOJA DECYZJA**
 - [ ] **4.4** `[C]` Testy integracyjne: wszystkie 4 tryby RAG na tym samym zapytaniu testowym
 
-**Branch**: `feature/FAZA-4-advanced-rag-modes`
+**Branch**: `feature/phase-4-advanced-rag-modes`
 
 ---
 
@@ -102,7 +102,7 @@ Konwencja branchy: `feature/FAZA-X.Y-krotki-opis` → PR → `develop` → merge
 - [ ] **5.5** `[C]` Eval: model `EvalLog`, zapis do Mongo (`eval_logs`)
 - [ ] **5.6** `[C]` Admin: endpoint GET eval logs z filtrem po `rag_mode`, export CSV
 
-**Branch**: `feature/FAZA-5-admin-eval`
+**Branch**: `feature/phase-5-admin-eval`
 
 ---
 
@@ -118,7 +118,7 @@ Konwencja branchy: `feature/FAZA-X.Y-krotki-opis` → PR → `develop` → merge
 - [ ] **6.8** `[C]` Historia konwersacji (lista + detal)
 - [ ] **6.9** `[C]` GitHub Actions: frontend CI (tsc --noEmit + eslint + vitest) na PR
 
-**Branche**: `feature/FAZA-6.1-frontend-setup`, `feature/FAZA-6.2-chat-ui`, `feature/FAZA-6.3-admin-panel`
+**Branche**: `feature/phase-6.1-frontend-setup`, `feature/phase-6.2-chat-ui`, `feature/phase-6.3-admin-panel`
 
 ---
 
@@ -131,7 +131,7 @@ Konwencja branchy: `feature/FAZA-X.Y-krotki-opis` → PR → `develop` → merge
 - [ ] **7.5** `[C]` Wykresy (matplotlib/seaborn): faithfulness, answer_relevancy, context_precision vs rag_mode, latency
 - [ ] **7.6** Interpretacja wyników i wnioski naukowe — **TWOJE**
 
-**Branch**: `feature/FAZA-7-eval-experiment`
+**Branch**: `feature/phase-7-eval-experiment`
 
 ---
 
@@ -144,7 +144,7 @@ Konwencja branchy: `feature/FAZA-X.Y-krotki-opis` → PR → `develop` → merge
 - [ ] **8.5** Wstęp i podsumowanie — **TWOJE**
 - [ ] **8.6** `[C]` Korekta językowa (EN), formatowanie, bibliografia
 
-**Branch**: `feature/FAZA-8-thesis-writing`
+**Branch**: `feature/phase-8-thesis-writing`
 
 ---
 
