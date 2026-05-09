@@ -157,10 +157,10 @@ ADMIN_PASSWORD=changeme
 ### Branch naming examples
 
 ```
-feature/FAZA-0-setup-infra
-feature/FAZA-1-auth-gateway
-feature/FAZA-2.1-shared-models
-feature/FAZA-3.2-generation-streaming
+feature/phase-0-setup-infra
+feature/phase-1-auth-gateway
+feature/phase-2.1-shared-models
+feature/phase-3.2-generation-streaming
 fix/rabbitmq-connection-retry
 chore/update-dependencies
 ```
@@ -170,7 +170,7 @@ chore/update-dependencies
 ```
 git checkout develop
 git pull
-git checkout -b feature/FAZA-X.Y-description
+git checkout -b feature/phase-X.Y-description
 # implement
 git push -u origin feature/FAZA-X.Y-description
 # open PR → develop
