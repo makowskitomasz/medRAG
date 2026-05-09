@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.extractor import extract_text
+from app.connectors.file_extractor import extract_text
 
 
 def test_extract_txt():

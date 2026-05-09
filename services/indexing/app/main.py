@@ -10,9 +10,9 @@ from medrag_shared.amqp import disconnect as amqp_disconnect
 from medrag_shared.mongo import connect, disconnect
 
 from app.config import settings
-from app.consumer import handle_chunks_embedded
-from app.weaviate_client import connect as weaviate_connect
-from app.weaviate_client import disconnect as weaviate_disconnect
+from app.connectors.weaviate_connector import connect as weaviate_connect
+from app.connectors.weaviate_connector import disconnect as weaviate_disconnect
+from app.consumers.document_consumer import handle_chunks_embedded
 
 logger = get_logger(__name__)
 

@@ -9,8 +9,8 @@ from medrag_shared.amqp import disconnect as amqp_disconnect
 from medrag_shared.mongo import connect, disconnect
 
 from app.config import settings
-from app.router import router
-from app.topology import setup_topology
+from app.connectors.amqp_topology import setup_topology
+from app.routers.ingestion_router import router
 
 logger = get_logger(__name__)
 
@@ -20,7 +20,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await connect(settings.mongodb_uri)
     await amqp_connect(settings.rabbitmq_url)
 
-    # set up RabbitMQ topology (exchanges, queues, DLX)
     conn = await aio_pika.connect_robust(settings.rabbitmq_url)
     channel = await conn.channel()
     await setup_topology(channel)
