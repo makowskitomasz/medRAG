@@ -33,7 +33,7 @@ jobs:
       - name: Check if service exists
         id: exists
         run: |
-          if [ -d "services/${{ matrix.service }}" ]; then
+          if [ -f "services/${{ matrix.service }}/pyproject.toml" ]; then
             echo "found=true" >> $GITHUB_OUTPUT
           else
             echo "found=false" >> $GITHUB_OUTPUT
@@ -86,7 +86,7 @@ jobs:
       - name: Check if shared exists
         id: exists
         run: |
-          if [ -d "shared" ]; then
+          if [ -f "shared/pyproject.toml" ]; then
             echo "found=true" >> $GITHUB_OUTPUT
           else
             echo "found=false" >> $GITHUB_OUTPUT
