@@ -10,7 +10,7 @@ from medrag_shared.amqp import disconnect as amqp_disconnect
 from medrag_shared.mongo import connect, disconnect
 
 from app.config import settings
-from app.consumer import handle_document_uploaded
+from app.consumers.document_consumer import handle_document_uploaded
 
 logger = get_logger(__name__)
 

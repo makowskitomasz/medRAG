@@ -1,7 +1,7 @@
 import jwt
 import pytest
 
-from app.security import create_token, decode_token, hash_password, verify_password
+from app.connectors.jwt_connector import create_token, decode_token, hash_password, verify_password
 
 
 def test_password_round_trip():

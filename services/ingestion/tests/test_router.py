@@ -17,10 +17,11 @@ def mock_deps():
         patch("medrag_shared.mongo.disconnect", new_callable=AsyncMock),
         patch("medrag_shared.amqp.connect", new_callable=AsyncMock),
         patch("medrag_shared.amqp.disconnect", new_callable=AsyncMock),
-        patch("app.router.publish", new_callable=AsyncMock),
+        patch("app.services.ingestion_service.publish", new_callable=AsyncMock),
         patch("app.main.setup_topology", new_callable=AsyncMock),
         patch("app.main.aio_pika.connect_robust", new_callable=AsyncMock),
-        patch("app.router.get_db", return_value=mock_db),
+        patch("app.repositories.project_repository.get_db", return_value=mock_db),
+        patch("app.repositories.document_repository.get_db", return_value=mock_db),
     ):
         yield mock_db
 

@@ -1,5 +1,5 @@
-from app.strategies.fixed import FixedChunker
-from app.strategies.recursive import RecursiveChunker
+from app.connectors.strategies.fixed import FixedChunker
+from app.connectors.strategies.recursive import RecursiveChunker
 
 TEXT = "word " * 300  # ~1500 chars
 

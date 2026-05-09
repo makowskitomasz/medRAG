@@ -3,23 +3,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from app.connectors.jwt_connector import hash_password
 from app.main import app
-from app.security import hash_password
 
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
 def mock_mongo():
-    """Patch MongoDB so tests run without a real connection."""
     mock_db = MagicMock()
     with (
         patch("medrag_shared.mongo.connect", new_callable=AsyncMock),
         patch("medrag_shared.mongo.disconnect", new_callable=AsyncMock),
-        patch("app.router._ensure_indexes", new_callable=AsyncMock),
-        patch("app.router._seed_admin", new_callable=AsyncMock),
-        patch("app.router.get_db", return_value=mock_db),
-        patch("app.router.get_db", return_value=mock_db),
+        patch("app.main.ensure_indexes", new_callable=AsyncMock),
+        patch("app.main.seed_admin", new_callable=AsyncMock),
+        patch("app.repositories.user_repository.get_db", return_value=mock_db),
     ):
         yield mock_db
 

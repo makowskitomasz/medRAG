@@ -6,7 +6,8 @@ from medrag_shared import get_logger
 from medrag_shared.mongo import connect, disconnect
 
 from app.config import settings
-from app.router import router
+from app.repositories.project_repository import ensure_indexes
+from app.routers.project_router import router
 
 logger = get_logger(__name__)
 
@@ -14,8 +15,7 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await connect(settings.mongodb_uri)
-    db = __import__("medrag_shared.mongo", fromlist=["get_db"]).get_db()
-    await db.projects.create_index("name")
+    await ensure_indexes()
     logger.info("admin service ready")
     yield
     await disconnect()
