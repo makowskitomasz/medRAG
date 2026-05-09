@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
 from medrag_shared import get_logger
 
 from app.config import settings
@@ -46,7 +45,10 @@ async def validate_jwt(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
         return {**resp.json(), "token": credentials.credentials}
     except httpx.RequestError:
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Auth service unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auth service unavailable",
+        )
 
 
 async def _proxy(
@@ -104,7 +106,9 @@ async def proxy_admin(
 
 
 @app.api_route("/auth/{path:path}", methods=["GET", "POST"])
-async def proxy_auth(path: str, request: Request, http: httpx.AsyncClient = Depends(get_http)) -> Response:
+async def proxy_auth(
+    path: str, request: Request, http: httpx.AsyncClient = Depends(get_http)
+) -> Response:
     body = await request.body()
     resp = await http.request(
         method=request.method,
