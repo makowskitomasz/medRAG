@@ -67,7 +67,7 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 - [ ] **3.2** `[C]` Retrieval: enrichment chunków metadanymi z Mongo (tytuł, strona, projekt)
 - [ ] **3.3** `[C]` Reranker Service: cross-encoder BGE-reranker-v2-m3 (sentence-transformers)
 - [ ] **3.4** `[C]` Query Processor: query rewriting (LLM call) + HyDE (generuj hipotetyczny dokument)
-- [ ] **3.5** `[C]` Generation Service: prompt template + integracja z Anthropic SDK (claude-sonnet-4-6)
+- [ ] **3.5** `[C]` Generation Service: prompt template + integracja z openai SDK przez OpenRouter (`base_url=https://openrouter.ai/api/v1`, model konfigurowalny przez `LLM_MODEL`)
 - [ ] **3.6** `[C]` Generation: streaming SSE (`StreamingResponse` FastAPI)
 - [ ] **3.7** `[C]` Generation: ekstrakcja cytowań z odpowiedzi
 - [ ] **3.8** `[C]` Orchestrator: abstrakcja `RagPipeline`, implementacja `VanillaPipeline`
