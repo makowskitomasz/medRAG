@@ -31,7 +31,7 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 - [x] **1.3** `[C]` Auth: middleware FastAPI do walidacji JWT (do reuse w innych serwisach)
 - [x] **1.4** `[C]` API Gateway: routing do serwisów (httpx.AsyncClient), forward JWT
 - [x] **1.5** `[C]` Auth: seed admin user przy starcie z env (`ADMIN_EMAIL`, `ADMIN_PASSWORD`)
-- [ ] **1.6** `[C]` Unit testy Auth: register, login, invalid credentials, expired token
+- [x] **1.6** `[C]` Unit testy Auth: register, login, invalid credentials, expired token
 - [x] **1.7** Test e2e: rejestracja → login → call do chronionego endpointa przez gateway
 
 **Branch**: `feature/phase-1-auth-gateway`
@@ -54,8 +54,8 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 - [x] **2.12** `[C]` Embedding: batch processing, publish `chunks.embedded`
 - [x] **2.13** `[C]` Indexing Service: schema Weaviate (klasa `Chunk`), insert vectors
 - [x] **2.14** `[C]` Status tracking: każdy serwis aktualizuje `documents.status_history` z `trace_id`
-- [ ] **2.15** `[C]` Testy jednostkowe: chunking strategies, parser (mock pypdf), embedding batch
-- [ ] **2.16** Test e2e: upload PDF → status `indexed` w Mongo, wektory w Weaviate
+- [x] **2.15** `[C]` Testy jednostkowe: chunking strategies, parser (mock pypdf), embedding batch
+- [x] **2.16** Test e2e: upload PDF → status `indexed` w Mongo, wektory w Weaviate
 
 **Branche**: `feature/phase-2.1-shared-models`, `feature/phase-2.2-ingestion-api`, `feature/phase-2.3-parser-chunking`, `feature/phase-2.4-embedding-indexing`
 
