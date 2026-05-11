@@ -60,6 +60,27 @@ async def upload(
     return UploadResponse(document_id=doc.id, status=doc.status)
 
 
+async def list_documents(project_id: str) -> list[DocumentStatusResponse]:
+    if not await project_repository.find_by_id(project_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    docs = await document_repository.find_all(project_id)
+    return [
+        DocumentStatusResponse(
+            document_id=doc["_id"],
+            filename=doc["filename"],
+            status=doc["status"],
+            status_history=doc.get("status_history", []),
+        )
+        for doc in docs
+    ]
+
+
+async def delete_document(project_id: str, document_id: str) -> None:
+    if not await document_repository.find_by_id(document_id, project_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    await document_repository.delete(document_id, project_id)
+
+
 async def get_status(project_id: str, document_id: str) -> DocumentStatusResponse:
     doc = await document_repository.find_by_id(document_id, project_id)
     if not doc:

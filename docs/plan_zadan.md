@@ -9,16 +9,16 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 
 ## Faza 0 — Setup & Infra (cel: docker-compose ze stackiem startuje, CI zielone)
 
-- [ ] **0.0** Branching: utwórz `develop`, ustaw branch protection na `main` i `develop` (wymagany PR + CI green)
-- [ ] **0.1** `[C]` Inicjalizacja monorepo: struktura `services/`, `shared/`, `frontend/`, `docker/`, `docs/`, `scripts/`
-- [ ] **0.2** `[C]` Setup uv + bazowy `pyproject.toml` template per service (ruff, mypy, pytest w dev deps)
-- [ ] **0.3** `[C]` Bazowy `Dockerfile` dla serwisów Python (multi-stage, slim, non-root `appuser`)
-- [ ] **0.4** `[C]` `docker-compose.yml` z MongoDB + Weaviate + RabbitMQ + healthchecks
-- [ ] **0.5** `[C]` Shared lib (`shared/`): structured logger z `trace_id`, base Pydantic Settings, AMQP client wrapper, MongoDB client wrapper
-- [ ] **0.6** `[C]` GitHub Actions: CI workflow (lint ruff + typecheck mypy + pytest) na PR do `develop`/`main`
-- [ ] **0.7** `[C]` GitHub Actions: CD workflow (docker compose build + healthcheck smoke test) na push do `develop`
+- [x] **0.0** Branching: utwórz `develop`, ustaw branch protection na `main` i `develop` (wymagany PR + CI green)
+- [x] **0.1** `[C]` Inicjalizacja monorepo: struktura `services/`, `shared/`, `frontend/`, `docker/`, `docs/`, `scripts/`
+- [x] **0.2** `[C]` Setup uv + bazowy `pyproject.toml` template per service (ruff, mypy, pytest w dev deps)
+- [x] **0.3** `[C]` Bazowy `Dockerfile` dla serwisów Python (multi-stage, slim, non-root `appuser`)
+- [x] **0.4** `[C]` `docker-compose.yml` z MongoDB + Weaviate + RabbitMQ + healthchecks
+- [x] **0.5** `[C]` Shared lib (`shared/`): structured logger z `trace_id`, base Pydantic Settings, AMQP client wrapper, MongoDB client wrapper
+- [x] **0.6** `[C]` GitHub Actions: CI workflow (lint ruff + typecheck mypy + pytest) na PR do `develop`/`main`
+- [x] **0.7** `[C]` GitHub Actions: CD workflow (docker compose build + healthcheck smoke test) na push do `develop`
 - [ ] **0.8** Smoke test lokalny: `docker compose up`, połączenie do każdej bazy z hello-world serwisu
-- [ ] **0.9** `[C]` `.github/PULL_REQUEST_TEMPLATE.md` i podstawowy `.gitignore`
+- [x] **0.9** `[C]` `.github/PULL_REQUEST_TEMPLATE.md` i podstawowy `.gitignore`
 
 **Branch**: `feature/phase-0-setup-infra`
 
@@ -26,13 +26,13 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 
 ## Faza 1 — Auth + Gateway (cel: logowanie działa, JWT walidowany przez gateway)
 
-- [ ] **1.1** `[C]` Auth Service: model `User` (Pydantic + Mongo), kolekcja `users`, indeksy
-- [ ] **1.2** `[C]` Auth: endpointy `POST /register`, `POST /login`, `GET /me` z bcrypt + PyJWT
-- [ ] **1.3** `[C]` Auth: middleware FastAPI do walidacji JWT (do reuse w innych serwisach)
-- [ ] **1.4** `[C]` API Gateway: routing do serwisów (httpx.AsyncClient), forward JWT
-- [ ] **1.5** `[C]` Auth: seed admin user przy starcie z env (`ADMIN_EMAIL`, `ADMIN_PASSWORD`)
+- [x] **1.1** `[C]` Auth Service: model `User` (Pydantic + Mongo), kolekcja `users`, indeksy
+- [x] **1.2** `[C]` Auth: endpointy `POST /register`, `POST /login`, `GET /me` z bcrypt + PyJWT
+- [x] **1.3** `[C]` Auth: middleware FastAPI do walidacji JWT (do reuse w innych serwisach)
+- [x] **1.4** `[C]` API Gateway: routing do serwisów (httpx.AsyncClient), forward JWT
+- [x] **1.5** `[C]` Auth: seed admin user przy starcie z env (`ADMIN_EMAIL`, `ADMIN_PASSWORD`)
 - [ ] **1.6** `[C]` Unit testy Auth: register, login, invalid credentials, expired token
-- [ ] **1.7** Test e2e: rejestracja → login → call do chronionego endpointa przez gateway
+- [x] **1.7** Test e2e: rejestracja → login → call do chronionego endpointa przez gateway
 
 **Branch**: `feature/phase-1-auth-gateway`
 
@@ -40,20 +40,20 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 
 ## Faza 2 — Ingestion pipeline (cel: PDF → wektory w Weaviate)
 
-- [ ] **2.1** `[C]` Modele: `Project`, `Document`, `Chunk` w `shared/models/`
-- [ ] **2.2** `[C]` Ingestion API: endpoint `POST /projects/{id}/documents` (multipart upload)
-- [ ] **2.3** `[C]` Ingestion: walidacja typu pliku, content_hash (deduplikacja), zapis do `/tmp/uploads`
-- [ ] **2.4** `[C]` Ingestion: insert document w Mongo + publish `document.uploaded` do RabbitMQ
-- [ ] **2.5** `[C]` RabbitMQ topology: exchange `documents` (topic), queues + bindings + DLX (dead-letter)
-- [ ] **2.6** `[C]` Parser Service: konsument `document.uploaded`, integracja z `pypdf` (DOCX: `python-docx`)
-- [ ] **2.7** `[C]` Parser: zapis `extracted_text` do Mongo, cleanup `/tmp`, publish `document.parsed`
-- [ ] **2.8** `[C]` Chunking Service: strategia `recursive` (LangChain `RecursiveCharacterTextSplitter`) jako default
-- [ ] **2.9** `[C]` Chunking: strategia `fixed_512` i `semantic` jako dodatkowe warianty
-- [ ] **2.10** `[C]` Chunking: insert chunks do Mongo, publish `document.chunked`
-- [ ] **2.11** `[C]` Embedding Service: abstrakcja `EmbeddingProvider`, implementacja `LocalBGEProvider` (BGE-m3)
-- [ ] **2.12** `[C]` Embedding: batch processing, publish `chunks.embedded`
-- [ ] **2.13** `[C]` Indexing Service: schema Weaviate (klasa `Chunk`), insert vectors
-- [ ] **2.14** `[C]` Status tracking: każdy serwis aktualizuje `documents.status_history` z `trace_id`
+- [x] **2.1** `[C]` Modele: `Project`, `Document`, `Chunk` w `shared/models/`
+- [x] **2.2** `[C]` Ingestion API: endpoint `POST /projects/{id}/documents` (multipart upload)
+- [x] **2.3** `[C]` Ingestion: walidacja typu pliku, content_hash (deduplikacja), zapis do `/tmp/uploads`
+- [x] **2.4** `[C]` Ingestion: insert document w Mongo + publish `document.uploaded` do RabbitMQ
+- [x] **2.5** `[C]` RabbitMQ topology: exchange `documents` (topic), queues + bindings + DLX (dead-letter)
+- [x] **2.6** `[C]` Parser Service: konsument `document.uploaded`, integracja z `pypdf` (DOCX: `python-docx`)
+- [x] **2.7** `[C]` Parser: zapis `extracted_text` do Mongo, cleanup `/tmp`, publish `document.parsed`
+- [x] **2.8** `[C]` Chunking Service: strategia `recursive` (LangChain `RecursiveCharacterTextSplitter`) jako default
+- [x] **2.9** `[C]` Chunking: strategia `fixed_512` i `semantic` jako dodatkowe warianty
+- [x] **2.10** `[C]` Chunking: insert chunks do Mongo, publish `document.chunked`
+- [x] **2.11** `[C]` Embedding Service: abstrakcja `EmbeddingProvider`, implementacja `LocalBGEProvider` (BGE-m3)
+- [x] **2.12** `[C]` Embedding: batch processing, publish `chunks.embedded`
+- [x] **2.13** `[C]` Indexing Service: schema Weaviate (klasa `Chunk`), insert vectors
+- [x] **2.14** `[C]` Status tracking: każdy serwis aktualizuje `documents.status_history` z `trace_id`
 - [ ] **2.15** `[C]` Testy jednostkowe: chunking strategies, parser (mock pypdf), embedding batch
 - [ ] **2.16** Test e2e: upload PDF → status `indexed` w Mongo, wektory w Weaviate
 
@@ -135,19 +135,6 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 
 ---
 
-## Faza 8 — Pisanie pracy (cel: gotowy draft)
-
-- [ ] **8.1** `[C]` Rozdział architektury (diagramy C4 + decyzje + uzasadnienia)
-- [ ] **8.2** `[C]` Rozdział implementacji (stack, wzorce, napotkane problemy)
-- [ ] **8.3** Rozdział ewaluacji (interpretacja wyników, wnioski) — **TO MUSI BYĆ TWOJE**
-- [ ] **8.4** `[C]` ADR-y dla 5 kluczowych decyzji (`docs/adr/`)
-- [ ] **8.5** Wstęp i podsumowanie — **TWOJE**
-- [ ] **8.6** `[C]` Korekta językowa (EN), formatowanie, bibliografia
-
-**Branch**: `feature/phase-8-thesis-writing`
-
----
-
 ## Podsumowanie
 
 | Faza | Zadania | [C] delegowane |
@@ -160,7 +147,6 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 | 5. Admin + Eval | 6 | 6 |
 | 6. Frontend | 9 | 9 |
 | 7. Ewaluacja | 6 | 3 |
-| 8. Pisanie pracy | 6 | 4 |
-| **Razem** | **77** | **65** |
+| **Razem** | **71** | **61** |
 
 ~65 zadań do delegowania Claude'owi, ~12 wymaga Twojego głębokiego zaangażowania.

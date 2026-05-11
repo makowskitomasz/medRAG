@@ -14,3 +14,13 @@ async def create(document: Document) -> None:
 
 async def find_by_id(document_id: str, project_id: str) -> dict | None:
     return await get_db().documents.find_one({"_id": document_id, "project_id": project_id})
+
+
+async def find_all(project_id: str) -> list[dict]:
+    cursor = get_db().documents.find({"project_id": project_id})
+    return await cursor.to_list(length=None)
+
+
+async def delete(document_id: str, project_id: str) -> bool:
+    result = await get_db().documents.delete_one({"_id": document_id, "project_id": project_id})
+    return result.deleted_count > 0

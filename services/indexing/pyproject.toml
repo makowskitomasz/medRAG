@@ -10,6 +10,7 @@ dependencies = [
     "motor>=3.4.0",
     "aio-pika>=9.4.0",
     "weaviate-client>=4.6.0",
+    "packaging>=24.0",
     "medrag-shared",
 ]
 
