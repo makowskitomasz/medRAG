@@ -49,7 +49,7 @@ async def consume(
 ) -> None:
     if _channel is None:
         raise RuntimeError("AMQP channel not initialized — call connect() first")
-    queue = await _channel.declare_queue(queue_name, durable=True)
+    queue = await _channel.declare_queue(queue_name, durable=True, passive=True)
     async with queue.iterator() as it:
         async for message in it:
             async with message.process():

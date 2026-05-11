@@ -4,7 +4,7 @@ from medrag_shared.config import BaseServiceSettings
 class Settings(BaseServiceSettings):
     service_name: str = "ingestion"
 
-    upload_dir: str = "/tmp/uploads"
+    upload_dir: str = "/app/uploads"
     allowed_extensions: list[str] = [".pdf", ".docx", ".txt"]
     max_file_size_mb: int = 50
 

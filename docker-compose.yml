@@ -53,39 +53,159 @@ services:
       retries: 10
       start_period: 20s
 
-  # ── Services (uncomment as they are implemented) ────────────────────────────
-  # api-gateway:
-  #   build:
-  #     context: services/api-gateway
-  #     dockerfile: ../../docker/Dockerfile.service
-  #   ports:
-  #     - "8000:8000"
-  #   env_file: .env
-  #   depends_on:
-  #     mongo: { condition: service_healthy }
-  #     rabbitmq: { condition: service_healthy }
-  #   healthcheck:
-  #     test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
-  #     interval: 15s
-  #     timeout: 5s
-  #     retries: 3
+  # ── Services ─────────────────────────────────────────────────────────────────
+  api-gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: api-gateway
+    ports:
+      - "8000:8000"
+    env_file: .env
+    depends_on:
+      mongo: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
-  # auth:
-  #   build:
-  #     context: services/auth
-  #     dockerfile: ../../docker/Dockerfile.service
-  #   ports:
-  #     - "8001:8000"
-  #   env_file: .env
-  #   depends_on:
-  #     mongo: { condition: service_healthy }
-  #   healthcheck:
-  #     test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
-  #     interval: 15s
-  #     timeout: 5s
-  #     retries: 3
+  auth:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: auth
+    ports:
+      - "8001:8000"
+    env_file: .env
+    depends_on:
+      mongo: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  admin:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: admin
+    ports:
+      - "8012:8000"
+    env_file: .env
+    depends_on:
+      mongo: { condition: service_healthy }
+      weaviate: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  ingestion:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: ingestion
+    ports:
+      - "8007:8000"
+    env_file: .env
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      mongo: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  parser:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: parser
+    ports:
+      - "8008:8000"
+    env_file: .env
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  chunking:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: chunking
+    ports:
+      - "8009:8000"
+    env_file: .env
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  embedding:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: embedding
+    ports:
+      - "8010:8000"
+    env_file: .env
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+    deploy:
+      resources:
+        limits:
+          memory: 6g
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  indexing:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: indexing
+    ports:
+      - "8011:8000"
+    env_file: .env
+    depends_on:
+      mongo: { condition: service_healthy }
+      weaviate: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
 volumes:
   mongo_data:
   weaviate_data:
   rabbitmq_data:
+  uploads_data:

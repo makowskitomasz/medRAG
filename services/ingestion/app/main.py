@@ -1,7 +1,6 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-import aio_pika
 from fastapi import FastAPI
 from medrag_shared import get_logger
 from medrag_shared.amqp import connect as amqp_connect
@@ -20,10 +19,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await connect(settings.mongodb_uri)
     await amqp_connect(settings.rabbitmq_url)
 
-    conn = await aio_pika.connect_robust(settings.rabbitmq_url)
-    channel = await conn.channel()
-    await setup_topology(channel)
-    await conn.close()
+    from medrag_shared.amqp import _channel as shared_channel
+
+    if shared_channel is not None:
+        await setup_topology(shared_channel)
 
     logger.info("ingestion service ready")
     yield
