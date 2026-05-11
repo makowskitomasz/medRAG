@@ -32,6 +32,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create .env for compose
+        run: |
+          cp .env.example .env
+          echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> .env
+          echo "JWT_SECRET=${JWT_SECRET}" >> .env
+          echo "JWT_ALGORITHM=HS256" >> .env
+          echo "JWT_EXPIRE_MINUTES=1440" >> .env
+          echo "ADMIN_EMAIL=${ADMIN_EMAIL}" >> .env
+          echo "ADMIN_PASSWORD=${ADMIN_PASSWORD}" >> .env
+          echo "LLM_PROVIDER=${LLM_PROVIDER}" >> .env
+          echo "LLM_MODEL=${LLM_MODEL}" >> .env
+          echo "EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER}" >> .env
+
       - name: Start infrastructure
         run: docker compose up -d
         timeout-minutes: 5
