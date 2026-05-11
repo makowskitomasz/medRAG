@@ -18,6 +18,7 @@ def mock_deps():
         patch("medrag_shared.amqp.connect", new_callable=AsyncMock),
         patch("medrag_shared.amqp.disconnect", new_callable=AsyncMock),
         patch("app.services.ingestion_service.publish", new_callable=AsyncMock),
+        patch("app.services.ingestion_service.save", return_value="/tmp/test.pdf"),
         patch("app.main.setup_topology", new_callable=AsyncMock),
         patch("medrag_shared.amqp._channel", new_callable=MagicMock),
         patch("app.repositories.project_repository.get_db", return_value=mock_db),
