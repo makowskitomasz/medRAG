@@ -33,7 +33,7 @@ COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /build/shared /app/shared
 COPY services/${SERVICE}/app /app/app
 
-RUN chown -R appuser:appgroup /app && mkdir -p /app/uploads && chown appuser:appgroup /app/uploads
+RUN chown -R appuser:appgroup /app && mkdir -p /app/uploads && chown appuser:appgroup /app/uploads && mkdir -p /app/.cache/huggingface && chown -R appuser:appgroup /app/.cache
 
 USER appuser
 

@@ -29,7 +29,7 @@ async def proxy_ingest(
     return await proxy(request, f"{settings.ingestion_url}/{path}", http, user)
 
 
-@router.api_route("/admin/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+@router.api_route("/admin/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_admin(
     path: str,
     request: Request,

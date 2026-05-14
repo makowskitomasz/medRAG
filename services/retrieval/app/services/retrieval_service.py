@@ -1,8 +1,20 @@
+import httpx
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from weaviate import WeaviateAsyncClient
 from weaviate.classes.query import HybridFusion, MetadataQuery
 
+from app.config.settings import settings
 from app.schemas.retrieval_schemas import RetrievalRequest, RetrievalResponse, RetrievedChunk
+
+
+async def _embed_query(query: str) -> list[float]:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            f"{settings.embedding_service_url}/embed",
+            json={"texts": [query]},
+        )
+        resp.raise_for_status()
+        return resp.json()["vectors"][0]
 
 
 async def hybrid_search(
@@ -20,8 +32,10 @@ async def hybrid_search(
         "return_metadata": MetadataQuery(score=True),
         "filters": _project_filter(request.project_id),
     }
-    if request.query_vector:
-        hybrid_kwargs["vector"] = request.query_vector
+
+    if request.alpha > 0.0:
+        query_vector = request.query_vector or await _embed_query(request.query)
+        hybrid_kwargs["vector"] = query_vector
 
     result = await collection.query.hybrid(**hybrid_kwargs)
 

@@ -36,10 +36,11 @@ async def connect_weaviate(url: str) -> None:
     import weaviate
 
     global _weaviate_client
-    _weaviate_client = await weaviate.use_async_with_local(
+    _weaviate_client = weaviate.use_async_with_local(
         host=url.replace("http://", "").split(":")[0],
         port=int(url.split(":")[-1]),
     )
+    await _weaviate_client.connect()
 
 
 async def disconnect_weaviate() -> None:
