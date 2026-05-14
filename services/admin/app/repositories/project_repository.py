@@ -32,5 +32,10 @@ async def get_by_id(project_id: str) -> dict | None:
     return await get_db().projects.find_one({"_id": project_id})
 
 
+async def update_by_id(project_id: str, patch: dict) -> dict | None:
+    await get_db().projects.update_one({"_id": project_id}, {"$set": patch})
+    return await get_by_id(project_id)
+
+
 async def ensure_indexes() -> None:
     await get_db().projects.create_index("name")

@@ -7,6 +7,12 @@ from medrag_shared.models.project import (
 from pydantic import BaseModel
 
 
+class UpdateProjectRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    settings: ProjectSettings | None = None
+
+
 class CreateProjectRequest(BaseModel):
     name: str
     description: str = ""

@@ -67,7 +67,7 @@ services:
       mongo: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -84,7 +84,7 @@ services:
     depends_on:
       mongo: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -103,7 +103,7 @@ services:
       weaviate: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -123,7 +123,7 @@ services:
       mongo: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -142,7 +142,7 @@ services:
     depends_on:
       rabbitmq: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -159,7 +159,7 @@ services:
     depends_on:
       rabbitmq: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -173,6 +173,10 @@ services:
     ports:
       - "8010:8000"
     env_file: .env
+    environment:
+      HF_HOME: /app/.cache/huggingface
+    volumes:
+      - embedding_cache:/app/.cache/huggingface
     depends_on:
       rabbitmq: { condition: service_healthy }
     deploy:
@@ -180,7 +184,7 @@ services:
         limits:
           memory: 6g
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -199,7 +203,101 @@ services:
       weaviate: { condition: service_healthy }
       rabbitmq: { condition: service_healthy }
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  retrieval:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: retrieval
+    ports:
+      - "8004:8000"
+    env_file: .env
+    depends_on:
+      mongo: { condition: service_healthy }
+      weaviate: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  reranker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: reranker
+    ports:
+      - "8005:8000"
+    env_file: .env
+    environment:
+      HF_HOME: /app/.cache/huggingface
+    volumes:
+      - reranker_cache:/app/.cache/huggingface
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 180s
+
+  query-processor:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: query-processor
+    ports:
+      - "8003:8000"
+    env_file: .env
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  generation:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: generation
+    ports:
+      - "8006:8000"
+    env_file: .env
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  orchestrator:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        SERVICE: orchestrator
+    ports:
+      - "8002:8000"
+    env_file: .env
+    depends_on:
+      mongo: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      retrieval: { condition: service_healthy }
+      reranker: { condition: service_healthy }
+      generation: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -209,3 +307,5 @@ volumes:
   weaviate_data:
   rabbitmq_data:
   uploads_data:
+  reranker_cache:
+  embedding_cache:
