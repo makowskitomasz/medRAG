@@ -20,8 +20,10 @@ class EmbeddingProvider(StrEnum):
 class RagMode(StrEnum):
     VANILLA = "vanilla"
     HYDE = "hyde"
+    QUERY_REWRITING = "query_rewriting"
     SELF_REFLECTION = "self_reflection"
     MULTI_AGENT = "multi_agent"
+    CORRECTIVE_RAG = "corrective_rag"
 
 
 class ProjectSettings(BaseModel):

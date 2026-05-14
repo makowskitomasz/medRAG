@@ -3,8 +3,18 @@ from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI
 
 from app.config.settings import Settings, settings
-from app.schemas.generation_schemas import GenerationRequest, GenerationResult
-from app.services.generation_service import generate, generate_stream, get_llm_client
+from app.schemas.generation_schemas import (
+    EvaluationRequest,
+    EvaluationResult,
+    GenerationRequest,
+    GenerationResult,
+)
+from app.services.generation_service import (
+    evaluate_answer,
+    generate,
+    generate_stream,
+    get_llm_client,
+)
 
 router = APIRouter()
 
@@ -24,6 +34,15 @@ async def generate_answer(
     client: AsyncOpenAI = Depends(get_client),
 ) -> GenerationResult:
     return await generate(request, client, cfg.llm_model, cfg.llm_max_tokens, cfg.llm_temperature)
+
+
+@router.post("/evaluate", response_model=EvaluationResult)
+async def evaluate(
+    request: EvaluationRequest,
+    cfg: Settings = Depends(get_settings),
+    client: AsyncOpenAI = Depends(get_client),
+) -> EvaluationResult:
+    return await evaluate_answer(request, client, cfg.llm_model)
 
 
 @router.post("/generate/stream")

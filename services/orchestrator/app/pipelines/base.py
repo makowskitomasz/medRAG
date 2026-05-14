@@ -1,3 +1,4 @@
+import json
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 
@@ -68,5 +69,35 @@ class RagPipeline(ABC):
         citations = [Citation(**c) for c in data.get("citations", [])]
         return data["answer"], citations
 
-    async def _generate_stream_url(self) -> str:
-        return f"{self.settings.generation_url}/generate/stream"
+    async def _evaluate_answer(self, query: str, answer: str, chunks: list[dict]) -> float:
+        """Ask generation service to score answer sufficiency (0.0–1.0)."""
+        payload = {"query": query, "answer": answer, "chunks": chunks}
+        resp = await self.http.post(f"{self.settings.generation_url}/evaluate", json=payload)
+        resp.raise_for_status()
+        return float(resp.json().get("score", 1.0))
+
+    async def _stream_generation(
+        self,
+        query: str,
+        chunks: list[dict],
+        conversation_history: list[dict],
+        conversation_id: str,
+        rag_mode: str,
+    ) -> AsyncGenerator[str, None]:
+        payload = {"query": query, "chunks": chunks, "conversation_history": conversation_history}
+        url = f"{self.settings.generation_url}/generate/stream"
+
+        async with self.http.stream("POST", url, json=payload) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if line.startswith("data: "):
+                    raw = line[6:]
+                    if raw == "[DONE]":
+                        break
+                    event = json.loads(raw)
+                    if event.get("type") == "citations":
+                        event["conversation_id"] = conversation_id
+                        event["rag_mode"] = rag_mode
+                    yield f"data: {json.dumps(event)}\n\n"
+
+        yield "data: [DONE]\n\n"

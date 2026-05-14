@@ -3,7 +3,12 @@ from collections.abc import AsyncGenerator
 
 from openai import AsyncOpenAI
 
-from app.schemas.generation_schemas import GenerationRequest, GenerationResult
+from app.schemas.generation_schemas import (
+    EvaluationRequest,
+    EvaluationResult,
+    GenerationRequest,
+    GenerationResult,
+)
 from app.services.citation_extractor import extract_citations
 from app.services.prompt_builder import build_messages
 
@@ -55,7 +60,7 @@ async def generate_stream(
         stream=True,
     )
 
-    async for chunk in stream:
+    async for chunk in stream:  # type: ignore[assignment]
         delta = chunk.choices[0].delta.content if chunk.choices else None
         if delta:
             full_answer.append(delta)
@@ -66,3 +71,44 @@ async def generate_stream(
     citations_payload = [c.model_dump() for c in citations]
     yield f"data: {json.dumps({'type': 'citations', 'citations': citations_payload})}\n\n"
     yield "data: [DONE]\n\n"
+
+
+_EVAL_SYSTEM = (
+    "You are an evaluator. Given a query, an answer, and the source context chunks, "
+    "score how well the answer addresses the query using only information from the context. "
+    'Reply with JSON only: {"score": <float 0.0-1.0>, "reasoning": "<one sentence>"}. '
+    "1.0 = fully answered with context support. 0.0 = not answered or hallucinated."
+)
+
+
+async def evaluate_answer(
+    request: EvaluationRequest,
+    client: AsyncOpenAI,
+    model: str,
+) -> EvaluationResult:
+    import re
+
+    context = "\n\n".join(f"[SOURCE_{i + 1}] {c.content}" for i, c in enumerate(request.chunks))
+    messages = [
+        {"role": "system", "content": _EVAL_SYSTEM},
+        {
+            "role": "user",
+            "content": f"Query: {request.query}\n\nAnswer: {request.answer}\n\nContext:\n{context}",
+        },
+    ]
+    response = await client.chat.completions.create(
+        model=model,
+        messages=messages,  # type: ignore[arg-type]
+        max_tokens=200,
+        temperature=0.0,
+    )
+    raw = response.choices[0].message.content or '{"score": 1.0, "reasoning": ""}'
+    # Strip markdown code fences if present.
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+    try:
+        import json
+
+        data = json.loads(raw)
+        return EvaluationResult(score=float(data["score"]), reasoning=data.get("reasoning", ""))
+    except Exception:
+        return EvaluationResult(score=1.0, reasoning="parse error — defaulting to sufficient")

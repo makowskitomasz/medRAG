@@ -26,3 +26,14 @@ class Citation(BaseModel):
 class GenerationResult(BaseModel):
     answer: str
     citations: list[Citation]
+
+
+class EvaluationRequest(BaseModel):
+    query: str
+    answer: str
+    chunks: list[ContextChunk]
+
+
+class EvaluationResult(BaseModel):
+    score: float
+    reasoning: str
