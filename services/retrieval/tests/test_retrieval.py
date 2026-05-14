@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -45,7 +45,11 @@ async def test_hybrid_search_returns_enriched_chunks():
     db.__getitem__.return_value.aggregate = fake_aggregate
 
     request = RetrievalRequest(query="drug interaction", project_id="proj-1", top_k=10, alpha=0.5)
-    result = await hybrid_search(request, weaviate_client, db)
+    with patch(
+        "app.services.retrieval_service._embed_query",
+        new=AsyncMock(return_value=[0.1] * 768),
+    ):
+        result = await hybrid_search(request, weaviate_client, db)
 
     assert result.total == 2
     chunk1 = next(c for c in result.chunks if c.chunk_id == "uuid-1")
@@ -70,7 +74,11 @@ async def test_hybrid_search_empty_results():
     db.__getitem__ = MagicMock(return_value=MagicMock(aggregate=fake_aggregate))
 
     request = RetrievalRequest(query="unknown query", project_id="proj-1")
-    result = await hybrid_search(request, weaviate_client, db)
+    with patch(
+        "app.services.retrieval_service._embed_query",
+        new=AsyncMock(return_value=[0.1] * 768),
+    ):
+        result = await hybrid_search(request, weaviate_client, db)
 
     assert result.total == 0
     assert result.chunks == []
