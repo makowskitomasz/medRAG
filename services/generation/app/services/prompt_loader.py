@@ -12,5 +12,11 @@ _env = Environment(
 )
 
 
-def render(template_name: str, **context: object) -> str:
-    return _env.get_template(template_name).render(**context).strip()
+def render(template_name: str, override: str | None = None, **context: object) -> str:
+    """Render a prompt template.
+
+    If *override* is provided (a Jinja2 source string stored in the project's
+    prompt_overrides), it is rendered instead of the file-based template.
+    """
+    tmpl = _env.from_string(override) if override is not None else _env.get_template(template_name)
+    return tmpl.render(**context).strip()

@@ -18,8 +18,14 @@ def build_messages(
     query: str,
     chunks: list[ContextChunk],
     conversation_history: list[dict],
+    prompt_overrides: dict[str, str] | None = None,
 ) -> list[dict]:
-    system = render("generate_system.j2", specialty="drug interactions", safety_note=None)
+    system = render(
+        "generate_system.j2",
+        override=(prompt_overrides or {}).get("generate_system"),
+        specialty="drug interactions",
+        safety_note=None,
+    )
     context_block = build_context_block(chunks)
     user_message = f"Context:\n{context_block}\n\nQuestion: {query}"
 

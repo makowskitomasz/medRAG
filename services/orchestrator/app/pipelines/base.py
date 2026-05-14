@@ -8,9 +8,15 @@ from app.schemas.orchestrator_schemas import Citation, QueryResponse
 
 
 class RagPipeline(ABC):
-    def __init__(self, http_client: httpx.AsyncClient, settings) -> None:  # type: ignore[type-arg]
+    def __init__(
+        self,
+        http_client: httpx.AsyncClient,
+        settings,  # type: ignore[type-arg]
+        prompt_overrides: dict[str, str] | None = None,
+    ) -> None:
         self.http = http_client
         self.settings = settings
+        self.prompt_overrides: dict[str, str] = prompt_overrides or {}
 
     @abstractmethod
     async def run(
@@ -62,7 +68,12 @@ class RagPipeline(ABC):
     async def _generate(
         self, query: str, chunks: list[dict], history: list[dict]
     ) -> tuple[str, list[Citation]]:
-        payload = {"query": query, "chunks": chunks, "conversation_history": history}
+        payload = {
+            "query": query,
+            "chunks": chunks,
+            "conversation_history": history,
+            "prompt_overrides": self.prompt_overrides,
+        }
         resp = await self.http.post(f"{self.settings.generation_url}/generate", json=payload)
         resp.raise_for_status()
         data = resp.json()
@@ -71,7 +82,12 @@ class RagPipeline(ABC):
 
     async def _evaluate_answer(self, query: str, answer: str, chunks: list[dict]) -> float:
         """Ask generation service to score answer sufficiency (0.0–1.0)."""
-        payload = {"query": query, "answer": answer, "chunks": chunks}
+        payload = {
+            "query": query,
+            "answer": answer,
+            "chunks": chunks,
+            "prompt_overrides": self.prompt_overrides,
+        }
         resp = await self.http.post(f"{self.settings.generation_url}/evaluate", json=payload)
         resp.raise_for_status()
         return float(resp.json().get("score", 1.0))
@@ -84,7 +100,12 @@ class RagPipeline(ABC):
         conversation_id: str,
         rag_mode: str,
     ) -> AsyncGenerator[str, None]:
-        payload = {"query": query, "chunks": chunks, "conversation_history": conversation_history}
+        payload = {
+            "query": query,
+            "chunks": chunks,
+            "conversation_history": conversation_history,
+            "prompt_overrides": self.prompt_overrides,
+        }
         url = f"{self.settings.generation_url}/generate/stream"
 
         async with self.http.stream("POST", url, json=payload) as resp:

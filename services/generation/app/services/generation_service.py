@@ -45,7 +45,9 @@ async def generate(
     max_tokens: int,
     temperature: float,
 ) -> GenerationResult:
-    messages = build_messages(request.query, request.chunks, request.conversation_history)
+    messages = build_messages(
+        request.query, request.chunks, request.conversation_history, request.prompt_overrides
+    )
     response = await client.chat.completions.create(
         model=model,
         messages=messages,
@@ -65,7 +67,9 @@ async def generate_stream(
     temperature: float,
 ) -> AsyncGenerator[str, None]:
     """Yields SSE-formatted strings. Final event contains citations JSON."""
-    messages = build_messages(request.query, request.chunks, request.conversation_history)
+    messages = build_messages(
+        request.query, request.chunks, request.conversation_history, request.prompt_overrides
+    )
     full_answer: list[str] = []
 
     stream = await client.chat.completions.create(
@@ -98,7 +102,11 @@ async def evaluate_answer(
     client: instructor.AsyncInstructor,
     model: str,
 ) -> EvaluationResult:
-    system = render("evaluate_system.j2", strict_mode=False)
+    system = render(
+        "evaluate_system.j2",
+        override=request.prompt_overrides.get("evaluate_system"),
+        strict_mode=False,
+    )
     context = _format_context(request.chunks)
     return await client.chat.completions.create(
         model=model,
@@ -121,7 +129,11 @@ async def detect_conflict(
     client: instructor.AsyncInstructor,
     model: str,
 ) -> ConflictDetectionResult:
-    system = render("detect_conflict_system.j2", topic_hint=None)
+    system = render(
+        "detect_conflict_system.j2",
+        override=request.prompt_overrides.get("detect_conflict_system"),
+        topic_hint=None,
+    )
     context = _format_context(request.chunks)
     return await client.chat.completions.create(
         model=model,

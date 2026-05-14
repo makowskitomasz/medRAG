@@ -23,7 +23,7 @@ class MadamRagPipeline(RagPipeline):
         try:
             resp = await self.http.post(
                 f"{self.settings.generation_url}/detect_conflict",
-                json={"chunks": chunks},
+                json={"chunks": chunks, "prompt_overrides": self.prompt_overrides},
             )
             resp.raise_for_status()
             data = resp.json()

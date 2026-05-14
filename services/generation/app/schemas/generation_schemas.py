@@ -14,6 +14,7 @@ class GenerationRequest(BaseModel):
     query: str
     chunks: list[ContextChunk]
     conversation_history: list[dict] = []
+    prompt_overrides: dict[str, str] = {}
 
 
 class Citation(BaseModel):
@@ -32,6 +33,7 @@ class EvaluationRequest(BaseModel):
     query: str
     answer: str
     chunks: list[ContextChunk]
+    prompt_overrides: dict[str, str] = {}
 
 
 class EvaluationResult(BaseModel):
@@ -41,6 +43,7 @@ class EvaluationResult(BaseModel):
 
 class ConflictDetectionRequest(BaseModel):
     chunks: list[ContextChunk]
+    prompt_overrides: dict[str, str] = {}
 
 
 class ConflictDetectionResult(BaseModel):

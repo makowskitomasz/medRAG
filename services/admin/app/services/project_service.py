@@ -2,7 +2,12 @@ from fastapi import HTTPException, status
 from medrag_shared.models.project import Project, ProjectSettings
 
 from app.repositories import project_repository
-from app.schemas.project_schemas import CreateProjectRequest, ProjectResponse, UpdateProjectRequest
+from app.schemas.project_schemas import (
+    CreateProjectRequest,
+    ProjectResponse,
+    UpdateProjectRequest,
+    UpdateSettingsRequest,
+)
 
 
 async def create_project(body: CreateProjectRequest, user_id: str = "") -> ProjectResponse:
@@ -35,12 +40,43 @@ async def update_project(project_id: str, body: UpdateProjectRequest) -> Project
     if body.settings is not None:
         patch["settings"] = body.settings.model_dump()
     updated = await project_repository.update_by_id(project_id, patch)
-    return ProjectResponse(
-        id=str(updated["_id"]),
-        name=updated["name"],
-        description=updated.get("description", ""),
-        settings=ProjectSettings(**updated["settings"]),
-    )
+    return project_repository._to_response(updated)
+
+
+async def update_settings(project_id: str, body: UpdateSettingsRequest) -> ProjectResponse:
+    """Merge only the provided settings fields into the existing settings."""
+    doc = await project_repository.get_by_id(project_id)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    current = ProjectSettings(**doc["settings"])
+    merged = current.model_dump()
+
+    updates = body.model_dump(exclude_unset=True)
+    if "prompt_overrides" in updates and updates["prompt_overrides"] is not None:
+        # Merge override keys — don't wipe keys not mentioned in the request.
+        existing = merged.get("prompt_overrides", {})
+        merged["prompt_overrides"] = {**existing, **updates.pop("prompt_overrides")}
+    merged.update({k: v for k, v in updates.items() if v is not None})
+
+    updated = await project_repository.update_by_id(project_id, {"settings": merged})
+    return project_repository._to_response(updated)
+
+
+async def delete_prompt_override(project_id: str, slug: str) -> ProjectResponse:
+    """Remove a single prompt override — reverts to the file-based default."""
+    doc = await project_repository.get_by_id(project_id)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    current = ProjectSettings(**doc["settings"])
+    overrides = dict(current.prompt_overrides)
+    overrides.pop(slug, None)
+    current_dump = current.model_dump()
+    current_dump["prompt_overrides"] = overrides
+
+    updated = await project_repository.update_by_id(project_id, {"settings": current_dump})
+    return project_repository._to_response(updated)
 
 
 async def list_projects() -> list[ProjectResponse]:
@@ -51,11 +87,4 @@ async def get_project(project_id: str) -> ProjectResponse:
     doc = await project_repository.get_by_id(project_id)
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    from medrag_shared.models.project import ProjectSettings
-
-    return ProjectResponse(
-        id=str(doc["_id"]),
-        name=doc["name"],
-        description=doc.get("description", ""),
-        settings=ProjectSettings(**doc["settings"]),
-    )
+    return project_repository._to_response(doc)

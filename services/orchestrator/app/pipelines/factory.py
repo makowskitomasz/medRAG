@@ -25,6 +25,11 @@ _PIPELINE_MAP = {
 }
 
 
-def get_pipeline(rag_mode: RagMode, http_client: httpx.AsyncClient, settings) -> RagPipeline:  # type: ignore[type-arg]
+def get_pipeline(
+    rag_mode: RagMode,
+    http_client: httpx.AsyncClient,
+    settings,  # type: ignore[type-arg]
+    prompt_overrides: dict[str, str] | None = None,
+) -> RagPipeline:
     pipeline_cls = _PIPELINE_MAP.get(rag_mode, VanillaPipeline)
-    return pipeline_cls(http_client, settings)
+    return pipeline_cls(http_client, settings, prompt_overrides)

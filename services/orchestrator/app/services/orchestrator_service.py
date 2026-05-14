@@ -32,7 +32,8 @@ async def handle_query(
     )
     history = build_history(conversation)
 
-    pipeline = get_pipeline(rag_mode, http_client, settings)
+    overrides = dict(project_settings.prompt_overrides)
+    pipeline = get_pipeline(rag_mode, http_client, settings, overrides)
     result = await pipeline.run(
         query=request.query,
         project_id=request.project_id,
@@ -64,7 +65,8 @@ async def handle_query_stream(
     )
     history = build_history(conversation)
 
-    pipeline = get_pipeline(rag_mode, http_client, settings)
+    overrides = dict(project_settings.prompt_overrides)
+    pipeline = get_pipeline(rag_mode, http_client, settings, overrides)
 
     answer_parts: list[str] = []
 

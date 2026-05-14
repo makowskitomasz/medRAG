@@ -36,6 +36,9 @@ class ProjectSettings(BaseModel):
     hybrid_alpha: float = Field(default=0.5, ge=0.0, le=1.0)
     top_k: int = Field(default=20, ge=1, le=100)
     rerank_top_n: int = Field(default=5, ge=1, le=20)
+    # Per-project Jinja2 prompt overrides. Keys match template slugs
+    # (e.g. "generate_system", "evaluate_system"). Empty = use file defaults.
+    prompt_overrides: dict[str, str] = Field(default_factory=dict)
 
 
 class Project(BaseModel):
