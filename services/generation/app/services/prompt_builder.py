@@ -1,12 +1,5 @@
 from app.schemas.generation_schemas import ContextChunk
-
-_SYSTEM_PROMPT = """You are a medical advisory assistant specializing in drug interactions.
-Answer the user's question using ONLY the provided context passages.
-Each passage is labeled with [SOURCE_N] where N is the source index.
-When you use information from a passage, cite it inline as [SOURCE_N].
-If the context does not contain enough information, say so clearly.
-Do not invent information not present in the context.
-Be concise, accurate, and clinically precise."""
+from app.services.prompt_loader import render
 
 
 def build_context_block(chunks: list[ContextChunk]) -> str:
@@ -26,10 +19,11 @@ def build_messages(
     chunks: list[ContextChunk],
     conversation_history: list[dict],
 ) -> list[dict]:
+    system = render("generate_system.j2", specialty="drug interactions", safety_note=None)
     context_block = build_context_block(chunks)
     user_message = f"Context:\n{context_block}\n\nQuestion: {query}"
 
-    messages: list[dict] = [{"role": "system", "content": _SYSTEM_PROMPT}]
+    messages: list[dict] = [{"role": "system", "content": system}]
     messages.extend(conversation_history)
     messages.append({"role": "user", "content": user_message})
     return messages

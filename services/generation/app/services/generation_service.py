@@ -1,11 +1,13 @@
 import json
 from collections.abc import AsyncGenerator
 
+import instructor
 from openai import AsyncOpenAI
 
 from app.schemas.generation_schemas import (
     ConflictDetectionRequest,
     ConflictDetectionResult,
+    ContextChunk,
     EvaluationRequest,
     EvaluationResult,
     GenerationRequest,
@@ -13,15 +15,27 @@ from app.schemas.generation_schemas import (
 )
 from app.services.citation_extractor import extract_citations
 from app.services.prompt_builder import build_messages
+from app.services.prompt_loader import render
 
-_client: AsyncOpenAI | None = None
+_MAX_RETRIES = 2
+
+_raw_client: AsyncOpenAI | None = None
+_instructor_client: instructor.AsyncInstructor | None = None
 
 
 def get_llm_client(base_url: str, api_key: str) -> AsyncOpenAI:
-    global _client
-    if _client is None:
-        _client = AsyncOpenAI(base_url=base_url, api_key=api_key)
-    return _client
+    global _raw_client
+    if _raw_client is None:
+        _raw_client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+    return _raw_client
+
+
+def get_instructor_client(base_url: str, api_key: str) -> instructor.AsyncInstructor:
+    global _instructor_client
+    if _instructor_client is None:
+        raw = get_llm_client(base_url, api_key)
+        _instructor_client = instructor.from_openai(raw, mode=instructor.Mode.JSON)
+    return _instructor_client
 
 
 async def generate(
@@ -75,83 +89,49 @@ async def generate_stream(
     yield "data: [DONE]\n\n"
 
 
-_EVAL_SYSTEM = (
-    "You are an evaluator. Given a query, an answer, and the source context chunks, "
-    "score how well the answer addresses the query using only information from the context. "
-    'Reply with JSON only: {"score": <float 0.0-1.0>, "reasoning": "<one sentence>"}. '
-    "1.0 = fully answered with context support. 0.0 = not answered or hallucinated."
-)
+def _format_context(chunks: list[ContextChunk]) -> str:
+    return "\n\n".join(f"[SOURCE_{i + 1}] {c.content}" for i, c in enumerate(chunks))
 
 
 async def evaluate_answer(
     request: EvaluationRequest,
-    client: AsyncOpenAI,
+    client: instructor.AsyncInstructor,
     model: str,
 ) -> EvaluationResult:
-    import re
-
-    context = "\n\n".join(f"[SOURCE_{i + 1}] {c.content}" for i, c in enumerate(request.chunks))
-    messages = [
-        {"role": "system", "content": _EVAL_SYSTEM},
-        {
-            "role": "user",
-            "content": f"Query: {request.query}\n\nAnswer: {request.answer}\n\nContext:\n{context}",
-        },
-    ]
-    response = await client.chat.completions.create(
+    system = render("evaluate_system.j2", strict_mode=False)
+    context = _format_context(request.chunks)
+    return await client.chat.completions.create(
         model=model,
-        messages=messages,  # type: ignore[arg-type]
-        max_tokens=200,
-        temperature=0.0,
+        messages=[
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": (
+                    f"Query: {request.query}\n\nAnswer: {request.answer}\n\nContext:\n{context}"
+                ),
+            },
+        ],
+        response_model=EvaluationResult,
+        max_retries=_MAX_RETRIES,
     )
-    raw = response.choices[0].message.content or '{"score": 1.0, "reasoning": ""}'
-    # Strip markdown code fences if present.
-    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
-    try:
-        import json
-
-        data = json.loads(raw)
-        return EvaluationResult(score=float(data["score"]), reasoning=data.get("reasoning", ""))
-    except Exception:
-        return EvaluationResult(score=1.0, reasoning="parse error — defaulting to sufficient")
-
-
-_CONFLICT_SYSTEM = (
-    "You are a medical evidence analyst. Review the provided source chunks and determine if they "
-    "contain conflicting medical information about the same topic. "
-    "Look for contradictions in dosing, contraindications, efficacy, or safety recommendations. "
-    "Reply with JSON only: "
-    '{"has_conflict": <bool>, "confidence": <float 0.0-1.0>, "reasoning": "<one sentence>"}.'
-)
 
 
 async def detect_conflict(
     request: ConflictDetectionRequest,
-    client: AsyncOpenAI,
+    client: instructor.AsyncInstructor,
     model: str,
 ) -> ConflictDetectionResult:
-    import re
-
-    context = "\n\n".join(f"[SOURCE_{i + 1}] {c.content}" for i, c in enumerate(request.chunks))
-    messages = [
-        {"role": "system", "content": _CONFLICT_SYSTEM},
-        {"role": "user", "content": f"Evaluate these medical sources for conflicts:\n\n{context}"},
-    ]
-    response = await client.chat.completions.create(
+    system = render("detect_conflict_system.j2", topic_hint=None)
+    context = _format_context(request.chunks)
+    return await client.chat.completions.create(
         model=model,
-        messages=messages,  # type: ignore[arg-type]
-        max_tokens=200,
-        temperature=0.0,
+        messages=[
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": f"Evaluate these medical sources for conflicts:\n\n{context}",
+            },
+        ],
+        response_model=ConflictDetectionResult,
+        max_retries=_MAX_RETRIES,
     )
-    _default = '{"has_conflict": false, "confidence": 0.5, "reasoning": ""}'
-    raw = response.choices[0].message.content or _default
-    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
-    try:
-        data = json.loads(raw)
-        return ConflictDetectionResult(
-            has_conflict=bool(data.get("has_conflict", False)),
-            confidence=float(data.get("confidence", 0.5)),
-            reasoning=data.get("reasoning", ""),
-        )
-    except Exception:
-        return ConflictDetectionResult(has_conflict=False, confidence=0.5, reasoning="parse error")

@@ -1,3 +1,4 @@
+import instructor
 from fastapi import APIRouter, Depends
 from openai import AsyncOpenAI
 
@@ -12,7 +13,7 @@ from app.schemas.query_schemas import (
     TriageRequest,
     TriageResponse,
 )
-from app.services.llm_client import get_llm_client
+from app.services.llm_client import get_instructor_client, get_llm_client
 from app.services.query_service import (
     decompose_query,
     generate_hypothetical_document,
@@ -29,6 +30,10 @@ def get_settings() -> Settings:
 
 def get_client(cfg: Settings = Depends(get_settings)) -> AsyncOpenAI:
     return get_llm_client(cfg.llm_base_url, cfg.resolved_api_key)
+
+
+def get_iclient(cfg: Settings = Depends(get_settings)) -> instructor.AsyncInstructor:
+    return get_instructor_client(cfg.llm_base_url, cfg.resolved_api_key)
 
 
 @router.post("/rewrite", response_model=QueryRewriteResponse)
@@ -55,9 +60,9 @@ async def hyde(
 async def decompose(
     request: DecomposeRequest,
     cfg: Settings = Depends(get_settings),
-    client: AsyncOpenAI = Depends(get_client),
+    iclient: instructor.AsyncInstructor = Depends(get_iclient),
 ) -> DecomposeResponse:
-    sub_questions = await decompose_query(request.query, client, cfg.llm_model)
+    sub_questions = await decompose_query(request.query, iclient, cfg.llm_model)
     return DecomposeResponse(original_query=request.query, sub_questions=sub_questions)
 
 
@@ -65,11 +70,11 @@ async def decompose(
 async def triage(
     request: TriageRequest,
     cfg: Settings = Depends(get_settings),
-    client: AsyncOpenAI = Depends(get_client),
+    iclient: instructor.AsyncInstructor = Depends(get_iclient),
 ) -> TriageResponse:
-    result = await triage_query(request.query, client, cfg.llm_model)
+    result = await triage_query(request.query, iclient, cfg.llm_model)
     return TriageResponse(
-        complexity=result.get("complexity", "standard"),
-        conflict_risk=result.get("conflict_risk", "low"),
-        route=result.get("route", "vanilla"),
+        complexity=result["complexity"],
+        conflict_risk=result["conflict_risk"],
+        route=result["route"],
     )
