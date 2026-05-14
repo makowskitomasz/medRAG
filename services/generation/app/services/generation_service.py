@@ -4,6 +4,8 @@ from collections.abc import AsyncGenerator
 from openai import AsyncOpenAI
 
 from app.schemas.generation_schemas import (
+    ConflictDetectionRequest,
+    ConflictDetectionResult,
     EvaluationRequest,
     EvaluationResult,
     GenerationRequest,
@@ -112,3 +114,44 @@ async def evaluate_answer(
         return EvaluationResult(score=float(data["score"]), reasoning=data.get("reasoning", ""))
     except Exception:
         return EvaluationResult(score=1.0, reasoning="parse error — defaulting to sufficient")
+
+
+_CONFLICT_SYSTEM = (
+    "You are a medical evidence analyst. Review the provided source chunks and determine if they "
+    "contain conflicting medical information about the same topic. "
+    "Look for contradictions in dosing, contraindications, efficacy, or safety recommendations. "
+    "Reply with JSON only: "
+    '{"has_conflict": <bool>, "confidence": <float 0.0-1.0>, "reasoning": "<one sentence>"}.'
+)
+
+
+async def detect_conflict(
+    request: ConflictDetectionRequest,
+    client: AsyncOpenAI,
+    model: str,
+) -> ConflictDetectionResult:
+    import re
+
+    context = "\n\n".join(f"[SOURCE_{i + 1}] {c.content}" for i, c in enumerate(request.chunks))
+    messages = [
+        {"role": "system", "content": _CONFLICT_SYSTEM},
+        {"role": "user", "content": f"Evaluate these medical sources for conflicts:\n\n{context}"},
+    ]
+    response = await client.chat.completions.create(
+        model=model,
+        messages=messages,  # type: ignore[arg-type]
+        max_tokens=200,
+        temperature=0.0,
+    )
+    _default = '{"has_conflict": false, "confidence": 0.5, "reasoning": ""}'
+    raw = response.choices[0].message.content or _default
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+    try:
+        data = json.loads(raw)
+        return ConflictDetectionResult(
+            has_conflict=bool(data.get("has_conflict", False)),
+            confidence=float(data.get("confidence", 0.5)),
+            reasoning=data.get("reasoning", ""),
+        )
+    except Exception:
+        return ConflictDetectionResult(has_conflict=False, confidence=0.5, reasoning="parse error")

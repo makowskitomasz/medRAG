@@ -37,3 +37,13 @@ class EvaluationRequest(BaseModel):
 class EvaluationResult(BaseModel):
     score: float
     reasoning: str
+
+
+class ConflictDetectionRequest(BaseModel):
+    chunks: list[ContextChunk]
+
+
+class ConflictDetectionResult(BaseModel):
+    has_conflict: bool
+    confidence: float
+    reasoning: str

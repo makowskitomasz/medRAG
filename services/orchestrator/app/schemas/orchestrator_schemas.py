@@ -23,6 +23,7 @@ class QueryResponse(BaseModel):
     answer: str
     citations: list[Citation]
     rag_mode: str
+    abstained: bool = False
 
 
 class ConversationMessage(BaseModel):

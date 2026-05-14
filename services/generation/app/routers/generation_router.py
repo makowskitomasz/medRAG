@@ -4,12 +4,15 @@ from openai import AsyncOpenAI
 
 from app.config.settings import Settings, settings
 from app.schemas.generation_schemas import (
+    ConflictDetectionRequest,
+    ConflictDetectionResult,
     EvaluationRequest,
     EvaluationResult,
     GenerationRequest,
     GenerationResult,
 )
 from app.services.generation_service import (
+    detect_conflict,
     evaluate_answer,
     generate,
     generate_stream,
@@ -43,6 +46,15 @@ async def evaluate(
     client: AsyncOpenAI = Depends(get_client),
 ) -> EvaluationResult:
     return await evaluate_answer(request, client, cfg.llm_model)
+
+
+@router.post("/detect_conflict", response_model=ConflictDetectionResult)
+async def conflict_detection(
+    request: ConflictDetectionRequest,
+    cfg: Settings = Depends(get_settings),
+    client: AsyncOpenAI = Depends(get_client),
+) -> ConflictDetectionResult:
+    return await detect_conflict(request, client, cfg.llm_model)
 
 
 @router.post("/generate/stream")

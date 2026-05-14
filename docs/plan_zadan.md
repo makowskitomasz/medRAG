@@ -82,32 +82,46 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 
 ---
 
-## Faza 4 — Self-Reflection + Multi-Agent + Query-Rewriting RAG (cel: 6 trybów działa)
+## Faza 4 — Pełna biblioteka architektur RAG + RARE-RAG (cel: 9 trybów + auto-router)
 
 Kontekst: dataset `Drug Interactions Reference Guide` zawiera m.in. interakcje warfaryna–aspiryna,
 warfaryna–NLPZ, statyny–CYP3A4, inhibitory ACE–diuretyki, metformina–środki kontrastowe,
 SSRI–MAOI, klopidogrel–IPP, digoksyna. Te przypadki posłużą jako pytania testowe do porównania architektur.
 
-### 4.1 Self-Reflection (Self-RAG)
-- [ ] **4.1.1** `[C]` Orchestrator: `SelfReflectionPipeline` — vanilla flow → LLM ocenia answer score (0-1) → jeśli < progu: refine query + retry (max 2 iteracje)
-- [ ] **4.1.2** `[C]` Generation: dodatkowy endpoint `/evaluate` — LLM ocenia czy odpowiedź jest wystarczająca na podstawie kontekstu (tak/nie + uzasadnienie)
-- [ ] **4.1.3** `[C]` Testy jednostkowe: mock LLM score, weryfikacja że pipeline zatrzymuje się przy score ≥ progu i po max 2 iteracjach
+Architektury wg dokumentu analitycznego (bez GraphRAG): Classic RAG (vanilla), HyDE, Query Rewriting,
+Self-RAG, Corrective RAG, Iterative Multi-Hop RAG, MA-RAG, MADAM-RAG, RARE-RAG.
 
-### 4.2 Multi-Agent RAG
-- [ ] **4.2.1** Decyzja: jakie agent roles — np. `retrieval_agent`, `synthesis_agent`, `fact_check_agent` — **TWOJA DECYZJA**
-- [ ] **4.2.2** `[C]` Orchestrator: `MultiAgentPipeline` — router agent klasyfikuje pytanie (typ interakcji, lek, mechanizm) → uruchamia odpowiedniego specialist agent → aggregator łączy odpowiedzi
-- [ ] **4.2.3** `[C]` Specialist agents: każdy wywołuje retrieval z innym query wariantem (np. mechanizm, ryzyko, dawkowanie)
-- [ ] **4.2.4** `[C]` Testy jednostkowe: routing agent mock, agregacja wyników
+### 4.1 Zaimplementowane (done w poprzednim commicie)
+- [x] **4.1.1** `[C]` `VanillaPipeline` (Classic RAG baseline)
+- [x] **4.1.2** `[C]` `HydePipeline` (Hypothetical Document Embeddings)
+- [x] **4.1.3** `[C]` `QueryRewritingPipeline` (rewrite → retrieval)
+- [x] **4.1.4** `[C]` `SelfReflectionPipeline` (Self-RAG: score → retry max 2×)
+- [x] **4.1.5** `[C]` `MultiAgentPipeline` (MA-RAG: 3 perspektywy równolegle, dedup)
+- [x] **4.1.6** `[C]` `CorrectiveRagPipeline` (ocena relevance, fallback BM25)
+- [x] **4.1.7** `[C]` Generation `/evaluate` endpoint (LLM score 0–1 dla self-reflection)
 
-### 4.3 Query Rewriting RAG
-- [ ] **4.3.1** `[C]` Orchestrator: `QueryRewritingPipeline` — LLM przepisuje query na terminologię medyczną przed retrieval (używa istniejącego `/rewrite` z Query Processor)
-- [ ] **4.3.2** `[C]` Testy jednostkowe: weryfikacja że rewritten query trafia do retrieval zamiast oryginału
+### 4.2 Iterative Multi-Hop RAG
+- [x] **4.2.1** `[C]` `IterativeMultiHopPipeline` — Query Processor `/decompose` rozkłada pytanie na pod-pytania → każde niezależny retrieval → agregacja dowodów → rerank → generate
+- [x] **4.2.2** `[C]` Query Processor: endpoint `/decompose` — LLM rozkłada złożone pytanie na listę pod-pytań
+- [x] **4.2.3** `[C]` Testy: weryfikacja dekompozycji, agregacji i deduplikacji chunków między hopami
 
-### 4.4 Integracja i routing
-- [ ] **4.4.1** `[C]` Orchestrator factory: rozszerzenie o `self_reflection`, `multi_agent`, `query_rewriting` (razem z istniejącymi `vanilla`, `hyde`)
-- [ ] **4.4.2** `[C]` Testy integracyjne: wszystkie 6 trybów RAG na tym samym zapytaniu testowym (np. "What are the risks of combining aspirin and warfarin?")
+### 4.3 MADAM-RAG (sprzeczne dowody)
+- [x] **4.3.1** `[C]` `MadamRagPipeline` — conflict detection → diverse retrieval → Pro/Counter/Conflict agents → cautious aggregation → generate z uncertainty
+- [x] **4.3.2** `[C]` Generation `/detect_conflict` endpoint — LLM ocenia czy chunki zawierają sprzeczne informacje (bool + confidence)
+- [x] **4.3.3** `[C]` Testy: conflict detection mock, cautious answer gdy wykryto konflikt
 
-**Branch**: `feature/phase-4-advanced-rag-modes`
+### 4.4 RARE-RAG (Risk-Aware Routed Evidence RAG)
+- [x] **4.4.1** `[C]` `RareRagPipeline` — meta-pipeline: LLM triage pytania → wybiera jeden z 8 trybów → deleguje do odpowiedniego pipeline → grounding verification → odpowiedź lub abstencja
+- [x] **4.4.2** `[C]` Query Processor: endpoint `/triage` — klasyfikacja pytania: complexity (simple/standard/complex/multi_hop), conflict_risk (low/medium/high), returns route decision
+- [x] **4.4.3** `[C]` Abstention path: gdy grounding score < progu po retry — zwrot `{"abstained": true, "reason": "..."}`
+- [x] **4.4.4** `[C]` Testy: routing decisions dla każdego typu pytania, abstention przy niskim score
+
+### 4.5 Shared models i integracja
+- [x] **4.5.1** `[C]` RagMode enum: dodanie `iterative_multihop`, `madam_rag`, `rare_rag`
+- [x] **4.5.2** `[C]` Factory: rejestracja wszystkich 9 pipeline'ów
+- [x] **4.5.3** `[C]` Testy integracyjne: wszystkie 9 trybów na zapytaniu "What are the risks of combining aspirin and warfarin?"
+
+**Branch**: `feature/phase-4-eval-rag-architectures`
 
 ---
 

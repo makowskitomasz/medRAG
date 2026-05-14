@@ -24,6 +24,9 @@ class RagMode(StrEnum):
     SELF_REFLECTION = "self_reflection"
     MULTI_AGENT = "multi_agent"
     CORRECTIVE_RAG = "corrective_rag"
+    ITERATIVE_MULTIHOP = "iterative_multihop"
+    MADAM_RAG = "madam_rag"
+    RARE_RAG = "rare_rag"
 
 
 class ProjectSettings(BaseModel):

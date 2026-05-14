@@ -25,3 +25,47 @@ async def rewrite_query(query: str, context: str, client: AsyncOpenAI, model: st
 
 async def generate_hypothetical_document(query: str, client: AsyncOpenAI, model: str) -> str:
     return await chat_complete(client, model, _HYDE_SYSTEM, query)
+
+
+_DECOMPOSE_SYSTEM = (
+    "You are a medical research assistant. Break down the complex medical question into "
+    "2-4 simpler sub-questions that together cover the original question. "
+    'Return JSON only: {"sub_questions": ["...", "..."]}. '
+    "Each sub-question should be self-contained and answerable independently."
+)
+
+_TRIAGE_SYSTEM = (
+    "You are a medical query classifier. Classify the query and return routing decision. "
+    "complexity: 'simple' (single fact), 'standard' (one topic), 'complex' (multi-factor), "
+    "'multi_hop' (requires chaining evidence). "
+    "conflict_risk: 'low' (clear consensus), 'medium' (some variation), "
+    "'high' (known contradictions). "
+    "route: one of vanilla|hyde|query_rewriting|self_reflection|multi_agent|corrective_rag|"
+    "iterative_multihop|madam_rag. "
+    'Return JSON only: {"complexity": "...", "conflict_risk": "...", "route": "..."}'
+)
+
+
+async def decompose_query(query: str, client: AsyncOpenAI, model: str) -> list[str]:
+    import json
+    import re
+
+    raw = await chat_complete(client, model, _DECOMPOSE_SYSTEM, query)
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+    try:
+        data = json.loads(raw)
+        return [str(q) for q in data.get("sub_questions", [query])]
+    except Exception:
+        return [query]
+
+
+async def triage_query(query: str, client: AsyncOpenAI, model: str) -> dict:
+    import json
+    import re
+
+    raw = await chat_complete(client, model, _TRIAGE_SYSTEM, query)
+    raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip())
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {"complexity": "standard", "conflict_risk": "low", "route": "vanilla"}

@@ -4,8 +4,11 @@ from medrag_shared.models.project import RagMode
 from app.pipelines.base import RagPipeline
 from app.pipelines.corrective_rag import CorrectiveRagPipeline
 from app.pipelines.hyde import HydePipeline
+from app.pipelines.iterative_multihop import IterativeMultiHopPipeline
+from app.pipelines.madam_rag import MadamRagPipeline
 from app.pipelines.multi_agent import MultiAgentPipeline
 from app.pipelines.query_rewriting import QueryRewritingPipeline
+from app.pipelines.rare_rag import RareRagPipeline
 from app.pipelines.self_reflection import SelfReflectionPipeline
 from app.pipelines.vanilla import VanillaPipeline
 
@@ -16,6 +19,9 @@ _PIPELINE_MAP = {
     RagMode.SELF_REFLECTION: SelfReflectionPipeline,
     RagMode.MULTI_AGENT: MultiAgentPipeline,
     RagMode.CORRECTIVE_RAG: CorrectiveRagPipeline,
+    RagMode.ITERATIVE_MULTIHOP: IterativeMultiHopPipeline,
+    RagMode.MADAM_RAG: MadamRagPipeline,
+    RagMode.RARE_RAG: RareRagPipeline,
 }
 
 

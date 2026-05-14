@@ -3,13 +3,22 @@ from openai import AsyncOpenAI
 
 from app.config.settings import Settings, settings
 from app.schemas.query_schemas import (
+    DecomposeRequest,
+    DecomposeResponse,
     HyDERequest,
     HyDEResponse,
     QueryRewriteRequest,
     QueryRewriteResponse,
+    TriageRequest,
+    TriageResponse,
 )
 from app.services.llm_client import get_llm_client
-from app.services.query_service import generate_hypothetical_document, rewrite_query
+from app.services.query_service import (
+    decompose_query,
+    generate_hypothetical_document,
+    rewrite_query,
+    triage_query,
+)
 
 router = APIRouter()
 
@@ -40,3 +49,27 @@ async def hyde(
 ) -> HyDEResponse:
     doc = await generate_hypothetical_document(request.query, client, cfg.llm_model)
     return HyDEResponse(query=request.query, hypothetical_document=doc)
+
+
+@router.post("/decompose", response_model=DecomposeResponse)
+async def decompose(
+    request: DecomposeRequest,
+    cfg: Settings = Depends(get_settings),
+    client: AsyncOpenAI = Depends(get_client),
+) -> DecomposeResponse:
+    sub_questions = await decompose_query(request.query, client, cfg.llm_model)
+    return DecomposeResponse(original_query=request.query, sub_questions=sub_questions)
+
+
+@router.post("/triage", response_model=TriageResponse)
+async def triage(
+    request: TriageRequest,
+    cfg: Settings = Depends(get_settings),
+    client: AsyncOpenAI = Depends(get_client),
+) -> TriageResponse:
+    result = await triage_query(request.query, client, cfg.llm_model)
+    return TriageResponse(
+        complexity=result.get("complexity", "standard"),
+        conflict_risk=result.get("conflict_risk", "low"),
+        route=result.get("route", "vanilla"),
+    )
