@@ -110,14 +110,26 @@ context_precision, context_recall, latency_ms, rag_mode, timestamp
 
 All variants share the same retrieval + reranker layer. They differ in how the query is processed and how generation is triggered.
 
-| Mode | Flow |
-|---|---|
-| `vanilla` | query → retrieval → rerank → generate |
-| `hyde` | query → LLM generates hypothetical doc → retrieval → rerank → generate |
-| `self_reflection` | vanilla flow → LLM self-scores answer → if insufficient: refine query + retry (max 2 iterations) |
-| `multi_agent` | query → router agent → specialist agents (per topic) → aggregator → generate |
+| Mode | Flow | Key idea |
+|---|---|---|
+| `vanilla` | query → retrieval → rerank → generate | Baseline; no query transformation |
+| `hyde` | query → LLM generates hypothetical doc → embed hypothetical doc → retrieval → rerank → generate | Hypothetical Document Embeddings (Gao et al. 2022); improves vector recall for complex questions |
+| `query_rewriting` | query → LLM rewrites to medical terminology → retrieval → rerank → generate | Bridges colloquial queries and technical corpus vocabulary (e.g. "mixing pills" → "drug-drug interaction pharmacokinetics") |
+| `self_reflection` | vanilla flow → LLM self-scores answer sufficiency (0–1) → if below threshold: refine query + retry (max 2 rounds) | Self-RAG style (Asai et al. 2023); catches incomplete answers before returning to user |
+| `multi_agent` | query → router agent classifies intent (mechanism / risk / dosing / contraindication) → specialist agents run parallel retrieval variants → aggregator synthesises | Multi-perspective retrieval; each agent queries with a different reformulation |
+| `corrective_rag` | vanilla flow → retrieved docs scored for relevance → low-relevance docs trigger web search fallback → regenerate | CRAG (Yan et al. 2024); handles knowledge gaps in the local corpus |
 
-New modes are added as new orchestrator strategy classes implementing a common `RagPipeline` interface.
+New modes are added as new orchestrator strategy classes implementing a common `RagPipeline` interface. The `rag_mode` field in `projects.settings` selects the active pipeline without code changes.
+
+### Pipeline selection rationale for thesis
+
+The six modes represent three generations of RAG:
+1. **Naive** (`vanilla`) — baseline, minimal processing
+2. **Query-side augmentation** (`hyde`, `query_rewriting`) — transform the question before retrieval
+3. **Answer-side verification** (`self_reflection`, `corrective_rag`) — validate and refine after generation
+4. **Decomposition** (`multi_agent`) — break the question into sub-tasks
+
+This taxonomy maps directly to a thesis chapter comparing retrieval quality and generation faithfulness across generations.
 
 ---
 
@@ -136,10 +148,46 @@ DLX (dead-letter exchange) on every queue. Failed messages land in `*.failed` qu
 
 ## 9. Evaluation approach
 
-- **Datasets**: Wikipedia subset (general medical) + drug interactions dataset (TBD source)
-- **Ground truth**: 50–100 QA pairs per dataset
-- **Metrics (RAGAS)**: faithfulness, answer relevancy, context precision, context recall
-- **Experiment**: run all 4 RAG modes against same dataset; compare metrics + latency
+### Dataset
+
+**Primary**: `Drug Interactions Reference Guide` — curated PDF covering:
+- Warfarin + Aspirin (bleeding risk, protein binding displacement, INR monitoring)
+- Warfarin + NSAIDs (GI hemorrhage risk, acetaminophen as alternative)
+- Warfarin dosing and monitoring (INR 2.0–3.0 target, CYP2C9/VKORC1 polymorphisms)
+- Statins + CYP3A4 inhibitors (myopathy, rhabdomyolysis risk — clarithromycin, amiodarone)
+- ACE inhibitors + potassium-sparing diuretics (hyperkalemia risk)
+- Metformin + contrast media (lactic acidosis, 48h withhold rule)
+- SSRIs + MAOIs (serotonin syndrome, 14-day washout)
+- Clopidogrel + PPIs (CYP2C19 inhibition, pantoprazole preferred)
+- Digoxin + amiodarone/verapamil (narrow therapeutic index, P-gp inhibition)
+- Rifampicin + oral contraceptives (CYP3A4 induction, contraceptive failure)
+
+**Secondary**: Wikipedia medical subset (general baseline, broader coverage)
+
+### Ground truth
+
+50–100 QA pairs per dataset. Example question types:
+- *"What is the mechanism of interaction between warfarin and aspirin?"*
+- *"Which analgesic is preferred in patients on warfarin therapy?"*
+- *"What washout period is required when switching from SSRI to MAOI?"*
+
+### Metrics (RAGAS)
+
+| Metric | What it measures |
+|---|---|
+| `faithfulness` | Answer grounded in retrieved context (no hallucination) |
+| `answer_relevancy` | Answer actually addresses the question |
+| `context_precision` | Retrieved chunks relevant to the question |
+| `context_recall` | Ground truth covered by retrieved chunks |
+
+### Experiment design
+
+Run all **6 RAG modes** × **2 datasets** × **same QA pairs**. Compare:
+- RAGAS metrics per mode
+- Latency (time to first token, total latency)
+- Cost per query (token count)
+
+Expected hypothesis: `self_reflection` and `corrective_rag` score higher on `faithfulness`; `hyde` and `query_rewriting` improve `context_recall` on complex questions; `vanilla` is fastest but least faithful.
 
 ---
 

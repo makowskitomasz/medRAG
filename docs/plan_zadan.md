@@ -82,12 +82,30 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 
 ---
 
-## Faza 4 — Self-Reflection + Multi-Agent RAG (cel: 4 tryby działają)
+## Faza 4 — Self-Reflection + Multi-Agent + Query-Rewriting RAG (cel: 6 trybów działa)
 
-- [ ] **4.1** `[C]` Orchestrator: `SelfReflectionPipeline` (iteracyjne refinowanie: max 2 rundy)
-- [ ] **4.2** `[C]` Orchestrator: `MultiAgentPipeline` (router agent + specialist agents + aggregator)
-- [ ] **4.3** Decyzja: które architektury agentowe (MARAG/MADAM) implementować — **TWOJA DECYZJA**
-- [ ] **4.4** `[C]` Testy integracyjne: wszystkie 4 tryby RAG na tym samym zapytaniu testowym
+Kontekst: dataset `Drug Interactions Reference Guide` zawiera m.in. interakcje warfaryna–aspiryna,
+warfaryna–NLPZ, statyny–CYP3A4, inhibitory ACE–diuretyki, metformina–środki kontrastowe,
+SSRI–MAOI, klopidogrel–IPP, digoksyna. Te przypadki posłużą jako pytania testowe do porównania architektur.
+
+### 4.1 Self-Reflection (Self-RAG)
+- [ ] **4.1.1** `[C]` Orchestrator: `SelfReflectionPipeline` — vanilla flow → LLM ocenia answer score (0-1) → jeśli < progu: refine query + retry (max 2 iteracje)
+- [ ] **4.1.2** `[C]` Generation: dodatkowy endpoint `/evaluate` — LLM ocenia czy odpowiedź jest wystarczająca na podstawie kontekstu (tak/nie + uzasadnienie)
+- [ ] **4.1.3** `[C]` Testy jednostkowe: mock LLM score, weryfikacja że pipeline zatrzymuje się przy score ≥ progu i po max 2 iteracjach
+
+### 4.2 Multi-Agent RAG
+- [ ] **4.2.1** Decyzja: jakie agent roles — np. `retrieval_agent`, `synthesis_agent`, `fact_check_agent` — **TWOJA DECYZJA**
+- [ ] **4.2.2** `[C]` Orchestrator: `MultiAgentPipeline` — router agent klasyfikuje pytanie (typ interakcji, lek, mechanizm) → uruchamia odpowiedniego specialist agent → aggregator łączy odpowiedzi
+- [ ] **4.2.3** `[C]` Specialist agents: każdy wywołuje retrieval z innym query wariantem (np. mechanizm, ryzyko, dawkowanie)
+- [ ] **4.2.4** `[C]` Testy jednostkowe: routing agent mock, agregacja wyników
+
+### 4.3 Query Rewriting RAG
+- [ ] **4.3.1** `[C]` Orchestrator: `QueryRewritingPipeline` — LLM przepisuje query na terminologię medyczną przed retrieval (używa istniejącego `/rewrite` z Query Processor)
+- [ ] **4.3.2** `[C]` Testy jednostkowe: weryfikacja że rewritten query trafia do retrieval zamiast oryginału
+
+### 4.4 Integracja i routing
+- [ ] **4.4.1** `[C]` Orchestrator factory: rozszerzenie o `self_reflection`, `multi_agent`, `query_rewriting` (razem z istniejącymi `vanilla`, `hyde`)
+- [ ] **4.4.2** `[C]` Testy integracyjne: wszystkie 6 trybów RAG na tym samym zapytaniu testowym (np. "What are the risks of combining aspirin and warfarin?")
 
 **Branch**: `feature/phase-4-advanced-rag-modes`
 
@@ -143,10 +161,10 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 | 1. Auth + Gateway | 7 | 6 |
 | 2. Ingestion | 16 | 14 |
 | 3. Query pipeline | 14 | 13 |
-| 4. Advanced RAG | 4 | 3 |
+| 4. Advanced RAG | 11 | 9 |
 | 5. Admin + Eval | 6 | 6 |
 | 6. Frontend | 9 | 9 |
 | 7. Ewaluacja | 6 | 3 |
-| **Razem** | **71** | **61** |
+| **Razem** | **78** | **67** |
 
-~65 zadań do delegowania Claude'owi, ~12 wymaga Twojego głębokiego zaangażowania.
+~67 zadań do delegowania Claude'owi, ~12 wymaga Twojego głębokiego zaangażowania.
