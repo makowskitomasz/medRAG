@@ -63,20 +63,20 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 
 ## Faza 3 — Query pipeline (cel: pytanie → streamowana odpowiedź z cytowaniami)
 
-- [ ] **3.1** `[C]` Retrieval Service: hybrid search w Weaviate (`hybrid()`: BM25 + vector + alpha z project settings)
-- [ ] **3.2** `[C]` Retrieval: enrichment chunków metadanymi z Mongo (tytuł, strona, projekt)
-- [ ] **3.3** `[C]` Reranker Service: cross-encoder BGE-reranker-v2-m3 (sentence-transformers)
-- [ ] **3.4** `[C]` Query Processor: query rewriting (LLM call) + HyDE (generuj hipotetyczny dokument)
-- [ ] **3.5** `[C]` Generation Service: prompt template + integracja z openai SDK przez OpenRouter (`base_url=https://openrouter.ai/api/v1`, model konfigurowalny przez `LLM_MODEL`)
-- [ ] **3.6** `[C]` Generation: streaming SSE (`StreamingResponse` FastAPI)
-- [ ] **3.7** `[C]` Generation: ekstrakcja cytowań z odpowiedzi
-- [ ] **3.8** `[C]` Orchestrator: abstrakcja `RagPipeline`, implementacja `VanillaPipeline`
-- [ ] **3.9** `[C]` Orchestrator: implementacja `HydePipeline` (używa Query Processor)
-- [ ] **3.10** `[C]` Orchestrator: routing do pipeline'u na podstawie `project.settings.rag_mode`
-- [ ] **3.11** `[C]` Orchestrator: zapis konwersacji do Mongo (`conversations` collection)
-- [ ] **3.12** `[C]` Orchestrator: publish `query.completed` do RabbitMQ
-- [ ] **3.13** `[C]` Testy jednostkowe: retrieval mock, reranker, citation extraction, pipeline routing
-- [ ] **3.14** Test e2e: pytanie przez gateway → streamowana odpowiedź z cytowaniami
+- [x] **3.1** `[C]` Retrieval Service: hybrid search w Weaviate (`hybrid()`: BM25 + vector + alpha z project settings)
+- [x] **3.2** `[C]` Retrieval: enrichment chunków metadanymi z Mongo (tytuł, strona, projekt)
+- [x] **3.3** `[C]` Reranker Service: cross-encoder BGE-reranker-v2-m3 (sentence-transformers)
+- [x] **3.4** `[C]` Query Processor: query rewriting (LLM call) + HyDE (generuj hipotetyczny dokument)
+- [x] **3.5** `[C]` Generation Service: prompt template + integracja z openai SDK przez OpenRouter (`base_url=https://openrouter.ai/api/v1`, model konfigurowalny przez `LLM_MODEL`)
+- [x] **3.6** `[C]` Generation: streaming SSE (`StreamingResponse` FastAPI)
+- [x] **3.7** `[C]` Generation: ekstrakcja cytowań z odpowiedzi
+- [x] **3.8** `[C]` Orchestrator: abstrakcja `RagPipeline`, implementacja `VanillaPipeline`
+- [x] **3.9** `[C]` Orchestrator: implementacja `HydePipeline` (używa Query Processor)
+- [x] **3.10** `[C]` Orchestrator: routing do pipeline'u na podstawie `project.settings.rag_mode`
+- [x] **3.11** `[C]` Orchestrator: zapis konwersacji do Mongo (`conversations` collection)
+- [x] **3.12** `[C]` Orchestrator: publish `query.completed` do RabbitMQ
+- [x] **3.13** `[C]` Testy jednostkowe: retrieval mock, reranker, citation extraction, pipeline routing
+- [x] **3.14** Test e2e: pytanie przez gateway → streamowana odpowiedź z cytowaniami
 
 **Branche**: `feature/phase-3.1-retrieval-reranker`, `feature/phase-3.2-generation-streaming`, `feature/phase-3.3-orchestrator-vanilla`, `feature/phase-3.4-orchestrator-hyde`
 
@@ -125,14 +125,19 @@ Self-RAG, Corrective RAG, Iterative Multi-Hop RAG, MA-RAG, MADAM-RAG, RARE-RAG.
 
 ---
 
-## Faza 5 — Admin + Eval (cel: metryki RAGAS zbierane automatycznie)
+## Faza 5 — Admin + Eval (cel: metryki zbierane automatycznie, bez RAGAS)
 
 - [ ] **5.1** `[C]` Admin Service: CRUD projektów z `settings` (chunking_strategy, rag_mode, embedding_provider)
 - [ ] **5.2** `[C]` Admin: lista dokumentów ze statusem, paginacja, filtrowanie
 - [ ] **5.3** `[C]` Admin: endpoint `POST /projects/{id}/reindex` (re-publish events)
-- [ ] **5.4** `[C]` Eval Service: konsument `query.completed`, integracja z RAGAS
-- [ ] **5.5** `[C]` Eval: model `EvalLog`, zapis do Mongo (`eval_logs`)
-- [ ] **5.6** `[C]` Admin: endpoint GET eval logs z filtrem po `rag_mode`, export CSV
+- [ ] **5.4** `[C]` Eval Service: konsument `query.completed`, własne metryki RAG (bez RAGAS)
+  - **Tryb benchmark** (event zawiera `gold_answer`): token F1, EM, faithfulness (LLM-as-judge), answer_relevance (BGE cosine similarity pytania i odpowiedzi)
+  - **Tryb produkcja** (brak `gold_answer`): faithfulness (LLM-as-judge), context_relevance (avg reranker score), citation_precision, latency_ms, token_count
+  - Wyniki zapisywane do kolekcji `eval_results` z polami: `rag_mode`, `question`, `metrics`, `mode` (benchmark/production), `timestamp`
+  - Skrypt `scripts/benchmark_runner.py`: wysyła pytania z Wikipedia QA dataset przez `/chat/query` z polem `gold_answer`, porównuje wyniki per `rag_mode`
+- [ ] **5.5** `[C]` Eval: model `EvalResult`, zapis do Mongo (`eval_results`)
+- [ ] **5.6** `[C]` Eval: `GET /results?project_id=&rag_mode=` — lista wyników; `GET /results/summary` — tabela porównawcza architektur
+- [ ] **5.7** `[C]` Admin: endpoint GET eval results z filtrem po `rag_mode`, export CSV
 
 **Branch**: `feature/phase-5-admin-eval`
 

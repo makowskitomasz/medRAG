@@ -4,7 +4,7 @@
 
 A technology demonstrator for drug interaction advisory using Retrieval-Augmented Generation. The system answers questions like: *"Can a patient with condition X take drug Y alongside drug Z?"* by retrieving relevant medical knowledge and generating a cited answer.
 
-Secondary goal: compare RAG architectures (Vanilla, HyDE, Self-Reflection, Multi-Agent) experimentally, measured with RAGAS metrics.
+Secondary goal: compare all 9 RAG architectures experimentally using custom evaluation metrics (no RAGAS dependency).
 
 ---
 
@@ -36,8 +36,12 @@ Secondary goal: compare RAG architectures (Vanilla, HyDE, Self-Reflection, Multi
 - Trigger reindex for a project
 
 ### Evaluation
-- Asynchronous RAGAS scoring after each query
-- Export eval logs to CSV for analysis
+- Asynchronous metric computation after each query (RabbitMQ consumer of `query.completed`)
+- Two evaluation modes: **benchmark** (with `gold_answer`) and **production** (without)
+- Benchmark mode: token F1, EM, faithfulness (LLM-as-judge), answer_relevance (BGE cosine)
+- Production mode: faithfulness, context_relevance, citation_precision, latency_ms, token_count
+- Results stored in `eval_results` collection, queryable by `rag_mode` and `project_id`
+- Export eval results to CSV for cross-architecture comparison
 
 ---
 
@@ -148,46 +152,82 @@ DLX (dead-letter exchange) on every queue. Failed messages land in `*.failed` qu
 
 ## 9. Evaluation approach
 
-### Dataset
+### Datasets
 
-**Primary**: `Drug Interactions Reference Guide` — curated PDF covering:
-- Warfarin + Aspirin (bleeding risk, protein binding displacement, INR monitoring)
-- Warfarin + NSAIDs (GI hemorrhage risk, acetaminophen as alternative)
-- Warfarin dosing and monitoring (INR 2.0–3.0 target, CYP2C9/VKORC1 polymorphisms)
-- Statins + CYP3A4 inhibitors (myopathy, rhabdomyolysis risk — clarithromycin, amiodarone)
-- ACE inhibitors + potassium-sparing diuretics (hyperkalemia risk)
-- Metformin + contrast media (lactic acidosis, 48h withhold rule)
-- SSRIs + MAOIs (serotonin syndrome, 14-day washout)
-- Clopidogrel + PPIs (CYP2C19 inhibition, pantoprazole preferred)
-- Digoxin + amiodarone/verapamil (narrow therapeutic index, P-gp inhibition)
-- Rifampicin + oral contraceptives (CYP3A4 induction, contraceptive failure)
+**Dataset A — Wikipedia medical QA** (benchmark, general baseline)
+- ~100 QA pairs from Wikipedia medical articles
+- Used to establish general RAG quality baseline
+- Has `gold_answer` → enables token F1, EM, answer_relevance
 
-**Secondary**: Wikipedia medical subset (general baseline, broader coverage)
+**Dataset B — Drug interactions** (benchmark, domain-specific)
+- 50–100 curated QA pairs covering:
+  - Warfarin + Aspirin (bleeding risk, INR monitoring)
+  - Warfarin + NSAIDs (GI hemorrhage risk)
+  - Statins + CYP3A4 inhibitors (myopathy risk)
+  - ACE inhibitors + potassium-sparing diuretics (hyperkalemia)
+  - Metformin + contrast media (lactic acidosis)
+  - SSRIs + MAOIs (serotonin syndrome, washout periods)
+  - Clopidogrel + PPIs (CYP2C19 inhibition)
+  - Digoxin + amiodarone/verapamil (narrow therapeutic index)
+  - Rifampicin + oral contraceptives (CYP3A4 induction)
+- Has `gold_answer` → full benchmark mode metrics
 
-### Ground truth
+**Dataset C — Production queries** (no ground truth)
+- Real-world queries without reference answers
+- Production mode metrics only
 
-50–100 QA pairs per dataset. Example question types:
-- *"What is the mechanism of interaction between warfarin and aspirin?"*
-- *"Which analgesic is preferred in patients on warfarin therapy?"*
-- *"What washout period is required when switching from SSRI to MAOI?"*
+### Metrics
 
-### Metrics (RAGAS)
+**Benchmark mode** (requires `gold_answer`):
 
-| Metric | What it measures |
-|---|---|
-| `faithfulness` | Answer grounded in retrieved context (no hallucination) |
-| `answer_relevancy` | Answer actually addresses the question |
-| `context_precision` | Retrieved chunks relevant to the question |
-| `context_recall` | Ground truth covered by retrieved chunks |
+| Metric | What it measures | How computed |
+|---|---|---|
+| `token_f1` | Token overlap between answer and gold | Standard NLP F1 on token sets |
+| `em` | Exact match after normalisation | Lowercase + strip punctuation |
+| `faithfulness` | Answer grounded in retrieved context | LLM-as-judge (Claude, single prompt) |
+| `answer_relevance` | Semantic similarity of answer to question | BGE cosine similarity |
+
+**Production mode** (no `gold_answer` required):
+
+| Metric | What it measures | How computed |
+|---|---|---|
+| `faithfulness` | Answer grounded in retrieved context | LLM-as-judge |
+| `context_relevance` | Quality of retrieved evidence set | Avg reranker score of passed chunks |
+| `citation_precision` | Fraction of cited chunks in final answer | `len(citations) / len(chunks_passed)` |
+| `latency_ms` | End-to-end query latency | Timestamp from `query.completed` event |
+| `token_count` | Input + output tokens | From LLM response metadata |
+
+### Eval service architecture
+
+```
+query.completed (RabbitMQ)
+    └── eval_service consumer
+            ├── extract: query, answer, chunks, citations, latency_ms, token_count, rag_mode
+            ├── if gold_answer present → benchmark mode (all 6 metrics)
+            └── else → production mode (faithfulness, context_relevance, citation_precision, latency, tokens)
+            └── write to MongoDB eval_results
+                    { rag_mode, project_id, question, metrics{}, eval_mode, timestamp }
+```
+
+Benchmark runner (`scripts/benchmark_runner.py`):
+- Reads QA pairs from JSON file (`{ question, gold_answer }`)
+- POSTs each to `/chat/query` with `gold_answer` injected into the event payload
+- Iterates over all 9 `rag_mode` values
+- Outputs comparison table: `rag_mode × metric`
 
 ### Experiment design
 
-Run all **6 RAG modes** × **2 datasets** × **same QA pairs**. Compare:
-- RAGAS metrics per mode
-- Latency (time to first token, total latency)
-- Cost per query (token count)
+Run all **9 RAG modes** × **2 datasets** × **same QA pairs**. Compare:
+- All benchmark metrics per mode
+- Latency P50/P95 per mode
+- Token cost per query per mode
 
-Expected hypothesis: `self_reflection` and `corrective_rag` score higher on `faithfulness`; `hyde` and `query_rewriting` improve `context_recall` on complex questions; `vanilla` is fastest but least faithful.
+Expected hypotheses:
+- `self_reflection` and `corrective_rag` score higher on `faithfulness`
+- `hyde` and `query_rewriting` improve `answer_relevance` on colloquial queries
+- `iterative_multihop` scores higher on complex multi-fact questions
+- `vanilla` is fastest and cheapest but least faithful
+- `rare_rag` approaches best-of-all but at highest latency cost
 
 ---
 
