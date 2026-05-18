@@ -41,5 +41,9 @@ async def update_by_id(project_id: str, patch: dict) -> dict | None:
     return await get_by_id(project_id)
 
 
+async def delete_by_id(project_id: str) -> None:
+    await get_db().projects.delete_one({"_id": project_id})
+
+
 async def ensure_indexes() -> None:
     await get_db().projects.create_index("name")

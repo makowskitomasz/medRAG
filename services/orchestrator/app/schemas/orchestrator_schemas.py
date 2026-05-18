@@ -9,6 +9,7 @@ class QueryRequest(BaseModel):
     query: str
     conversation_id: str | None = None
     stream: bool = False
+    gold_answer: str | None = None
 
 
 class Citation(BaseModel):

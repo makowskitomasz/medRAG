@@ -1,0 +1,251 @@
+{
+  "phase": "5 — Admin Service + Eval Service",
+  "goal": "Zweryfikować Admin CRUD projektów i dokumentów, trigger reindex, automatyczne zbieranie własnych metryk RAG (bez RAGAS) po każdym zapytaniu, eksport CSV.",
+  "preconditions_global": [
+    "Stack uruchomiony: docker compose up -d",
+    "Zmienne środowiskowe: $ADMIN_TOKEN (JWT admina), $GW=http://localhost:8000",
+    "Projekt testowy z dokumentem w statusie 'indexed': $PROJECT_ID"
+  ],
+  "scenarios": [
+    {
+      "id": "5.1",
+      "title": "Admin — tworzenie projektu z pełnymi settings",
+      "status": "READY",
+      "request": {
+        "method": "POST",
+        "url": "$GW/admin/projects",
+        "headers": { "Authorization": "Bearer $ADMIN_TOKEN", "Content-Type": "application/json" },
+        "body": {
+          "name": "Phase5 Test Project",
+          "description": "E2E test project for phase 5",
+          "chunking_strategy": "recursive",
+          "embedding_provider": "local_bge",
+          "rag_mode": "vanilla",
+          "hybrid_alpha": 0.5,
+          "top_k": 20,
+          "rerank_top_n": 5
+        }
+      },
+      "expected": {
+        "status": 201,
+        "body_contains": ["id", "name", "settings"],
+        "settings.rag_mode": "vanilla",
+        "settings.chunking_strategy": "recursive"
+      },
+      "note": "Save returned 'id' as $NEW_PROJECT_ID for subsequent tests."
+    },
+    {
+      "id": "5.2",
+      "title": "Admin — aktualizacja settings projektu (PATCH /settings)",
+      "status": "READY",
+      "request": {
+        "method": "PATCH",
+        "url": "$GW/admin/projects/$NEW_PROJECT_ID/settings",
+        "headers": { "Authorization": "Bearer $ADMIN_TOKEN", "Content-Type": "application/json" },
+        "body": {
+          "rag_mode": "hyde",
+          "hybrid_alpha": 0.7
+        }
+      },
+      "expected": {
+        "status": 200,
+        "body_contains": ["settings"],
+        "settings.rag_mode": "hyde",
+        "settings.hybrid_alpha": 0.7,
+        "settings.chunking_strategy": "recursive"
+      }
+    },
+    {
+      "id": "5.3",
+      "title": "Admin — lista dokumentów projektu z paginacją",
+      "status": "READY",
+      "request": {
+        "method": "GET",
+        "url": "$GW/admin/projects/$PROJECT_ID/documents?page=1&limit=10",
+        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
+      },
+      "expected": {
+        "status": 200,
+        "body_contains": ["items", "total", "page", "limit", "pages"],
+        "items[0]_contains": ["document_id", "filename", "status", "created_at"]
+      }
+    },
+    {
+      "id": "5.3b",
+      "title": "Admin — filtrowanie dokumentów po statusie",
+      "status": "READY",
+      "request": {
+        "method": "GET",
+        "url": "$GW/admin/projects/$PROJECT_ID/documents?status=indexed",
+        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
+      },
+      "expected": {
+        "status": 200,
+        "all_items_have": { "status": "indexed" }
+      }
+    },
+    {
+      "id": "5.4",
+      "title": "Admin — trigger reindex projektu",
+      "status": "READY",
+      "request": {
+        "method": "POST",
+        "url": "$GW/admin/projects/$PROJECT_ID/reindex",
+        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
+      },
+      "expected": {
+        "status": 200,
+        "body_contains": ["project_id", "documents_queued"],
+        "documents_queued_gte": 0
+      },
+      "note": "Sprawdź w RabbitMQ management (port 15672) że eventy 'document.uploaded' zostały opublikowane."
+    },
+    {
+      "id": "5.5",
+      "title": "Admin — usunięcie projektu",
+      "status": "READY",
+      "request": {
+        "method": "DELETE",
+        "url": "$GW/admin/projects/$NEW_PROJECT_ID",
+        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
+      },
+      "expected": {
+        "status": 204
+      },
+      "verify": {
+        "description": "GET na ten sam URL powinien zwrócić 404",
+        "method": "GET",
+        "url": "$GW/admin/projects/$NEW_PROJECT_ID",
+        "expected_status": 404
+      }
+    },
+    {
+      "id": "5.6",
+      "title": "Eval — log tworzony automatycznie po zapytaniu (production mode)",
+      "status": "READY",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Wyślij zapytanie przez gateway (bez gold_answer → production mode)",
+          "method": "POST",
+          "url": "$GW/chat/query",
+          "headers": { "Authorization": "Bearer $ADMIN_TOKEN", "Content-Type": "application/json" },
+          "body": {
+            "project_id": "$PROJECT_ID",
+            "query": "What are the risks of combining aspirin and warfarin?"
+          }
+        },
+        {
+          "step": 2,
+          "description": "Poczekaj ~10s na async przetworzenie przez eval service, potem sprawdź wyniki",
+          "method": "GET",
+          "url": "$GW/eval/results?project_id=$PROJECT_ID&rag_mode=vanilla",
+          "headers": { "Authorization": "Bearer $ADMIN_TOKEN" },
+          "expected": {
+            "status": 200,
+            "items_gte": 1,
+            "items[0].eval_mode": "production",
+            "items[0].metrics_contains": ["faithfulness", "latency_ms", "citation_precision", "context_relevance", "token_count"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "5.7",
+      "title": "Eval — metryki benchmark mode (z gold_answer: token_f1, em, answer_relevance)",
+      "status": "READY",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Wyślij zapytanie z gold_answer → benchmark mode",
+          "method": "POST",
+          "url": "$GW/chat/query",
+          "headers": { "Authorization": "Bearer $ADMIN_TOKEN", "Content-Type": "application/json" },
+          "body": {
+            "project_id": "$PROJECT_ID",
+            "query": "What is the warfarin and aspirin interaction?",
+            "gold_answer": "Combining warfarin and aspirin increases the risk of bleeding due to additive anticoagulant effects."
+          }
+        },
+        {
+          "step": 2,
+          "description": "Poczekaj ~10s, sprawdź że metryki benchmark są obecne",
+          "method": "GET",
+          "url": "$GW/eval/results?project_id=$PROJECT_ID",
+          "headers": { "Authorization": "Bearer $ADMIN_TOKEN" },
+          "expected": {
+            "status": 200,
+            "benchmark_item_contains_metrics": ["token_f1", "em", "faithfulness", "answer_relevance", "latency_ms"],
+            "all_metrics_range": "0.0 to 1.0 (except latency_ms which is integer ms)"
+          }
+        }
+      ]
+    },
+    {
+      "id": "5.8",
+      "title": "Eval — filtrowanie logów po rag_mode",
+      "status": "READY",
+      "request": {
+        "method": "GET",
+        "url": "$GW/eval/results?rag_mode=vanilla&project_id=$PROJECT_ID",
+        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
+      },
+      "expected": {
+        "status": 200,
+        "all_items_have": { "rag_mode": "vanilla" }
+      }
+    },
+    {
+      "id": "5.9",
+      "title": "Eval — tabela porównawcza architektur (summary)",
+      "status": "READY",
+      "request": {
+        "method": "GET",
+        "url": "$GW/eval/results/summary?project_id=$PROJECT_ID",
+        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
+      },
+      "expected": {
+        "status": 200,
+        "body_contains": ["summary"],
+        "summary_rows_contain": ["rag_mode", "count", "avg_faithfulness", "avg_latency_ms"]
+      }
+    },
+    {
+      "id": "5.10",
+      "title": "Admin — eksport logów eval do CSV",
+      "status": "READY",
+      "request": {
+        "method": "GET",
+        "url": "$GW/admin/eval-results/export?project_id=$PROJECT_ID",
+        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
+      },
+      "expected": {
+        "status": 200,
+        "content_type": "text/csv",
+        "header_row_contains": ["rag_mode", "question", "faithfulness", "latency_ms", "token_f1"]
+      }
+    },
+    {
+      "id": "5.11",
+      "title": "Eval — settings options endpoint (admin form helper)",
+      "status": "READY",
+      "request": {
+        "method": "GET",
+        "url": "$GW/admin/projects/settings/options",
+        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
+      },
+      "expected": {
+        "status": 200,
+        "body_contains": ["rag_modes", "chunking_strategies", "embedding_providers", "hybrid_alpha", "top_k"],
+        "rag_modes_count": 9
+      }
+    }
+  ],
+  "routing_map": {
+    "note": "Admin Service jest wystawiony przez gateway pod /admin/*, Eval Service pod /eval/*",
+    "admin_prefix": "/admin",
+    "eval_prefix": "/eval",
+    "admin_port_direct": 8012,
+    "eval_port_direct": 8013
+  }
+}

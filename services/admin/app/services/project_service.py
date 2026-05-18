@@ -1,10 +1,12 @@
 from fastapi import HTTPException, status
+from medrag_shared.amqp import publish
 from medrag_shared.models.project import Project, ProjectSettings
 
-from app.repositories import project_repository
+from app.repositories import document_repository, project_repository
 from app.schemas.project_schemas import (
     CreateProjectRequest,
     ProjectResponse,
+    ReindexResponse,
     UpdateProjectRequest,
     UpdateSettingsRequest,
 )
@@ -88,3 +90,30 @@ async def get_project(project_id: str) -> ProjectResponse:
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     return project_repository._to_response(doc)
+
+
+async def delete_project(project_id: str) -> None:
+    doc = await project_repository.get_by_id(project_id)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    await document_repository.delete_by_project(project_id)
+    await project_repository.delete_by_id(project_id)
+
+
+async def reindex_project(project_id: str) -> ReindexResponse:
+    doc = await project_repository.get_by_id(project_id)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    indexed_docs = await document_repository.find_indexed_by_project(project_id)
+    for d in indexed_docs:
+        await publish(
+            exchange_name="documents",
+            routing_key="document.uploaded",
+            payload={
+                "document_id": str(d["_id"]),
+                "tmp_path": "",
+                "project_id": project_id,
+                "reindex": True,
+            },
+        )
+    return ReindexResponse(project_id=project_id, documents_queued=len(indexed_docs))

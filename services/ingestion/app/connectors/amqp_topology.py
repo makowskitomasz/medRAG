@@ -5,12 +5,12 @@ import aio_pika
 EXCHANGE = "documents"
 DLX_EXCHANGE = "documents.dlx"
 
-QUEUES = {
+# Queues bound to the `documents` exchange (ingestion pipeline)
+DOCUMENT_QUEUES = {
     "parser.queue": "document.uploaded",
     "chunking.queue": "document.parsed",
     "embedding.queue": "document.chunked",
     "indexing.queue": "chunks.embedded",
-    "eval.queue": "query.completed",
 }
 
 
@@ -18,7 +18,7 @@ async def setup_topology(channel: aio_pika.abc.AbstractChannel) -> None:
     exchange = await channel.declare_exchange(EXCHANGE, aio_pika.ExchangeType.TOPIC, durable=True)
     dlx = await channel.declare_exchange(DLX_EXCHANGE, aio_pika.ExchangeType.TOPIC, durable=True)
 
-    for queue_name, routing_key in QUEUES.items():
+    for queue_name, routing_key in DOCUMENT_QUEUES.items():
         failed_queue_name = f"{queue_name}.failed"
 
         await channel.declare_queue(failed_queue_name, durable=True)

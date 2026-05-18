@@ -8,6 +8,7 @@ class Settings(BaseServiceSettings):
     orchestrator_url: str = "http://orchestrator:8000"
     ingestion_url: str = "http://ingestion:8000"
     admin_url: str = "http://admin:8000"
+    eval_url: str = "http://eval:8000"
 
 
 settings = Settings()
