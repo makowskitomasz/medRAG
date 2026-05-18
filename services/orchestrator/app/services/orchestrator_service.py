@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncGenerator
 
 import httpx
@@ -71,7 +72,7 @@ async def handle_query_stream(
     answer_parts: list[str] = []
 
     async def _stream() -> AsyncGenerator[str, None]:
-        async for chunk in pipeline.run_stream(
+        stream = pipeline.run_stream(
             query=request.query,
             project_id=request.project_id,
             conversation_id=conversation.id,
@@ -80,7 +81,10 @@ async def handle_query_stream(
             top_k=project_settings.top_k,
             alpha=project_settings.hybrid_alpha,
             rerank_top_n=project_settings.rerank_top_n,
-        ):
+        )
+        if asyncio.iscoroutine(stream):
+            stream = await stream
+        async for chunk in stream:
             if '"type": "token"' in chunk:
                 import json
 

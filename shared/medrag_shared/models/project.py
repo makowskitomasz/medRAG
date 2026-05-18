@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 
 from bson import ObjectId
@@ -47,6 +47,6 @@ class Project(BaseModel):
     description: str = ""
     settings: ProjectSettings = Field(default_factory=ProjectSettings)
     created_by: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     model_config = {"populate_by_name": True}

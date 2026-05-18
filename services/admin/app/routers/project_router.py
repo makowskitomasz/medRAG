@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Header, status
 
 from app.schemas.project_schemas import (
     CreateProjectRequest,
@@ -21,8 +21,10 @@ async def settings_options() -> SettingsOptions:
 
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
-async def create_project(body: CreateProjectRequest) -> ProjectResponse:
-    return await project_service.create_project(body)
+async def create_project(
+    body: CreateProjectRequest, x_user_id: str = Header(default="")
+) -> ProjectResponse:
+    return await project_service.create_project(body, x_user_id)
 
 
 @router.get("", response_model=list[ProjectResponse])

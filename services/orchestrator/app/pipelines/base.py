@@ -32,7 +32,7 @@ class RagPipeline(ABC):
     ) -> QueryResponse: ...
 
     @abstractmethod
-    async def run_stream(
+    def run_stream(
         self,
         query: str,
         project_id: str,
