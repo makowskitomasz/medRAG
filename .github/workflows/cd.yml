@@ -52,28 +52,13 @@ jobs:
       - name: Wait for healthchecks
         run: |
           echo "Waiting for all services to be healthy..."
-          deadline=$((SECONDS + 300))
-          while [ $SECONDS -lt $deadline ]; do
-            unhealthy=$(docker compose ps --format json | python3 -c "
-import sys, json
-data = sys.stdin.read().strip()
-lines = [l for l in data.splitlines() if l.strip()]
-count = 0
-for line in lines:
-  try:
-    s = json.loads(line)
-    h = s.get('Health', '')
-    if h and h not in ('healthy', ''):
-      count += 1
-  except Exception:
-    pass
-print(count)
-" 2>/dev/null || echo "0")
+          for i in $(seq 1 30); do
+            unhealthy=$(docker compose ps | grep -c "unhealthy\|starting" || true)
             if [ "$unhealthy" = "0" ]; then
               echo "All services healthy."
               break
             fi
-            echo "Waiting... ($unhealthy unhealthy)"
+            echo "Attempt $i/30 — $unhealthy service(s) not yet healthy, waiting 10s..."
             sleep 10
           done
 
