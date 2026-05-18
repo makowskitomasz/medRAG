@@ -2,6 +2,7 @@ from fastapi import APIRouter, Header, status
 
 from app.schemas.project_schemas import (
     CreateProjectRequest,
+    DeleteProjectResponse,
     ProjectResponse,
     ReindexResponse,
     SettingsOptions,
@@ -56,9 +57,9 @@ async def delete_prompt_override(project_id: str, slug: str) -> ProjectResponse:
     return await project_service.delete_prompt_override(project_id, slug)
 
 
-@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_project(project_id: str) -> None:
-    await project_service.delete_project(project_id)
+@router.delete("/{project_id}", response_model=DeleteProjectResponse)
+async def delete_project(project_id: str) -> DeleteProjectResponse:
+    return await project_service.delete_project(project_id)
 
 
 @router.post("/{project_id}/reindex", response_model=ReindexResponse)

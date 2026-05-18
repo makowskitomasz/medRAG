@@ -1,15 +1,26 @@
 from fastapi import HTTPException, status
+from medrag_shared import get_logger
 from medrag_shared.amqp import publish
 from medrag_shared.models.project import Project, ProjectSettings
 
-from app.repositories import document_repository, project_repository
+from app.config import settings as svc_settings
+from app.connectors import weaviate_connector
+from app.repositories import (
+    chunk_repository,
+    conversation_repository,
+    document_repository,
+    project_repository,
+)
 from app.schemas.project_schemas import (
     CreateProjectRequest,
+    DeleteProjectResponse,
     ProjectResponse,
     ReindexResponse,
     UpdateProjectRequest,
     UpdateSettingsRequest,
 )
+
+logger = get_logger(__name__)
 
 
 async def create_project(body: CreateProjectRequest, user_id: str = "") -> ProjectResponse:
@@ -92,12 +103,39 @@ async def get_project(project_id: str) -> ProjectResponse:
     return project_repository._to_response(doc)
 
 
-async def delete_project(project_id: str) -> None:
+async def delete_project(project_id: str) -> "DeleteProjectResponse":
     doc = await project_repository.get_by_id(project_id)
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
-    await document_repository.delete_by_project(project_id)
+
+    docs_deleted = await document_repository.delete_by_project(project_id)
+    chunks_deleted = await chunk_repository.delete_by_project(project_id)
+    conversations_deleted = await conversation_repository.delete_by_project(project_id)
+
+    vectors_deleted = 0
+    try:
+        vectors_deleted = weaviate_connector.delete_by_project(
+            svc_settings.weaviate_collection, project_id
+        )
+    except Exception as exc:
+        logger.warning("weaviate cascade delete failed", project_id=project_id, error=str(exc))
+
     await project_repository.delete_by_id(project_id)
+    logger.info(
+        "project deleted",
+        project_id=project_id,
+        docs=docs_deleted,
+        chunks=chunks_deleted,
+        conversations=conversations_deleted,
+        vectors=vectors_deleted,
+    )
+    return DeleteProjectResponse(
+        project_id=project_id,
+        documents_deleted=docs_deleted,
+        chunks_deleted=chunks_deleted,
+        conversations_deleted=conversations_deleted,
+        vectors_deleted=vectors_deleted,
+    )
 
 
 async def reindex_project(project_id: str) -> ReindexResponse:

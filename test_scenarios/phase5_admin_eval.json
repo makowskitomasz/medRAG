@@ -102,21 +102,68 @@
     },
     {
       "id": "5.5",
-      "title": "Admin — usunięcie projektu",
+      "title": "Admin — usunięcie projektu (pełna kaskada)",
       "status": "READY",
-      "request": {
-        "method": "DELETE",
-        "url": "$GW/admin/projects/$NEW_PROJECT_ID",
-        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
-      },
-      "expected": {
-        "status": 204
-      },
-      "verify": {
-        "description": "GET na ten sam URL powinien zwrócić 404",
-        "method": "GET",
-        "url": "$GW/admin/projects/$NEW_PROJECT_ID",
-        "expected_status": 404
+      "precondition": "Utwórz projekt z przynajmniej jednym dokumentem (status indexed). Zapisz jako $CASCADE_PROJECT_ID.",
+      "steps": [
+        {
+          "step": 1,
+          "description": "Sprawdź stan przed usunięciem — policz dokumenty, chunki, konwersacje",
+          "checks": [
+            "GET $GW/admin/projects/$CASCADE_PROJECT_ID/documents → total > 0",
+            "MongoDB: db.chunks.countDocuments({project_id: '$CASCADE_PROJECT_ID'}) > 0",
+            "Weaviate: GET http://localhost:8080/v1/objects?class=Chunk (sprawdź że project_id istnieje)"
+          ]
+        },
+        {
+          "step": 2,
+          "description": "Usuń projekt",
+          "method": "DELETE",
+          "url": "$GW/admin/projects/$CASCADE_PROJECT_ID",
+          "headers": { "Authorization": "Bearer $ADMIN_TOKEN" },
+          "expected": {
+            "status": 200,
+            "body_contains": [
+              "project_id",
+              "documents_deleted",
+              "chunks_deleted",
+              "conversations_deleted",
+              "vectors_deleted"
+            ],
+            "documents_deleted_gte": 1,
+            "chunks_deleted_gte": 1,
+            "vectors_deleted_gte": 0
+          }
+        },
+        {
+          "step": 3,
+          "description": "Projekt nie istnieje — GET zwraca 404",
+          "method": "GET",
+          "url": "$GW/admin/projects/$CASCADE_PROJECT_ID",
+          "headers": { "Authorization": "Bearer $ADMIN_TOKEN" },
+          "expected": { "status": 404 }
+        },
+        {
+          "step": 4,
+          "description": "Dokumenty usunięte — GET /documents zwraca pustą listę",
+          "method": "GET",
+          "url": "$GW/admin/projects/$CASCADE_PROJECT_ID/documents",
+          "headers": { "Authorization": "Bearer $ADMIN_TOKEN" },
+          "expected": { "status": 200, "total": 0, "items": [] }
+        },
+        {
+          "step": 5,
+          "description": "Ponowny DELETE zwraca 404",
+          "method": "DELETE",
+          "url": "$GW/admin/projects/$CASCADE_PROJECT_ID",
+          "headers": { "Authorization": "Bearer $ADMIN_TOKEN" },
+          "expected": { "status": 404 }
+        }
+      ],
+      "cascade_scope": {
+        "mongodb_collections": ["projects", "documents", "chunks", "conversations"],
+        "weaviate_collection": "Chunk (filtrowane po project_id)",
+        "note": "eval_results NIE są usuwane — historyczne wyniki ewaluacji zachowujemy do analizy"
       }
     },
     {

@@ -85,3 +85,11 @@ class SettingsOptions(BaseModel):
 class ReindexResponse(BaseModel):
     project_id: str
     documents_queued: int
+
+
+class DeleteProjectResponse(BaseModel):
+    project_id: str
+    documents_deleted: int
+    chunks_deleted: int
+    conversations_deleted: int
+    vectors_deleted: int
