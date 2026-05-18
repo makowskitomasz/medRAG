@@ -1,10 +1,25 @@
+import instructor
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI
 
 from app.config.settings import Settings, settings
-from app.schemas.generation_schemas import GenerationRequest, GenerationResult
-from app.services.generation_service import generate, generate_stream, get_llm_client
+from app.schemas.generation_schemas import (
+    ConflictDetectionRequest,
+    ConflictDetectionResult,
+    EvaluationRequest,
+    EvaluationResult,
+    GenerationRequest,
+    GenerationResult,
+)
+from app.services.generation_service import (
+    detect_conflict,
+    evaluate_answer,
+    generate,
+    generate_stream,
+    get_instructor_client,
+    get_llm_client,
+)
 
 router = APIRouter()
 
@@ -17,6 +32,10 @@ def get_client(cfg: Settings = Depends(get_settings)) -> AsyncOpenAI:
     return get_llm_client(cfg.llm_base_url, cfg.resolved_api_key)
 
 
+def get_iclient(cfg: Settings = Depends(get_settings)) -> instructor.AsyncInstructor:
+    return get_instructor_client(cfg.llm_base_url, cfg.resolved_api_key)
+
+
 @router.post("/generate", response_model=GenerationResult)
 async def generate_answer(
     request: GenerationRequest,
@@ -24,6 +43,24 @@ async def generate_answer(
     client: AsyncOpenAI = Depends(get_client),
 ) -> GenerationResult:
     return await generate(request, client, cfg.llm_model, cfg.llm_max_tokens, cfg.llm_temperature)
+
+
+@router.post("/evaluate", response_model=EvaluationResult)
+async def evaluate(
+    request: EvaluationRequest,
+    cfg: Settings = Depends(get_settings),
+    iclient: instructor.AsyncInstructor = Depends(get_iclient),
+) -> EvaluationResult:
+    return await evaluate_answer(request, iclient, cfg.llm_model)
+
+
+@router.post("/detect_conflict", response_model=ConflictDetectionResult)
+async def conflict_detection(
+    request: ConflictDetectionRequest,
+    cfg: Settings = Depends(get_settings),
+    iclient: instructor.AsyncInstructor = Depends(get_iclient),
+) -> ConflictDetectionResult:
+    return await detect_conflict(request, iclient, cfg.llm_model)
 
 
 @router.post("/generate/stream")

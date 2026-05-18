@@ -82,14 +82,46 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 
 ---
 
-## Faza 4 — Self-Reflection + Multi-Agent RAG (cel: 4 tryby działają)
+## Faza 4 — Pełna biblioteka architektur RAG + RARE-RAG (cel: 9 trybów + auto-router)
 
-- [ ] **4.1** `[C]` Orchestrator: `SelfReflectionPipeline` (iteracyjne refinowanie: max 2 rundy)
-- [ ] **4.2** `[C]` Orchestrator: `MultiAgentPipeline` (router agent + specialist agents + aggregator)
-- [ ] **4.3** Decyzja: które architektury agentowe (MARAG/MADAM) implementować — **TWOJA DECYZJA**
-- [ ] **4.4** `[C]` Testy integracyjne: wszystkie 4 tryby RAG na tym samym zapytaniu testowym
+Kontekst: dataset `Drug Interactions Reference Guide` zawiera m.in. interakcje warfaryna–aspiryna,
+warfaryna–NLPZ, statyny–CYP3A4, inhibitory ACE–diuretyki, metformina–środki kontrastowe,
+SSRI–MAOI, klopidogrel–IPP, digoksyna. Te przypadki posłużą jako pytania testowe do porównania architektur.
 
-**Branch**: `feature/phase-4-advanced-rag-modes`
+Architektury wg dokumentu analitycznego (bez GraphRAG): Classic RAG (vanilla), HyDE, Query Rewriting,
+Self-RAG, Corrective RAG, Iterative Multi-Hop RAG, MA-RAG, MADAM-RAG, RARE-RAG.
+
+### 4.1 Zaimplementowane (done w poprzednim commicie)
+- [x] **4.1.1** `[C]` `VanillaPipeline` (Classic RAG baseline)
+- [x] **4.1.2** `[C]` `HydePipeline` (Hypothetical Document Embeddings)
+- [x] **4.1.3** `[C]` `QueryRewritingPipeline` (rewrite → retrieval)
+- [x] **4.1.4** `[C]` `SelfReflectionPipeline` (Self-RAG: score → retry max 2×)
+- [x] **4.1.5** `[C]` `MultiAgentPipeline` (MA-RAG: 3 perspektywy równolegle, dedup)
+- [x] **4.1.6** `[C]` `CorrectiveRagPipeline` (ocena relevance, fallback BM25)
+- [x] **4.1.7** `[C]` Generation `/evaluate` endpoint (LLM score 0–1 dla self-reflection)
+
+### 4.2 Iterative Multi-Hop RAG
+- [x] **4.2.1** `[C]` `IterativeMultiHopPipeline` — Query Processor `/decompose` rozkłada pytanie na pod-pytania → każde niezależny retrieval → agregacja dowodów → rerank → generate
+- [x] **4.2.2** `[C]` Query Processor: endpoint `/decompose` — LLM rozkłada złożone pytanie na listę pod-pytań
+- [x] **4.2.3** `[C]` Testy: weryfikacja dekompozycji, agregacji i deduplikacji chunków między hopami
+
+### 4.3 MADAM-RAG (sprzeczne dowody)
+- [x] **4.3.1** `[C]` `MadamRagPipeline` — conflict detection → diverse retrieval → Pro/Counter/Conflict agents → cautious aggregation → generate z uncertainty
+- [x] **4.3.2** `[C]` Generation `/detect_conflict` endpoint — LLM ocenia czy chunki zawierają sprzeczne informacje (bool + confidence)
+- [x] **4.3.3** `[C]` Testy: conflict detection mock, cautious answer gdy wykryto konflikt
+
+### 4.4 RARE-RAG (Risk-Aware Routed Evidence RAG)
+- [x] **4.4.1** `[C]` `RareRagPipeline` — meta-pipeline: LLM triage pytania → wybiera jeden z 8 trybów → deleguje do odpowiedniego pipeline → grounding verification → odpowiedź lub abstencja
+- [x] **4.4.2** `[C]` Query Processor: endpoint `/triage` — klasyfikacja pytania: complexity (simple/standard/complex/multi_hop), conflict_risk (low/medium/high), returns route decision
+- [x] **4.4.3** `[C]` Abstention path: gdy grounding score < progu po retry — zwrot `{"abstained": true, "reason": "..."}`
+- [x] **4.4.4** `[C]` Testy: routing decisions dla każdego typu pytania, abstention przy niskim score
+
+### 4.5 Shared models i integracja
+- [x] **4.5.1** `[C]` RagMode enum: dodanie `iterative_multihop`, `madam_rag`, `rare_rag`
+- [x] **4.5.2** `[C]` Factory: rejestracja wszystkich 9 pipeline'ów
+- [x] **4.5.3** `[C]` Testy integracyjne: wszystkie 9 trybów na zapytaniu "What are the risks of combining aspirin and warfarin?"
+
+**Branch**: `feature/phase-4-eval-rag-architectures`
 
 ---
 
@@ -143,10 +175,10 @@ Konwencja branchy: `feature/phase-X.Y-krotki-opis` → PR → `develop` → merg
 | 1. Auth + Gateway | 7 | 6 |
 | 2. Ingestion | 16 | 14 |
 | 3. Query pipeline | 14 | 13 |
-| 4. Advanced RAG | 4 | 3 |
+| 4. Advanced RAG | 11 | 9 |
 | 5. Admin + Eval | 6 | 6 |
 | 6. Frontend | 9 | 9 |
 | 7. Ewaluacja | 6 | 3 |
-| **Razem** | **71** | **61** |
+| **Razem** | **78** | **67** |
 
-~65 zadań do delegowania Claude'owi, ~12 wymaga Twojego głębokiego zaangażowania.
+~67 zadań do delegowania Claude'owi, ~12 wymaga Twojego głębokiego zaangażowania.

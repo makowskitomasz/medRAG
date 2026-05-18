@@ -10,6 +10,8 @@ def _to_response(doc: dict) -> ProjectResponse:
         name=doc["name"],
         description=doc.get("description", ""),
         settings=ProjectSettings(**doc["settings"]),
+        created_by=doc.get("created_by", ""),
+        created_at=doc["created_at"],
     )
 
 
@@ -20,6 +22,8 @@ async def create(project: Project) -> ProjectResponse:
         name=project.name,
         description=project.description,
         settings=project.settings,
+        created_by=project.created_by,
+        created_at=project.created_at,
     )
 
 

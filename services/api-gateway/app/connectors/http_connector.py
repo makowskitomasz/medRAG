@@ -11,7 +11,7 @@ def get_http() -> httpx.AsyncClient:
 
 async def connect() -> None:
     global _client
-    _client = httpx.AsyncClient(timeout=30.0)
+    _client = httpx.AsyncClient(timeout=120.0)
 
 
 async def disconnect() -> None:
