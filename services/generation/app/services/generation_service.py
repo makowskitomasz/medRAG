@@ -34,7 +34,9 @@ def get_instructor_client(base_url: str, api_key: str) -> instructor.AsyncInstru
     global _instructor_client
     if _instructor_client is None:
         raw = get_llm_client(base_url, api_key)
-        _instructor_client = instructor.from_openai(raw, mode=instructor.Mode.JSON)
+        _instructor_client = instructor.from_openai(
+            raw, mode=instructor.Mode.OPENROUTER_STRUCTURED_OUTPUTS
+        )
     return _instructor_client
 
 

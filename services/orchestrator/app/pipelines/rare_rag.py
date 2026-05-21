@@ -103,6 +103,7 @@ class RareRagPipeline(RagPipeline):
         )
 
         if score >= _GROUNDING_THRESHOLD:
+            response.rag_mode = rag_mode
             return response
 
         # Retry with self_reflection for better grounding.
@@ -119,6 +120,7 @@ class RareRagPipeline(RagPipeline):
         )
 
         if score >= _ABSTENTION_RETRY_SCORE:
+            response.rag_mode = rag_mode
             return response
 
         # Abstain.

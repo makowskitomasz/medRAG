@@ -44,5 +44,3 @@ Thumbs.db
 data/
 tmp/uploads/
 
-# Local test scenarios (manual verification scripts, not part of CI)
-test_scenarios/

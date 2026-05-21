@@ -1,163 +1,194 @@
 {
   "phase": "5 — Admin Service + Eval Service",
   "goal": "Zweryfikować Admin CRUD projektów i dokumentów, trigger reindex, automatyczne zbieranie własnych metryk RAG (bez RAGAS) po każdym zapytaniu, eksport CSV.",
+  "status": "READY",
   "preconditions_global": [
-    "Stack uruchomiony: docker compose up -d",
-    "Zmienne środowiskowe: $ADMIN_TOKEN (JWT admina), $GW=http://localhost:8000",
-    "Projekt testowy z dokumentem w statusie 'indexed': $PROJECT_ID"
+    "Stack uruchomiony: docker compose up -d — wszystkie serwisy działają",
+    "$ADMIN_TOKEN z POST http://localhost:8000/auth/login",
+    "Projekt z zaindeksowanym dokumentem (status 'indexed') — zapisz $PROJECT_ID"
   ],
+  "variables_legend": {
+    "$ADMIN_TOKEN": "JWT token admina — z POST http://localhost:8000/auth/login",
+    "$PROJECT_ID": "ObjectId projektu z zaindeksowanymi dokumentami",
+    "$NEW_PROJECT_ID": "id projektu utworzonego w scenariuszu 5.1 — zapisz z odpowiedzi",
+    "$CASCADE_PROJECT_ID": "id projektu z przynajmniej jednym dokumentem — do testu kaskadowego usunięcia (5.5)"
+  },
+
   "scenarios": [
     {
-      "id": "5.1",
-      "title": "Admin — tworzenie projektu z pełnymi settings",
-      "status": "READY",
-      "request": {
-        "method": "POST",
-        "url": "$GW/admin/projects",
-        "headers": { "Authorization": "Bearer $ADMIN_TOKEN", "Content-Type": "application/json" },
-        "body": {
-          "name": "Phase5 Test Project",
-          "description": "E2E test project for phase 5",
-          "chunking_strategy": "recursive",
-          "embedding_provider": "local_bge",
-          "rag_mode": "vanilla",
-          "hybrid_alpha": 0.5,
-          "top_k": 20,
-          "rerank_top_n": 5
-        }
-      },
-      "expected": {
-        "status": 201,
-        "body_contains": ["id", "name", "settings"],
-        "settings.rag_mode": "vanilla",
-        "settings.chunking_strategy": "recursive"
-      },
-      "note": "Save returned 'id' as $NEW_PROJECT_ID for subsequent tests."
-    },
-    {
-      "id": "5.2",
-      "title": "Admin — aktualizacja settings projektu (PATCH /settings)",
-      "status": "READY",
-      "request": {
-        "method": "PATCH",
-        "url": "$GW/admin/projects/$NEW_PROJECT_ID/settings",
-        "headers": { "Authorization": "Bearer $ADMIN_TOKEN", "Content-Type": "application/json" },
-        "body": {
-          "rag_mode": "hyde",
-          "hybrid_alpha": 0.7
-        }
-      },
-      "expected": {
-        "status": 200,
-        "body_contains": ["settings"],
-        "settings.rag_mode": "hyde",
-        "settings.hybrid_alpha": 0.7,
-        "settings.chunking_strategy": "recursive"
-      }
-    },
-    {
-      "id": "5.3",
-      "title": "Admin — lista dokumentów projektu z paginacją",
-      "status": "READY",
-      "request": {
-        "method": "GET",
-        "url": "$GW/admin/projects/$PROJECT_ID/documents?page=1&limit=10",
-        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
-      },
-      "expected": {
-        "status": 200,
-        "body_contains": ["items", "total", "page", "limit", "pages"],
-        "items[0]_contains": ["document_id", "filename", "status", "created_at"]
-      }
-    },
-    {
-      "id": "5.3b",
-      "title": "Admin — filtrowanie dokumentów po statusie",
-      "status": "READY",
-      "request": {
-        "method": "GET",
-        "url": "$GW/admin/projects/$PROJECT_ID/documents?status=indexed",
-        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
-      },
-      "expected": {
-        "status": 200,
-        "all_items_have": { "status": "indexed" }
-      }
-    },
-    {
-      "id": "5.4",
-      "title": "Admin — trigger reindex projektu",
-      "status": "READY",
-      "request": {
-        "method": "POST",
-        "url": "$GW/admin/projects/$PROJECT_ID/reindex",
-        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
-      },
-      "expected": {
-        "status": 200,
-        "body_contains": ["project_id", "documents_queued"],
-        "documents_queued_gte": 0
-      },
-      "note": "Sprawdź w RabbitMQ management (port 15672) że eventy 'document.uploaded' zostały opublikowane."
-    },
-    {
-      "id": "5.5",
-      "title": "Admin — usunięcie projektu (pełna kaskada)",
-      "status": "READY",
-      "precondition": "Utwórz projekt z przynajmniej jednym dokumentem (status indexed). Zapisz jako $CASCADE_PROJECT_ID.",
+      "id": "5.0",
+      "title": "Health check — Admin i Eval",
+      "status": "TODO",
+      "description": "Szybka weryfikacja że Admin i Eval odpowiadają.",
       "steps": [
         {
           "step": 1,
-          "description": "Sprawdź stan przed usunięciem — policz dokumenty, chunki, konwersacje",
+          "action": "Health check admin",
+          "command": "curl -s http://localhost:8012/health",
+          "postman_command": "curl --location 'http://localhost:8012/health'",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "admin" }
+        },
+        {
+          "step": 2,
+          "action": "Health check eval",
+          "command": "curl -s http://localhost:8013/health",
+          "postman_command": "curl --location 'http://localhost:8013/health'",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "eval" }
+        }
+      ]
+    },
+
+    {
+      "id": "5.1",
+      "title": "Admin — tworzenie projektu z pełnymi settings",
+      "status": "TODO",
+      "description": "POST /admin/projects tworzy projekt z pełnymi settings. Zwraca id — zapisz jako $NEW_PROJECT_ID.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Utwórz projekt z pełnymi settings",
+          "command": "curl -s -X POST http://localhost:8000/admin/projects -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"name\": \"Phase5 Test Project\", \"description\": \"E2E test project for phase 5\", \"chunking_strategy\": \"recursive\", \"embedding_provider\": \"local_bge\", \"rag_mode\": \"vanilla\", \"hybrid_alpha\": 0.5, \"top_k\": 20, \"rerank_top_n\": 5}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/admin/projects' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"name\": \"Phase5 Test Project\", \"description\": \"E2E test project for phase 5\", \"chunking_strategy\": \"recursive\", \"embedding_provider\": \"local_bge\", \"rag_mode\": \"vanilla\", \"hybrid_alpha\": 0.5, \"top_k\": 20, \"rerank_top_n\": 5}'",
+          "expected_status": 201,
           "checks": [
-            "GET $GW/admin/projects/$CASCADE_PROJECT_ID/documents → total > 0",
-            "MongoDB: db.chunks.countDocuments({project_id: '$CASCADE_PROJECT_ID'}) > 0",
-            "Weaviate: GET http://localhost:8080/v1/objects?class=Chunk (sprawdź że project_id istnieje)"
+            "id jest non-empty string — zapisz jako $NEW_PROJECT_ID",
+            "settings.rag_mode == 'vanilla'",
+            "settings.chunking_strategy == 'recursive'",
+            "created_at i created_by są obecne w odpowiedzi"
+          ],
+          "save_to_variable": "$NEW_PROJECT_ID"
+        }
+      ]
+    },
+
+    {
+      "id": "5.2",
+      "title": "Admin — aktualizacja settings projektu (PATCH /settings)",
+      "status": "TODO",
+      "description": "PATCH /projects/{id}/settings — merge, nie replace. Niezmodyfikowane pola pozostają niezmienione.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Zmień rag_mode i hybrid_alpha (inne pola bez zmian)",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$NEW_PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"hyde\", \"hybrid_alpha\": 0.7}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$NEW_PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"rag_mode\": \"hyde\", \"hybrid_alpha\": 0.7}'",
+          "expected_status": 200,
+          "checks": [
+            "settings.rag_mode == 'hyde'",
+            "settings.hybrid_alpha == 0.7",
+            "settings.chunking_strategy == 'recursive' (niezmienione z 5.1)"
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "5.3",
+      "title": "Admin — lista dokumentów projektu z paginacją i filtrowaniem",
+      "status": "TODO",
+      "description": "GET /projects/{id}/documents — paginowana lista z opcjonalnym filtrem po statusie.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Pobierz dokumenty projektu (strona 1, limit 10)",
+          "command": "curl -s \"http://localhost:8000/admin/projects/$PROJECT_ID/documents?page=1&limit=10\" -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request GET 'http://localhost:8000/admin/projects/PROJECT_ID_HERE/documents?page=1&limit=10' --header 'Authorization: Bearer ADMIN_TOKEN_HERE'",
+          "expected_status": 200,
+          "checks": [
+            "items, total, page, limit, pages są obecne w odpowiedzi",
+            "items[0] zawiera: document_id, filename, status, created_at"
           ]
         },
         {
           "step": 2,
-          "description": "Usuń projekt",
-          "method": "DELETE",
-          "url": "$GW/admin/projects/$CASCADE_PROJECT_ID",
-          "headers": { "Authorization": "Bearer $ADMIN_TOKEN" },
-          "expected": {
-            "status": 200,
-            "body_contains": [
-              "project_id",
-              "documents_deleted",
-              "chunks_deleted",
-              "conversations_deleted",
-              "vectors_deleted"
-            ],
-            "documents_deleted_gte": 1,
-            "chunks_deleted_gte": 1,
-            "vectors_deleted_gte": 0
-          }
+          "action": "Filtruj dokumenty po statusie 'indexed'",
+          "command": "curl -s \"http://localhost:8000/admin/projects/$PROJECT_ID/documents?status=indexed\" -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/admin/projects/$PROJECT_ID/documents?status=indexed' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "wszystkie items[i].status == 'indexed'"
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "5.4",
+      "title": "Admin — trigger reindex projektu",
+      "status": "TODO",
+      "description": "POST /projects/{id}/reindex re-emituje eventy document.uploaded dla wszystkich dokumentów projektu. Uruchamia cały pipeline ingestion od nowa.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Trigger reindex",
+          "command": "curl -s -X POST http://localhost:8000/admin/projects/$PROJECT_ID/reindex -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/admin/projects/$PROJECT_ID/reindex' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "project_id i documents_queued są obecne w odpowiedzi",
+            "documents_queued >= 0"
+          ],
+          "notes": "Sprawdź w RabbitMQ management (port 15672) że eventy 'document.uploaded' zostały opublikowane."
+        }
+      ]
+    },
+
+    {
+      "id": "5.5",
+      "title": "Admin — usunięcie projektu (pełna kaskada)",
+      "status": "TODO",
+      "description": "DELETE /projects/{id} usuwa projekt wraz z dokumentami, chunkami, konwersacjami i wektorami Weaviate. eval_results NIE są usuwane.",
+      "precondition": "Utwórz projekt z przynajmniej jednym dokumentem (status indexed). Zapisz jako $CASCADE_PROJECT_ID.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Sprawdź dokumenty projektu przed usunięciem",
+          "command": "curl -s http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID/documents -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID/documents' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "total > 0 (projekt ma przynajmniej 1 dokument)"
+          ]
+        },
+        {
+          "step": 2,
+          "action": "Usuń projekt (kaskadowo)",
+          "command": "curl -s -X DELETE http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request DELETE 'http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "project_id, documents_deleted, chunks_deleted, conversations_deleted, vectors_deleted są obecne",
+            "documents_deleted >= 1",
+            "chunks_deleted >= 1",
+            "vectors_deleted >= 0"
+          ]
         },
         {
           "step": 3,
-          "description": "Projekt nie istnieje — GET zwraca 404",
-          "method": "GET",
-          "url": "$GW/admin/projects/$CASCADE_PROJECT_ID",
-          "headers": { "Authorization": "Bearer $ADMIN_TOKEN" },
-          "expected": { "status": 404 }
+          "action": "GET projektu — 404 po usunięciu",
+          "command": "curl -s http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 404
         },
         {
           "step": 4,
-          "description": "Dokumenty usunięte — GET /documents zwraca pustą listę",
-          "method": "GET",
-          "url": "$GW/admin/projects/$CASCADE_PROJECT_ID/documents",
-          "headers": { "Authorization": "Bearer $ADMIN_TOKEN" },
-          "expected": { "status": 200, "total": 0, "items": [] }
+          "action": "GET dokumentów — pusta lista po usunięciu",
+          "command": "curl -s http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID/documents -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID/documents' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "total == 0",
+            "items == []"
+          ]
         },
         {
           "step": 5,
-          "description": "Ponowny DELETE zwraca 404",
-          "method": "DELETE",
-          "url": "$GW/admin/projects/$CASCADE_PROJECT_ID",
-          "headers": { "Authorization": "Bearer $ADMIN_TOKEN" },
-          "expected": { "status": 404 }
+          "action": "Ponowny DELETE — 404 (idempotencja)",
+          "command": "curl -s -X DELETE http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request DELETE 'http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 404
         }
       ],
       "cascade_scope": {
@@ -166,133 +197,157 @@
         "note": "eval_results NIE są usuwane — historyczne wyniki ewaluacji zachowujemy do analizy"
       }
     },
+
     {
       "id": "5.6",
       "title": "Eval — log tworzony automatycznie po zapytaniu (production mode)",
-      "status": "READY",
+      "status": "TODO",
+      "description": "Zapytanie bez gold_answer → eval service zapisuje metryki produkcyjne async po zdarzeniu query.completed.",
       "steps": [
         {
           "step": 1,
-          "description": "Wyślij zapytanie przez gateway (bez gold_answer → production mode)",
-          "method": "POST",
-          "url": "$GW/chat/query",
-          "headers": { "Authorization": "Bearer $ADMIN_TOKEN", "Content-Type": "application/json" },
-          "body": {
-            "project_id": "$PROJECT_ID",
-            "query": "What are the risks of combining aspirin and warfarin?"
-          }
+          "action": "Wyślij zapytanie (bez gold_answer → production mode)",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the risks of combining aspirin and warfarin?\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the risks of combining aspirin and warfarin?\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "answer jest non-empty",
+            "conversation_id jest non-empty string"
+          ]
         },
         {
           "step": 2,
-          "description": "Poczekaj ~10s na async przetworzenie przez eval service, potem sprawdź wyniki",
-          "method": "GET",
-          "url": "$GW/eval/results?project_id=$PROJECT_ID&rag_mode=vanilla",
-          "headers": { "Authorization": "Bearer $ADMIN_TOKEN" },
-          "expected": {
-            "status": 200,
-            "items_gte": 1,
-            "items[0].eval_mode": "production",
-            "items[0].metrics_contains": ["faithfulness", "latency_ms", "citation_precision", "context_relevance", "token_count"]
-          }
+          "action": "Poczekaj ~10s, sprawdź wyniki ewaluacji",
+          "command": "curl -s \"http://localhost:8000/eval/results?project_id=$PROJECT_ID&rag_mode=vanilla\" -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request GET 'http://localhost:8000/eval/results?project_id=PROJECT_ID_HERE&rag_mode=vanilla' --header 'Authorization: Bearer ADMIN_TOKEN_HERE'",
+          "expected_status": 200,
+          "checks": [
+            "items ma >= 1 element",
+            "items[0].eval_mode == 'production'",
+            "items[0].metrics zawiera: faithfulness, latency_ms, citation_precision, context_relevance, token_count"
+          ],
+          "notes": "Eval service przetwarza async — poczekaj ~10s po zapytaniu przed sprawdzeniem wyników."
         }
       ]
     },
+
     {
       "id": "5.7",
       "title": "Eval — metryki benchmark mode (z gold_answer: token_f1, em, answer_relevance)",
-      "status": "READY",
+      "status": "TODO",
+      "description": "Zapytanie z gold_answer → eval service oblicza dodatkowo token_f1, em, answer_relevance.",
       "steps": [
         {
           "step": 1,
-          "description": "Wyślij zapytanie z gold_answer → benchmark mode",
-          "method": "POST",
-          "url": "$GW/chat/query",
-          "headers": { "Authorization": "Bearer $ADMIN_TOKEN", "Content-Type": "application/json" },
-          "body": {
-            "project_id": "$PROJECT_ID",
-            "query": "What is the warfarin and aspirin interaction?",
-            "gold_answer": "Combining warfarin and aspirin increases the risk of bleeding due to additive anticoagulant effects."
-          }
+          "action": "Wyślij zapytanie z gold_answer → benchmark mode",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is the warfarin and aspirin interaction?\", \"gold_answer\": \"Combining warfarin and aspirin increases the risk of bleeding due to additive anticoagulant effects.\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is the warfarin and aspirin interaction?\", \"gold_answer\": \"Combining warfarin and aspirin increases the risk of bleeding due to additive anticoagulant effects.\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "answer jest non-empty"
+          ]
         },
         {
           "step": 2,
-          "description": "Poczekaj ~10s, sprawdź że metryki benchmark są obecne",
-          "method": "GET",
-          "url": "$GW/eval/results?project_id=$PROJECT_ID",
-          "headers": { "Authorization": "Bearer $ADMIN_TOKEN" },
-          "expected": {
-            "status": 200,
-            "benchmark_item_contains_metrics": ["token_f1", "em", "faithfulness", "answer_relevance", "latency_ms"],
-            "all_metrics_range": "0.0 to 1.0 (except latency_ms which is integer ms)"
-          }
+          "action": "Poczekaj ~10s, sprawdź metryki benchmark",
+          "command": "curl -s \"http://localhost:8000/eval/results?project_id=$PROJECT_ID\" -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/eval/results?project_id=$PROJECT_ID' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "item z eval_mode == 'benchmark' zawiera metryki: token_f1, em, faithfulness, answer_relevance, latency_ms",
+            "wszystkie metryki w zakresie 0.0–1.0 (wyjątek: latency_ms jako integer)"
+          ],
+          "notes": "Eval service przetwarza async — poczekaj ~10s po zapytaniu."
         }
       ]
     },
+
     {
       "id": "5.8",
       "title": "Eval — filtrowanie logów po rag_mode",
-      "status": "READY",
-      "request": {
-        "method": "GET",
-        "url": "$GW/eval/results?rag_mode=vanilla&project_id=$PROJECT_ID",
-        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
-      },
-      "expected": {
-        "status": 200,
-        "all_items_have": { "rag_mode": "vanilla" }
-      }
+      "status": "TODO",
+      "description": "GET /eval/results?rag_mode=vanilla zwraca tylko wyniki dla danego trybu RAG.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Pobierz wyniki filtrowane po rag_mode=vanilla",
+          "command": "curl -s \"http://localhost:8000/eval/results?rag_mode=vanilla&project_id=$PROJECT_ID\" -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request GET 'http://localhost:8000/eval/results?rag_mode=vanilla&project_id=PROJECT_ID_HERE' --header 'Authorization: Bearer ADMIN_TOKEN_HERE'",
+          "expected_status": 200,
+          "checks": [
+            "wszystkie items[i].rag_mode == 'vanilla'"
+          ]
+        }
+      ]
     },
+
     {
       "id": "5.9",
       "title": "Eval — tabela porównawcza architektur (summary)",
-      "status": "READY",
-      "request": {
-        "method": "GET",
-        "url": "$GW/eval/results/summary?project_id=$PROJECT_ID",
-        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
-      },
-      "expected": {
-        "status": 200,
-        "body_contains": ["summary"],
-        "summary_rows_contain": ["rag_mode", "count", "avg_faithfulness", "avg_latency_ms"]
-      }
+      "status": "TODO",
+      "description": "GET /eval/results/summary — agregacja metryk per rag_mode. Podgląd tabeli porównawczej dla eksperymentów z Fazy 7.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Pobierz summary metryk per rag_mode",
+          "command": "curl -s \"http://localhost:8000/eval/results/summary?project_id=$PROJECT_ID\" -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/eval/results/summary?project_id=$PROJECT_ID' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "body zawiera klucz 'summary'",
+            "każdy wiersz summary zawiera: rag_mode, count, avg_faithfulness, avg_latency_ms"
+          ]
+        }
+      ]
     },
+
     {
       "id": "5.10",
       "title": "Admin — eksport logów eval do CSV",
-      "status": "READY",
-      "request": {
-        "method": "GET",
-        "url": "$GW/admin/eval-results/export?project_id=$PROJECT_ID",
-        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
-      },
-      "expected": {
-        "status": 200,
-        "content_type": "text/csv",
-        "header_row_contains": ["rag_mode", "question", "faithfulness", "latency_ms", "token_f1"]
-      }
+      "status": "TODO",
+      "description": "GET /admin/eval-results/export — pobiera wszystkie wyniki ewaluacji projektu jako plik CSV do analizy w Pythonie/Excel.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Eksportuj wyniki do CSV i sprawdź nagłówek",
+          "command": "curl -s \"http://localhost:8000/admin/eval-results/export?project_id=$PROJECT_ID\" -H 'Authorization: Bearer $ADMIN_TOKEN' -o eval_export.csv && head -3 eval_export.csv",
+          "postman_command": "curl --location 'http://localhost:8000/admin/eval-results/export?project_id=$PROJECT_ID' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "Content-Type == 'text/csv'",
+            "pierwsza linia (header) zawiera kolumny: rag_mode, question, faithfulness, latency_ms, token_f1"
+          ],
+          "notes": "Flaga -o eval_export.csv zapisuje plik lokalnie. 'head -3' pokazuje nagłówek i pierwsze 2 wiersze danych."
+        }
+      ]
     },
+
     {
       "id": "5.11",
-      "title": "Eval — settings options endpoint (admin form helper)",
-      "status": "READY",
-      "request": {
-        "method": "GET",
-        "url": "$GW/admin/projects/settings/options",
-        "headers": { "Authorization": "Bearer $ADMIN_TOKEN" }
-      },
-      "expected": {
-        "status": 200,
-        "body_contains": ["rag_modes", "chunking_strategies", "embedding_providers", "hybrid_alpha", "top_k"],
-        "rag_modes_count": 9
-      }
+      "title": "Admin — settings options endpoint (admin form helper)",
+      "status": "TODO",
+      "description": "GET /admin/projects/settings/options — metadane enumów i constraints używane przez frontend do budowania formularzy.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Pobierz opcje settings",
+          "command": "curl -s http://localhost:8000/admin/projects/settings/options -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/admin/projects/settings/options' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "body zawiera: rag_modes, chunking_strategies, embedding_providers, hybrid_alpha, top_k",
+            "rag_modes ma dokładnie 9 elementów"
+          ]
+        }
+      ]
     }
   ],
-  "routing_map": {
-    "note": "Admin Service jest wystawiony przez gateway pod /admin/*, Eval Service pod /eval/*",
-    "admin_prefix": "/admin",
-    "eval_prefix": "/eval",
-    "admin_port_direct": 8012,
-    "eval_port_direct": 8013
+
+  "cleanup": {
+    "description": "Usuń projekty testowe utworzone podczas testów",
+    "commands": [
+      "curl -s -X DELETE http://localhost:8000/admin/projects/$NEW_PROJECT_ID -H 'Authorization: Bearer $ADMIN_TOKEN'",
+      "curl -s -X DELETE http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID -H 'Authorization: Bearer $ADMIN_TOKEN'"
+    ]
   }
 }

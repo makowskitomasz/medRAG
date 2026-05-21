@@ -47,12 +47,19 @@ async def consume(
     queue_name: str,
     handler: Callable[[dict[str, Any], str | None], Awaitable[None]],
 ) -> None:
+    import logging
+
+    logger = logging.getLogger(__name__)
+
     if _channel is None:
         raise RuntimeError("AMQP channel not initialized — call connect() first")
     queue = await _channel.declare_queue(queue_name, durable=True, passive=True)
     async with queue.iterator() as it:
         async for message in it:
-            async with message.process():
-                payload = json.loads(message.body)
-                trace_id = (message.headers or {}).get("x-trace-id")
-                await handler(payload, trace_id)
+            try:
+                async with message.process():
+                    payload = json.loads(message.body)
+                    trace_id = (message.headers or {}).get("x-trace-id")
+                    await handler(payload, trace_id)
+            except Exception as exc:
+                logger.error(f"Message processing failed, nacking: {exc}")
