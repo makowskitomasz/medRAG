@@ -80,3 +80,16 @@ class SettingsOptions(BaseModel):
     top_k: FieldConstraint
     rerank_top_n: FieldConstraint
     prompt_slots: list[PromptSlot]
+
+
+class ReindexResponse(BaseModel):
+    project_id: str
+    documents_queued: int
+
+
+class DeleteProjectResponse(BaseModel):
+    project_id: str
+    documents_deleted: int
+    chunks_deleted: int
+    conversations_deleted: int
+    vectors_deleted: int

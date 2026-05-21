@@ -1,0 +1,268 @@
+{
+  "phase": "0 — Infrastructure & Health Checks",
+  "goal": "Verify that the entire Docker stack starts correctly: FastAPI services respond on /health, MongoDB, Weaviate and RabbitMQ are accessible.",
+  "preconditions_global": [
+    "Docker and docker compose are installed",
+    "Repository is cloned and .env file exists (copied from .env.example)",
+    "No other process is occupying ports: 8000-8013, 27017, 8080, 5672, 15672"
+  ],
+  "scenarios": [
+    {
+      "id": "0.1",
+      "title": "Start infrastructure containers",
+      "description": "Starts MongoDB, Weaviate and RabbitMQ. These are dependencies for all services — they must be healthy before starting application services.",
+      "preconditions": ["You are in the project root directory (medRAG/)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Start infrastructure containers in the background",
+          "command": "docker compose up -d mongo weaviate rabbitmq",
+          "expected_status": null,
+          "expected_output": "Container medrag-mongo-1 Started\nContainer medrag-weaviate-1 Started\nContainer medrag-rabbitmq-1 Started",
+          "notes": "First run may take 1-2 min (pulling images)"
+        },
+        {
+          "step": 2,
+          "action": "Check that all 3 containers have status healthy",
+          "command": "docker compose ps",
+          "expected_status": null,
+          "expected_output": "All three services should show 'healthy' in the STATUS column. If you see 'starting' — wait 30s and retry.",
+          "notes": "Weaviate starts slower than the others — may need up to 60s"
+        }
+      ],
+      "expected_outcome": "docker compose ps shows mongo, weaviate, rabbitmq with status healthy",
+      "save_for_later": {}
+    },
+    {
+      "id": "0.2",
+      "title": "Start application services",
+      "description": "Builds and starts all FastAPI services. Each should expose a /health endpoint.",
+      "preconditions": ["Scenario 0.1 completed successfully"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Build and start all application services",
+          "command": "docker compose up -d --build api-gateway auth admin ingestion parser chunking embedding indexing",
+          "expected_status": null,
+          "expected_output": "Each service should appear with status 'Started' or 'Running'",
+          "notes": "First build takes several minutes (Python dependency installation via uv)"
+        },
+        {
+          "step": 2,
+          "action": "Check logs for startup errors",
+          "command": "docker compose logs --tail=1 api-gateway auth admin ingestion parser chunking embedding indexing",
+          "expected_status": null,
+          "expected_output": "Each service should print 'Application startup complete' or 'Uvicorn running on'. Connection errors to MongoDB or RabbitMQ indicate a Docker network issue.",
+          "notes": "Look for: ERROR, CRITICAL, Connection refused"
+        }
+      ],
+      "expected_outcome": "8 application services running with no startup errors in logs",
+      "save_for_later": {}
+    },
+    {
+      "id": "0.3",
+      "title": "Health check — api-gateway (port 8000)",
+      "description": "The gateway is the entry point for all requests. It must respond first.",
+      "preconditions": ["Scenario 0.2 completed successfully"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Call /health on api-gateway",
+          "command": "curl -s http://localhost:8000/health | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": {
+            "status": "ok",
+            "service": "api-gateway"
+          },
+          "notes": "If you get 'Connection refused' — the service has not started. Check: docker compose logs api-gateway"
+        }
+      ],
+      "expected_outcome": "JSON with status=ok and service=api-gateway",
+      "save_for_later": {}
+    },
+    {
+      "id": "0.4",
+      "title": "Health check — auth service (port 8001)",
+      "description": "The auth service must be accessible directly and through the gateway. Also verifies the MongoDB connection.",
+      "preconditions": ["Scenario 0.2 completed successfully"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Health check directly on auth service",
+          "command": "curl -s http://localhost:8001/health | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": {
+            "status": "ok",
+            "service": "auth"
+          },
+          "notes": "If auth returns 500 — there is a problem connecting to MongoDB. Check: docker compose logs auth"
+        }
+      ],
+      "expected_outcome": "JSON with status=ok and service=auth",
+      "save_for_later": {}
+    },
+    {
+      "id": "0.5",
+      "title": "Health check — all remaining services (ports 8007–8013)",
+      "description": "Verifies that each service starts and responds correctly on /health.",
+      "preconditions": ["Scenario 0.2 completed successfully"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Health check admin service",
+          "command": "curl -s http://localhost:8012/health | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "admin" },
+          "notes": null
+        },
+        {
+          "step": 2,
+          "action": "Health check ingestion service",
+          "command": "curl -s http://localhost:8007/health | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "ingestion" },
+          "notes": null
+        },
+        {
+          "step": 3,
+          "action": "Health check parser service (RabbitMQ worker — only /health, no business HTTP routes)",
+          "command": "curl -s http://localhost:8008/health | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "parser" },
+          "notes": "Parser is a RabbitMQ worker — it has no business endpoints, only /health"
+        },
+        {
+          "step": 4,
+          "action": "Health check chunking service",
+          "command": "curl -s http://localhost:8009/health | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "chunking" },
+          "notes": null
+        },
+        {
+          "step": 5,
+          "action": "Health check embedding service (may start slowly — loads BGE-m3 model)",
+          "command": "curl -s http://localhost:8010/health | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "embedding" },
+          "notes": "Embedding loads the sentence-transformers model on startup. May need 60-120s on first run. If 'starting', wait and retry."
+        },
+        {
+          "step": 6,
+          "action": "Health check indexing service",
+          "command": "curl -s http://localhost:8011/health | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "indexing" },
+          "notes": null
+        },
+        {
+          "step": 7,
+          "action": "Health check eval service",
+          "command": "curl -s http://localhost:8013/health | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "eval" },
+          "notes": null
+        }
+      ],
+      "expected_outcome": "All 7 services return status=ok",
+      "save_for_later": {}
+    },
+    {
+      "id": "0.6",
+      "title": "Weaviate — readiness and schema",
+      "description": "Weaviate must be ready to accept vectors. Check the ready endpoint and that the schema is accessible.",
+      "preconditions": ["weaviate container has status healthy"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Check if Weaviate is ready",
+          "command": "curl -s http://localhost:8080/v1/.well-known/ready",
+          "expected_status": 200,
+          "expected_output": "Empty response with HTTP 200 — Weaviate is ready",
+          "notes": "If you get 503 — Weaviate is still starting. Wait 30s."
+        },
+        {
+          "step": 2,
+          "action": "Fetch current schema (may be empty on first start)",
+          "command": "curl -s http://localhost:8080/v1/schema | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": {
+            "classes": []
+          },
+          "notes": "The 'Chunk' class appears only after the first ingestion pipeline run. At this stage classes=[] is correct."
+        }
+      ],
+      "expected_outcome": "Weaviate responds 200 on /ready and returns valid schema JSON",
+      "save_for_later": {}
+    },
+    {
+      "id": "0.7",
+      "title": "RabbitMQ — Management UI and queues",
+      "description": "Verify that RabbitMQ is alive, the broker is accessible through the Management API, and required queues have been declared by services.",
+      "preconditions": ["rabbitmq container has status healthy", "Application services from 0.2 are running"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Open RabbitMQ Management UI in browser",
+          "command": "open http://localhost:15672",
+          "expected_status": null,
+          "expected_output": "RabbitMQ login page. Login: guest, password: guest.",
+          "notes": "On macOS 'open' launches the browser. On Linux use: xdg-open or enter the URL manually."
+        },
+        {
+          "step": 2,
+          "action": "Check queue list via Management API",
+          "command": "curl -s -u guest:guest http://localhost:15672/api/queues | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_output": "List of queues. Expected: parser.queue, chunking.queue, embedding.queue, indexing.queue, eval.queue",
+          "notes": "Queues are declared by services on startup. If the list is empty — services have not yet connected to RabbitMQ. Check: docker compose logs parser chunking"
+        },
+        {
+          "step": 3,
+          "action": "Check that the 'documents' exchange exists",
+          "command": "curl -s -u guest:guest http://localhost:15672/api/exchanges/%2F/documents | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": {
+            "name": "documents",
+            "type": "topic",
+            "durable": true
+          },
+          "notes": "The 'documents' exchange should be of type 'topic' and durable. If 404 — services have not declared the topology."
+        },
+        {
+          "step": 4,
+          "action": "Check that queues have no stuck messages",
+          "command": "curl -s -u guest:guest 'http://localhost:15672/api/queues/%2F/parser.queue' | python3 -c \"import sys,json; q=json.load(sys.stdin); print(f'messages: {q[\\\"messages\\\"]}, ready: {q[\\\"messages_ready\\\"]}, unacked: {q[\\\"messages_unacknowledged\\\"]}')\"",
+          "expected_output": "messages: 0, ready: 0, unacked: 0",
+          "notes": "On a clean start queues should be empty. If messages > 0 — may be leftovers from a previous session."
+        }
+      ],
+      "expected_outcome": "Queues exist, 'documents' exchange exists, queues are empty",
+      "save_for_later": {}
+    },
+    {
+      "id": "0.8",
+      "title": "Stop the stack",
+      "description": "Clean shutdown of all containers. Data is preserved in volumes.",
+      "preconditions": [],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Stop all containers (preserve volumes with data)",
+          "command": "docker compose down",
+          "expected_output": "Each container shows 'Stopping...' then 'Stopped'",
+          "notes": "MongoDB, Weaviate and RabbitMQ data is in named volumes — survives restart"
+        },
+        {
+          "step": 2,
+          "action": "If you want to wipe ALL data (fresh start)",
+          "command": "docker compose down -v",
+          "expected_output": "Containers and volumes removed",
+          "notes": "WARNING: -v removes volumes — you will lose all data in MongoDB and Weaviate. Use only for a fresh start."
+        }
+      ],
+      "expected_outcome": "All containers stopped",
+      "save_for_later": {}
+    }
+  ]
+}

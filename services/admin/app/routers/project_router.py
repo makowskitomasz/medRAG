@@ -2,7 +2,9 @@ from fastapi import APIRouter, Header, status
 
 from app.schemas.project_schemas import (
     CreateProjectRequest,
+    DeleteProjectResponse,
     ProjectResponse,
+    ReindexResponse,
     SettingsOptions,
     UpdateProjectRequest,
     UpdateSettingsRequest,
@@ -53,3 +55,14 @@ async def update_settings(project_id: str, body: UpdateSettingsRequest) -> Proje
 async def delete_prompt_override(project_id: str, slug: str) -> ProjectResponse:
     """Remove a single prompt override, reverting it to the file-based default."""
     return await project_service.delete_prompt_override(project_id, slug)
+
+
+@router.delete("/{project_id}", response_model=DeleteProjectResponse)
+async def delete_project(project_id: str) -> DeleteProjectResponse:
+    return await project_service.delete_project(project_id)
+
+
+@router.post("/{project_id}/reindex", response_model=ReindexResponse)
+async def reindex_project(project_id: str) -> ReindexResponse:
+    """Re-publish document.uploaded events for all indexed documents of a project."""
+    return await project_service.reindex_project(project_id)

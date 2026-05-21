@@ -1,4 +1,5 @@
 import asyncio
+import time
 from collections.abc import AsyncGenerator
 
 import httpx
@@ -35,6 +36,8 @@ async def handle_query(
 
     overrides = dict(project_settings.prompt_overrides)
     pipeline = get_pipeline(rag_mode, http_client, settings, overrides)
+
+    t0 = time.monotonic()
     result = await pipeline.run(
         query=request.query,
         project_id=request.project_id,
@@ -45,9 +48,10 @@ async def handle_query(
         alpha=project_settings.hybrid_alpha,
         rerank_top_n=project_settings.rerank_top_n,
     )
+    latency_ms = int((time.monotonic() - t0) * 1000)
 
     await append_messages(conversation.id, request.query, result.answer, db)
-    await _publish_query_completed(result, request, trace_id)
+    await _publish_query_completed(result, request, trace_id, latency_ms, project_settings.top_k)
     return result
 
 
@@ -105,8 +109,12 @@ async def _publish_query_completed(
     result: QueryResponse,
     request: QueryRequest,
     trace_id: str | None,
+    latency_ms: int = 0,
+    top_k: int = 20,
 ) -> None:
     try:
+        contexts = [c.snippet for c in result.citations]
+        token_count = len(result.answer.split())
         await publish(
             exchange_name="queries",
             routing_key="query.completed",
@@ -117,6 +125,11 @@ async def _publish_query_completed(
                 "answer": result.answer,
                 "rag_mode": result.rag_mode,
                 "citations": [c.model_dump() for c in result.citations],
+                "latency_ms": latency_ms,
+                "token_count": token_count,
+                "contexts": contexts,
+                "top_k": top_k,
+                "gold_answer": request.gold_answer,
             },
             trace_id=trace_id,
         )

@@ -41,6 +41,16 @@ async def proxy_admin(
     return await proxy(request, f"{settings.admin_url}/{path}", http, user)
 
 
+@router.api_route("/eval/{path:path}", methods=["GET", "POST"])
+async def proxy_eval(
+    path: str,
+    request: Request,
+    user: dict = Depends(require_auth),
+    http: httpx.AsyncClient = Depends(get_http),
+) -> Response:
+    return await proxy(request, f"{settings.eval_url}/{path}", http, user)
+
+
 @router.api_route("/auth/{path:path}", methods=["GET", "POST"])
 async def proxy_auth(
     path: str,

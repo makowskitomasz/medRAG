@@ -1,0 +1,353 @@
+{
+  "phase": "5 — Admin Service + Eval Service",
+  "goal": "Verify Admin CRUD for projects and documents, trigger reindex, automatic collection of custom RAG metrics (without RAGAS) after each query, and CSV export.",
+  "status": "READY",
+  "preconditions_global": [
+    "Stack running: docker compose up -d — all services healthy",
+    "$ADMIN_TOKEN from POST http://localhost:8000/auth/login",
+    "Project with an indexed document (status 'indexed') — save $PROJECT_ID"
+  ],
+  "variables_legend": {
+    "$ADMIN_TOKEN": "Admin JWT token — from POST http://localhost:8000/auth/login",
+    "$PROJECT_ID": "ObjectId of project with indexed documents",
+    "$NEW_PROJECT_ID": "id of project created in scenario 5.1 — save from response",
+    "$CASCADE_PROJECT_ID": "id of project with at least one document — for cascade delete test (5.5)"
+  },
+
+  "scenarios": [
+    {
+      "id": "5.0",
+      "title": "Health check — Admin and Eval",
+      "status": "TODO",
+      "description": "Quick verification that Admin and Eval services are responding.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Health check admin",
+          "command": "curl -s http://localhost:8012/health",
+          "postman_command": "curl --location 'http://localhost:8012/health'",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "admin" }
+        },
+        {
+          "step": 2,
+          "action": "Health check eval",
+          "command": "curl -s http://localhost:8013/health",
+          "postman_command": "curl --location 'http://localhost:8013/health'",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "eval" }
+        }
+      ]
+    },
+
+    {
+      "id": "5.1",
+      "title": "Admin — create project with full settings",
+      "status": "TODO",
+      "description": "POST /admin/projects creates a project with full settings. Returns id — save as $NEW_PROJECT_ID.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Create project with full settings",
+          "command": "curl -s -X POST http://localhost:8000/admin/projects -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"name\": \"Phase5 Test Project\", \"description\": \"E2E test project for phase 5\", \"chunking_strategy\": \"recursive\", \"embedding_provider\": \"local_bge\", \"rag_mode\": \"vanilla\", \"hybrid_alpha\": 0.5, \"top_k\": 20, \"rerank_top_n\": 5}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/admin/projects' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"name\": \"Phase5 Test Project\", \"description\": \"E2E test project for phase 5\", \"chunking_strategy\": \"recursive\", \"embedding_provider\": \"local_bge\", \"rag_mode\": \"vanilla\", \"hybrid_alpha\": 0.5, \"top_k\": 20, \"rerank_top_n\": 5}'",
+          "expected_status": 201,
+          "checks": [
+            "id is a non-empty string — save as $NEW_PROJECT_ID",
+            "settings.rag_mode == 'vanilla'",
+            "settings.chunking_strategy == 'recursive'",
+            "created_at and created_by are present in the response"
+          ],
+          "save_to_variable": "$NEW_PROJECT_ID"
+        }
+      ]
+    },
+
+    {
+      "id": "5.2",
+      "title": "Admin — update project settings (PATCH /settings)",
+      "status": "TODO",
+      "description": "PATCH /projects/{id}/settings — merge, not replace. Unmodified fields remain unchanged.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Change rag_mode and hybrid_alpha (other fields unchanged)",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$NEW_PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"hyde\", \"hybrid_alpha\": 0.7}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$NEW_PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"rag_mode\": \"hyde\", \"hybrid_alpha\": 0.7}'",
+          "expected_status": 200,
+          "checks": [
+            "settings.rag_mode == 'hyde'",
+            "settings.hybrid_alpha == 0.7",
+            "settings.chunking_strategy == 'recursive' (unchanged from 5.1)"
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "5.3",
+      "title": "Admin — project document list with pagination and filtering",
+      "status": "TODO",
+      "description": "GET /projects/{id}/documents — paginated list with optional status filter.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Fetch project documents (page 1, limit 10)",
+          "command": "curl -s \"http://localhost:8000/admin/projects/$PROJECT_ID/documents?page=1&limit=10\" -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request GET 'http://localhost:8000/admin/projects/PROJECT_ID_HERE/documents?page=1&limit=10' --header 'Authorization: Bearer ADMIN_TOKEN_HERE'",
+          "expected_status": 200,
+          "checks": [
+            "items, total, page, limit, pages are present in the response",
+            "items[0] contains: document_id, filename, status, created_at"
+          ]
+        },
+        {
+          "step": 2,
+          "action": "Filter documents by status 'indexed'",
+          "command": "curl -s \"http://localhost:8000/admin/projects/$PROJECT_ID/documents?status=indexed\" -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/admin/projects/$PROJECT_ID/documents?status=indexed' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "all items[i].status == 'indexed'"
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "5.4",
+      "title": "Admin — trigger project reindex",
+      "status": "TODO",
+      "description": "POST /projects/{id}/reindex re-emits document.uploaded events for all project documents. Restarts the entire ingestion pipeline from scratch.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Trigger reindex",
+          "command": "curl -s -X POST http://localhost:8000/admin/projects/$PROJECT_ID/reindex -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/admin/projects/$PROJECT_ID/reindex' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "project_id and documents_queued are present in the response",
+            "documents_queued >= 0"
+          ],
+          "notes": "Check RabbitMQ management (port 15672) that 'document.uploaded' events were published."
+        }
+      ]
+    },
+
+    {
+      "id": "5.5",
+      "title": "Admin — delete project (full cascade)",
+      "status": "TODO",
+      "description": "DELETE /projects/{id} deletes the project along with documents, chunks, conversations and Weaviate vectors. eval_results are NOT deleted.",
+      "precondition": "Create a project with at least one document (status indexed). Save as $CASCADE_PROJECT_ID.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Check project documents before deletion",
+          "command": "curl -s http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID/documents -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID/documents' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "total > 0 (project has at least 1 document)"
+          ]
+        },
+        {
+          "step": 2,
+          "action": "Delete project (cascade)",
+          "command": "curl -s -X DELETE http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request DELETE 'http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "project_id, documents_deleted, chunks_deleted, conversations_deleted, vectors_deleted are present",
+            "documents_deleted >= 1",
+            "chunks_deleted >= 1",
+            "vectors_deleted >= 0"
+          ]
+        },
+        {
+          "step": 3,
+          "action": "GET project — 404 after deletion",
+          "command": "curl -s http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 404
+        },
+        {
+          "step": 4,
+          "action": "GET documents — empty list after deletion",
+          "command": "curl -s http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID/documents -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID/documents' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "total == 0",
+            "items == []"
+          ]
+        },
+        {
+          "step": 5,
+          "action": "Second DELETE — 404 (idempotency)",
+          "command": "curl -s -X DELETE http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request DELETE 'http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 404
+        }
+      ],
+      "cascade_scope": {
+        "mongodb_collections": ["projects", "documents", "chunks", "conversations"],
+        "weaviate_collection": "Chunk (filtered by project_id)",
+        "note": "eval_results are NOT deleted — historical evaluation results are preserved for analysis"
+      }
+    },
+
+    {
+      "id": "5.6",
+      "title": "Eval — log created automatically after query (production mode)",
+      "status": "TODO",
+      "description": "Query without gold_answer → eval service saves production metrics async after query.completed event.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Send query (without gold_answer → production mode)",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the risks of combining aspirin and warfarin?\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the risks of combining aspirin and warfarin?\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "answer is non-empty",
+            "conversation_id is a non-empty string"
+          ]
+        },
+        {
+          "step": 2,
+          "action": "Wait ~10s, check evaluation results",
+          "command": "curl -s \"http://localhost:8000/eval/results?project_id=$PROJECT_ID&rag_mode=vanilla\" -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request GET 'http://localhost:8000/eval/results?project_id=PROJECT_ID_HERE&rag_mode=vanilla' --header 'Authorization: Bearer ADMIN_TOKEN_HERE'",
+          "expected_status": 200,
+          "checks": [
+            "items has >= 1 element",
+            "items[0].eval_mode == 'production'",
+            "items[0].metrics contains: faithfulness, latency_ms, citation_precision, context_relevance, token_count"
+          ],
+          "notes": "Eval service processes async — wait ~10s after the query before checking results."
+        }
+      ]
+    },
+
+    {
+      "id": "5.7",
+      "title": "Eval — benchmark mode metrics (with gold_answer: token_f1, em, answer_relevance)",
+      "status": "TODO",
+      "description": "Query with gold_answer → eval service additionally computes token_f1, em, answer_relevance.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Send query with gold_answer → benchmark mode",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is the warfarin and aspirin interaction?\", \"gold_answer\": \"Combining warfarin and aspirin increases the risk of bleeding due to additive anticoagulant effects.\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is the warfarin and aspirin interaction?\", \"gold_answer\": \"Combining warfarin and aspirin increases the risk of bleeding due to additive anticoagulant effects.\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "answer is non-empty"
+          ]
+        },
+        {
+          "step": 2,
+          "action": "Wait ~10s, check benchmark metrics",
+          "command": "curl -s \"http://localhost:8000/eval/results?project_id=$PROJECT_ID\" -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/eval/results?project_id=$PROJECT_ID' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "item with eval_mode == 'benchmark' contains metrics: token_f1, em, faithfulness, answer_relevance, latency_ms",
+            "all metrics in range 0.0-1.0 (exception: latency_ms as integer)"
+          ],
+          "notes": "Eval service processes async — wait ~10s after the query."
+        }
+      ]
+    },
+
+    {
+      "id": "5.8",
+      "title": "Eval — filter logs by rag_mode",
+      "status": "TODO",
+      "description": "GET /eval/results?rag_mode=vanilla returns only results for the given RAG mode.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Fetch results filtered by rag_mode=vanilla",
+          "command": "curl -s \"http://localhost:8000/eval/results?rag_mode=vanilla&project_id=$PROJECT_ID\" -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request GET 'http://localhost:8000/eval/results?rag_mode=vanilla&project_id=PROJECT_ID_HERE' --header 'Authorization: Bearer ADMIN_TOKEN_HERE'",
+          "expected_status": 200,
+          "checks": [
+            "all items[i].rag_mode == 'vanilla'"
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "5.9",
+      "title": "Eval — architecture comparison table (summary)",
+      "status": "TODO",
+      "description": "GET /eval/results/summary — aggregated metrics per rag_mode. Preview of the comparison table for Phase 7 experiments.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Fetch metrics summary per rag_mode",
+          "command": "curl -s \"http://localhost:8000/eval/results/summary?project_id=$PROJECT_ID\" -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/eval/results/summary?project_id=$PROJECT_ID' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "body contains key 'summary'",
+            "each summary row contains: rag_mode, count, avg_faithfulness, avg_latency_ms"
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "5.10",
+      "title": "Admin — export eval logs to CSV",
+      "status": "TODO",
+      "description": "GET /admin/eval-results/export — downloads all evaluation results for a project as a CSV file for analysis in Python/Excel.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Export results to CSV and check the header",
+          "command": "curl -s \"http://localhost:8000/admin/eval-results/export?project_id=$PROJECT_ID\" -H 'Authorization: Bearer $ADMIN_TOKEN' -o eval_export.csv && head -3 eval_export.csv",
+          "postman_command": "curl --location 'http://localhost:8000/admin/eval-results/export?project_id=$PROJECT_ID' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "Content-Type == 'text/csv'",
+            "first line (header) contains columns: rag_mode, question, faithfulness, latency_ms, token_f1"
+          ],
+          "notes": "The -o eval_export.csv flag saves the file locally. 'head -3' shows the header and first 2 data rows."
+        }
+      ]
+    },
+
+    {
+      "id": "5.11",
+      "title": "Admin — settings options endpoint (admin form helper)",
+      "status": "TODO",
+      "description": "GET /admin/projects/settings/options — enum metadata and constraints used by the frontend to build forms.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Fetch settings options",
+          "command": "curl -s http://localhost:8000/admin/projects/settings/options -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location 'http://localhost:8000/admin/projects/settings/options' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "body contains: rag_modes, chunking_strategies, embedding_providers, hybrid_alpha, top_k",
+            "rag_modes has exactly 9 elements"
+          ]
+        }
+      ]
+    }
+  ],
+
+  "cleanup": {
+    "description": "Delete test projects created during testing",
+    "commands": [
+      "curl -s -X DELETE http://localhost:8000/admin/projects/$NEW_PROJECT_ID -H 'Authorization: Bearer $ADMIN_TOKEN'",
+      "curl -s -X DELETE http://localhost:8000/admin/projects/$CASCADE_PROJECT_ID -H 'Authorization: Bearer $ADMIN_TOKEN'"
+    ]
+  }
+}
