@@ -1,3 +1,4 @@
+import time
 from collections.abc import AsyncGenerator
 
 from app.pipelines.base import RagPipeline
@@ -37,8 +38,17 @@ class VanillaPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
+        t0 = time.monotonic()
+        yield self._sse("meta", {"conversationId": conversation_id, "ragMode": rag_mode})
+        yield self._sse("search", {"status": "searching", "query": query})
+
         chunks = await self._retrieve(query, project_id, top_k, alpha)
+        yield self._sse("search", {"status": "reranking", "found": len(chunks)})
+
         reranked = await self._rerank(query, chunks, rerank_top_n)
-        return self._stream_generation(
-            query, reranked, conversation_history, conversation_id, rag_mode
-        )
+        yield self._sse("search", {"status": "done", "kept": len(reranked)})
+
+        async for event in self._timed_stream(
+            query, reranked, conversation_history, conversation_id, rag_mode, t0
+        ):
+            yield event

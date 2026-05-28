@@ -1,3 +1,4 @@
+import time
 from collections.abc import AsyncGenerator
 
 from medrag_shared import get_logger
@@ -62,23 +63,60 @@ class SelfReflectionPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
-        # Self-reflection evaluation happens before streaming — run non-stream to find best chunks,
-        # then stream the final answer.
+        t0 = time.monotonic()
+        yield self._sse("meta", {"conversationId": conversation_id, "ragMode": rag_mode})
+
         current_query = query
         best_chunks: list[dict] = []
 
         for iteration in range(_MAX_ITERATIONS):
+            iter_label = f"{iteration + 1}/{_MAX_ITERATIONS}"
+            yield self._sse(
+                "think",
+                {
+                    "step": f"Retrieval iteration {iter_label}",
+                    "note": "evaluating answer sufficiency",
+                },
+            )
+            yield self._sse("search", {"status": "searching", "query": current_query})
+
             chunks = await self._retrieve(current_query, project_id, top_k, alpha)
+            yield self._sse("search", {"status": "reranking", "found": len(chunks)})
+
             reranked = await self._rerank(query, chunks, rerank_top_n)
+            yield self._sse("search", {"status": "done", "kept": len(reranked)})
             best_chunks = reranked
 
             answer, _ = await self._generate(query, reranked, conversation_history)
             score = await self._evaluate_answer(query, answer, reranked)
 
-            if score >= _SUFFICIENCY_THRESHOLD or iteration == _MAX_ITERATIONS - 1:
+            logger.info(
+                "self_reflection iteration",
+                iteration=iteration + 1,
+                score=score,
+                sufficient=score >= _SUFFICIENCY_THRESHOLD,
+            )
+
+            if score >= _SUFFICIENCY_THRESHOLD:
+                yield self._sse(
+                    "think",
+                    {
+                        "step": f"Iteration {iter_label} sufficient",
+                        "note": f"score {score:.2f} ≥ {_SUFFICIENCY_THRESHOLD}",
+                    },
+                )
                 break
+
+            yield self._sse(
+                "think",
+                {
+                    "step": f"Iteration {iter_label} insufficient",
+                    "note": f"score {score:.2f} — retrying with expanded query",
+                },
+            )
             current_query = f"{query} (provide more detail and specific information)"
 
-        return self._stream_generation(
-            query, best_chunks, conversation_history, conversation_id, rag_mode
-        )
+        async for event in self._timed_stream(
+            query, best_chunks, conversation_history, conversation_id, rag_mode, t0
+        ):
+            yield event

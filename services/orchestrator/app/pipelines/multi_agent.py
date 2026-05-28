@@ -1,4 +1,5 @@
 import asyncio
+import time
 from collections.abc import AsyncGenerator
 
 from medrag_shared import get_logger
@@ -8,11 +9,10 @@ from app.schemas.orchestrator_schemas import QueryResponse
 
 logger = get_logger(__name__)
 
-# Each agent reformulates the query from a different angle to maximise recall diversity.
 _AGENT_PERSPECTIVES = [
-    "mechanism of action and pharmacokinetics: {query}",
-    "clinical risks, contraindications and adverse effects: {query}",
-    "dosing, monitoring and management guidelines: {query}",
+    ("Researcher", "mechanism of action and pharmacokinetics: {query}"),
+    ("Critic", "clinical risks, contraindications and adverse effects: {query}"),
+    ("Editor", "dosing, monitoring and management guidelines: {query}"),
 ]
 
 
@@ -38,7 +38,7 @@ class MultiAgentPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> list[dict]:
-        perspective_queries = [p.format(query=query) for p in _AGENT_PERSPECTIVES]
+        perspective_queries = [p.format(query=query) for _, p in _AGENT_PERSPECTIVES]
         per_agent_top_k = max(top_k // len(perspective_queries), 3)
 
         results = await asyncio.gather(
@@ -91,7 +91,44 @@ class MultiAgentPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
-        reranked = await self._aggregate_chunks(query, project_id, top_k, alpha, rerank_top_n)
-        return self._stream_generation(
-            query, reranked, conversation_history, conversation_id, rag_mode
+        t0 = time.monotonic()
+        yield self._sse("meta", {"conversationId": conversation_id, "ragMode": rag_mode})
+
+        per_agent_top_k = max(top_k // len(_AGENT_PERSPECTIVES), 3)
+
+        for agent_name, perspective_template in _AGENT_PERSPECTIVES:
+            pq = perspective_template.format(query=query)
+            yield self._sse(
+                "think",
+                {"step": f"Agent: {agent_name}", "note": pq},
+            )
+
+        yield self._sse("search", {"status": "searching", "query": query})
+
+        perspective_queries = [p.format(query=query) for _, p in _AGENT_PERSPECTIVES]
+        results = await asyncio.gather(
+            *[
+                self._agent_retrieve(pq, project_id, per_agent_top_k, alpha)
+                for pq in perspective_queries
+            ]
         )
+
+        seen: set[str] = set()
+        merged: list[dict] = []
+        for chunks in results:
+            for chunk in chunks:
+                chunk_id = chunk.get("chunk_id", "")
+                if chunk_id not in seen:
+                    seen.add(chunk_id)
+                    merged.append(chunk)
+
+        yield self._sse("search", {"status": "reranking", "found": len(merged)})
+        logger.info("multi_agent aggregation", total_unique_chunks=len(merged))
+
+        reranked = await self._rerank(query, merged, rerank_top_n)
+        yield self._sse("search", {"status": "done", "kept": len(reranked)})
+
+        async for event in self._timed_stream(
+            query, reranked, conversation_history, conversation_id, rag_mode, t0
+        ):
+            yield event

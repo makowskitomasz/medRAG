@@ -37,9 +37,24 @@ class Conversation(BaseModel):
     id: str = Field(default_factory=lambda: str(ObjectId()), alias="_id")
     project_id: str
     user_id: str | None = None
+    title: str | None = None
     messages: list[ConversationMessage] = Field(default_factory=list)
     rag_mode: str = "vanilla"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     model_config = {"populate_by_name": True}
+
+
+class ConversationSummary(BaseModel):
+    id: str
+    project_id: str
+    title: str | None = None
+    rag_mode: str
+    message_count: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class UpdateConversationRequest(BaseModel):
+    title: str | None = None

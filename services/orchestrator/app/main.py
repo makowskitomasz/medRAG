@@ -13,6 +13,7 @@ from app.connectors import (
     create_http_client,
     disconnect_mongo,
 )
+from app.routers.conversations_router import router as conversations_router
 from app.routers.orchestrator_router import router
 
 logger = get_logger(__name__)
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(title="Orchestrator Service", lifespan=lifespan)
 app.include_router(router)
+app.include_router(conversations_router)
 
 
 @app.get("/health")

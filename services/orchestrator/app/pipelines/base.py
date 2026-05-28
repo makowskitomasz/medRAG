@@ -1,4 +1,5 @@
 import json
+import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 
@@ -32,7 +33,7 @@ class RagPipeline(ABC):
     ) -> QueryResponse: ...
 
     @abstractmethod
-    def run_stream(
+    async def run_stream(
         self,
         query: str,
         project_id: str,
@@ -43,6 +44,14 @@ class RagPipeline(ABC):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]: ...
+
+    # ------------------------------------------------------------------ helpers
+
+    @staticmethod
+    def _sse(event: str, data: dict) -> str:
+        return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+    # ------------------------------------------------------------------ backend calls
 
     async def _retrieve(
         self,
@@ -92,14 +101,15 @@ class RagPipeline(ABC):
         resp.raise_for_status()
         return float(resp.json().get("score", 1.0))
 
-    async def _stream_generation(
+    # ------------------------------------------------------------------ streaming
+
+    async def _stream_tokens_and_citations(
         self,
         query: str,
         chunks: list[dict],
         conversation_history: list[dict],
-        conversation_id: str,
-        rag_mode: str,
     ) -> AsyncGenerator[str, None]:
+        """Call generation service and map its events to rich SSE format."""
         payload = {
             "query": query,
             "chunks": chunks,
@@ -110,15 +120,49 @@ class RagPipeline(ABC):
 
         async with self.http.stream("POST", url, json=payload) as resp:
             resp.raise_for_status()
+            citation_index = 1
             async for line in resp.aiter_lines():
-                if line.startswith("data: "):
-                    raw = line[6:]
-                    if raw == "[DONE]":
-                        break
+                if not line.startswith("data: "):
+                    continue
+                raw = line[6:]
+                if raw == "[DONE]":
+                    break
+                try:
                     event = json.loads(raw)
-                    if event.get("type") == "citations":
-                        event["conversation_id"] = conversation_id
-                        event["rag_mode"] = rag_mode
-                    yield f"data: {json.dumps(event)}\n\n"
+                except json.JSONDecodeError:
+                    continue
 
-        yield "data: [DONE]\n\n"
+                event_type = event.get("type")
+                if event_type == "token":
+                    yield self._sse("token", {"text": event.get("content", "")})
+                elif event_type == "citations":
+                    for c in event.get("citations", []):
+                        yield self._sse(
+                            "citation",
+                            {
+                                "n": citation_index,
+                                "documentId": c.get("chunk_id", ""),
+                                "filename": c.get("filename"),
+                                "page": c.get("page"),
+                                "snippet": c.get("snippet", ""),
+                            },
+                        )
+                        citation_index += 1
+
+    async def _timed_stream(
+        self,
+        query: str,
+        chunks: list[dict],
+        conversation_history: list[dict],
+        conversation_id: str,
+        rag_mode: str,
+        t0: float,
+    ) -> AsyncGenerator[str, None]:
+        """Emit token/citation events then a final done event."""
+        async for event in self._stream_tokens_and_citations(query, chunks, conversation_history):
+            yield event
+        latency_ms = int((time.monotonic() - t0) * 1000)
+        yield self._sse(
+            "done",
+            {"conversationId": conversation_id, "latencyMs": latency_ms, "ragMode": rag_mode},
+        )

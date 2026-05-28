@@ -17,8 +17,9 @@ async def query(
     db: AsyncIOMotorDatabase = Depends(get_db),
     http_client: httpx.AsyncClient = Depends(get_http_client),
     x_trace_id: str | None = Header(default=None),
+    x_user_id: str | None = Header(default=None),
 ) -> QueryResponse:
-    return await handle_query(request, db, http_client, settings, x_trace_id)
+    return await handle_query(request, db, http_client, settings, x_trace_id, x_user_id)
 
 
 @router.post("/query/stream")
@@ -27,8 +28,9 @@ async def query_stream(
     db: AsyncIOMotorDatabase = Depends(get_db),
     http_client: httpx.AsyncClient = Depends(get_http_client),
     x_trace_id: str | None = Header(default=None),
+    x_user_id: str | None = Header(default=None),
 ) -> StreamingResponse:
-    gen = await handle_query_stream(request, db, http_client, settings, x_trace_id)
+    gen = await handle_query_stream(request, db, http_client, settings, x_trace_id, x_user_id)
     return StreamingResponse(
         gen,
         media_type="text/event-stream",

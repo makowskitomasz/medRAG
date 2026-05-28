@@ -29,6 +29,15 @@ async def proxy_ingest(
     return await proxy(request, f"{settings.ingestion_url}/{path}", http, user)
 
 
+@router.api_route("/projects", methods=["GET"])
+async def proxy_projects(
+    request: Request,
+    user: dict = Depends(require_auth),
+    http: httpx.AsyncClient = Depends(get_http),
+) -> Response:
+    return await proxy(request, f"{settings.admin_url}/projects", http, user)
+
+
 @router.api_route("/admin/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_admin(
     path: str,

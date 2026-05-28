@@ -1,4 +1,5 @@
 import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator
 
@@ -25,12 +26,13 @@ async def handle_query(
     http_client: httpx.AsyncClient,
     settings,  # type: ignore[type-arg]
     trace_id: str | None = None,
+    user_id: str | None = None,
 ) -> QueryResponse:
     project_settings = await get_project_settings(request.project_id, db)
     rag_mode = project_settings.rag_mode
 
     conversation = await get_or_create_conversation(
-        request.conversation_id, request.project_id, rag_mode.value, db
+        request.conversation_id, request.project_id, rag_mode.value, db, user_id
     )
     history = build_history(conversation)
 
@@ -61,12 +63,13 @@ async def handle_query_stream(
     http_client: httpx.AsyncClient,
     settings,  # type: ignore[type-arg]
     trace_id: str | None = None,
+    user_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
     project_settings = await get_project_settings(request.project_id, db)
     rag_mode = project_settings.rag_mode
 
     conversation = await get_or_create_conversation(
-        request.conversation_id, request.project_id, rag_mode.value, db
+        request.conversation_id, request.project_id, rag_mode.value, db, user_id
     )
     history = build_history(conversation)
 
@@ -88,15 +91,18 @@ async def handle_query_stream(
         )
         if asyncio.iscoroutine(stream):
             stream = await stream
+        current_event: str | None = None
         async for chunk in stream:
-            if '"type": "token"' in chunk:
-                import json
-
-                try:
-                    data = json.loads(chunk[6:])
-                    answer_parts.append(data.get("content", ""))
-                except Exception:
-                    pass
+            # Track current event type across the multi-line SSE frame
+            for line in chunk.splitlines():
+                if line.startswith("event: "):
+                    current_event = line[7:].strip()
+                elif line.startswith("data: ") and current_event == "token":
+                    try:
+                        data = json.loads(line[6:])
+                        answer_parts.append(data.get("text", ""))
+                    except Exception:
+                        pass
             yield chunk
 
         answer = "".join(answer_parts)
