@@ -92,3 +92,23 @@ services:
     volumes:
       - ./shared:/app/shared
       - ./services/eval/app:/app/app
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: ../docker/Dockerfile.frontend.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app              # live source
+      - frontend_nm:/app/node_modules   # preserve installed packages
+      - frontend_next:/app/.next        # preserve .next cache
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api-gateway:8000
+      - WATCHPACK_POLLING=true       # reliable HMR on macOS/Windows Docker
+    depends_on:
+      - api-gateway
+
+volumes:
+  frontend_nm:
+  frontend_next:
