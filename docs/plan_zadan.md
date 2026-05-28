@@ -161,7 +161,7 @@ Self-RAG, Corrective RAG, Iterative Multi-Hop RAG, MA-RAG, MADAM-RAG, RARE-RAG.
 
 ## Faza 7 — Ewaluacja eksperymentalna (cel: wyniki do pracy)
 
-- [ ] **7.1** Wybór i przygotowanie datasetu Wikipedia (subset, 50-100 QA pairs) — **TWOJE**
+- [ ] **7.1** Wybór i przygotowanie datasetu Wikipedia (subset, 800-1000 QA pairs) — **TWOJE**
 - [ ] **7.2** Wybór i przygotowanie datasetu drug interactions — **TWOJE**
 - [ ] **7.3** `[C]` Skrypt ewaluacji: uruchom N pytań w każdym trybie RAG, zbierz metryki
 - [ ] **7.4** Eksperyment: uruchom ewaluację dla wszystkich 4 trybów × 2 datasety — **TWOJE**
