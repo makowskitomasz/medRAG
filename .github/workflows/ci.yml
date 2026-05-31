@@ -152,7 +152,7 @@ jobs:
       - name: Type check
         if: steps.exists.outputs.found == 'true'
         working-directory: frontend
-        run: pnpm tsc --noEmit
+        run: pnpm typecheck
 
       - name: Lint
         if: steps.exists.outputs.found == 'true'
