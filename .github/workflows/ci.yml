@@ -142,7 +142,7 @@ jobs:
         if: steps.exists.outputs.found == 'true'
         uses: pnpm/action-setup@v4
         with:
-          package_json_file: frontend/package.json
+          version: 11
 
       - name: Install dependencies
         if: steps.exists.outputs.found == 'true'
