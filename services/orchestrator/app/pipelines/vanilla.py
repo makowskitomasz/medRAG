@@ -26,7 +26,7 @@ class VanillaPipeline(RagPipeline):
             rag_mode=rag_mode,
         )
 
-    async def run_stream(
+    async def run_stream(  # type: ignore[override]
         self,
         query: str,
         project_id: str,
@@ -37,8 +37,11 @@ class VanillaPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
+        yield self._sse_search_start()
         chunks = await self._retrieve(query, project_id, top_k, alpha)
         reranked = await self._rerank(query, chunks, rerank_top_n)
-        return self._stream_generation(
+        yield self._sse_search_done(reranked)
+        async for chunk in self._stream_generation(
             query, reranked, conversation_history, conversation_id, rag_mode
-        )
+        ):
+            yield chunk

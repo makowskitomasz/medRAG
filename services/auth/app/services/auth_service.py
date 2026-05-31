@@ -1,6 +1,12 @@
 from fastapi import HTTPException, status
 
-from app.connectors.jwt_connector import create_token, hash_password, verify_password
+from app.connectors.jwt_connector import (
+    create_refresh_token,
+    create_token,
+    decode_token,
+    hash_password,
+    verify_password,
+)
 from app.repositories import user_repository
 from app.schemas.auth_schemas import TokenResponse, UserResponse
 
@@ -16,7 +22,32 @@ async def login(email: str, password: str) -> TokenResponse:
     doc = await user_repository.find_by_email(email)
     if not doc or not verify_password(password, doc["hashed_password"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    return TokenResponse(access_token=create_token(str(doc["_id"]), doc["role"]))
+    user_id = str(doc["_id"])
+    role = doc["role"]
+    return TokenResponse(
+        access_token=create_token(user_id, role),
+        refresh_token=create_refresh_token(user_id, role),
+    )
+
+
+async def refresh(refresh_token: str) -> TokenResponse:
+    try:
+        payload = decode_token(refresh_token)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
+        )
+    if payload.get("type") != "refresh":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not a refresh token")
+    user_id: str = payload["sub"]
+    role: str = payload["role"]
+    doc = await user_repository.find_by_id(user_id)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return TokenResponse(
+        access_token=create_token(user_id, role),
+        refresh_token=create_refresh_token(user_id, role),
+    )
 
 
 async def get_me(user_id: str) -> UserResponse:

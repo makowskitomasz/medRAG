@@ -22,6 +22,7 @@ class Citation(BaseModel):
     filename: str | None = None
     page: int | None = None
     snippet: str
+    relevance: float | None = None
 
 
 class GenerationResult(BaseModel):

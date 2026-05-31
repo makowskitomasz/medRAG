@@ -22,6 +22,9 @@ async def list_documents(
             status=doc["status"],
             created_at=doc["created_at"],
             status_history=[StatusHistoryEntry(**e) for e in doc.get("status_history", [])],
+            file_size=doc.get("stats", {}).get("file_size"),
+            page_count=doc.get("stats", {}).get("page_count"),
+            chunk_count=doc.get("stats", {}).get("chunk_count"),
         )
         for doc in docs
     ]

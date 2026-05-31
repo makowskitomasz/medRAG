@@ -17,7 +17,16 @@ def verify_password(password: str, hashed: str) -> bool:
 def create_token(user_id: str, role: str) -> str:
     expire = datetime.now(UTC) + timedelta(minutes=settings.jwt_expire_minutes)
     return jwt.encode(
-        {"sub": user_id, "role": role, "exp": expire},
+        {"sub": user_id, "role": role, "exp": expire, "type": "access"},
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+
+def create_refresh_token(user_id: str, role: str) -> str:
+    expire = datetime.now(UTC) + timedelta(days=30)
+    return jwt.encode(
+        {"sub": user_id, "role": role, "exp": expire, "type": "refresh"},
         settings.jwt_secret,
         algorithm=settings.jwt_algorithm,
     )

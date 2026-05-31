@@ -23,6 +23,7 @@ def extract_citations(answer: str, chunks: list[ContextChunk]) -> list[Citation]
                 filename=chunk.filename,
                 page=chunk.page,
                 snippet=snippet,
+                relevance=round(chunk.score, 4) if chunk.score else None,
             )
         )
     return citations

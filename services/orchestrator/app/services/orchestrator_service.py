@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 import httpx
 from medrag_shared import get_logger
 from medrag_shared.amqp import publish
+from medrag_shared.models.project import RagMode
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.pipelines.factory import get_pipeline
@@ -27,7 +28,11 @@ async def handle_query(
     trace_id: str | None = None,
 ) -> QueryResponse:
     project_settings = await get_project_settings(request.project_id, db)
-    rag_mode = project_settings.rag_mode
+    rag_mode = (
+        RagMode(request.rag_mode_override)
+        if request.rag_mode_override
+        else project_settings.rag_mode
+    )
 
     conversation = await get_or_create_conversation(
         request.conversation_id, request.project_id, rag_mode.value, db
@@ -50,7 +55,13 @@ async def handle_query(
     )
     latency_ms = int((time.monotonic() - t0) * 1000)
 
-    await append_messages(conversation.id, request.query, result.answer, db)
+    await append_messages(
+        conversation.id,
+        request.query,
+        result.answer,
+        db,
+        citations=[c.model_dump() for c in result.citations],
+    )
     await _publish_query_completed(result, request, trace_id, latency_ms, project_settings.top_k)
     return result
 
@@ -63,7 +74,11 @@ async def handle_query_stream(
     trace_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
     project_settings = await get_project_settings(request.project_id, db)
-    rag_mode = project_settings.rag_mode
+    rag_mode = (
+        RagMode(request.rag_mode_override)
+        if request.rag_mode_override
+        else project_settings.rag_mode
+    )
 
     conversation = await get_or_create_conversation(
         request.conversation_id, request.project_id, rag_mode.value, db
@@ -74,8 +89,11 @@ async def handle_query_stream(
     pipeline = get_pipeline(rag_mode, http_client, settings, overrides)
 
     answer_parts: list[str] = []
+    captured_citations: list[dict] = []
 
     async def _stream() -> AsyncGenerator[str, None]:
+        import json
+
         stream = pipeline.run_stream(
             query=request.query,
             project_id=request.project_id,
@@ -89,18 +107,20 @@ async def handle_query_stream(
         if asyncio.iscoroutine(stream):
             stream = await stream
         async for chunk in stream:
-            if '"type": "token"' in chunk:
-                import json
-
-                try:
-                    data = json.loads(chunk[6:])
-                    answer_parts.append(data.get("content", ""))
-                except Exception:
-                    pass
+            try:
+                data = json.loads(chunk[6:].strip())
+                if data.get("type") == "token":
+                    answer_parts.append(data.get("content", data.get("text", "")))
+                elif data.get("type") == "citations":
+                    captured_citations.extend(data.get("citations", []))
+            except Exception:
+                pass
             yield chunk
 
         answer = "".join(answer_parts)
-        await append_messages(conversation.id, request.query, answer, db)
+        await append_messages(
+            conversation.id, request.query, answer, db, citations=captured_citations
+        )
 
     return _stream()
 

@@ -1,0 +1,8 @@
+allowBuilds:
+  '@parcel/watcher': true
+  '@swc/core': true
+  sharp: true
+onlyBuiltDependencies:
+  - "@parcel/watcher"
+  - "@swc/core"
+  - sharp

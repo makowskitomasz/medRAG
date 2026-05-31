@@ -1,7 +1,13 @@
 from fastapi import APIRouter, Depends, status
 
 from app.dependencies import require_auth
-from app.schemas.auth_schemas import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from app.schemas.auth_schemas import (
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserResponse,
+)
 from app.services import auth_service
 
 router = APIRouter()
@@ -20,6 +26,11 @@ async def login(body: LoginRequest) -> TokenResponse:
 @router.get("/me", response_model=UserResponse)
 async def me(payload: dict = Depends(require_auth)) -> UserResponse:
     return await auth_service.get_me(payload["sub"])
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(body: RefreshRequest) -> TokenResponse:
+    return await auth_service.refresh(body.refresh_token)
 
 
 @router.post("/validate")

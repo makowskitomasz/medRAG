@@ -51,7 +51,7 @@ class SelfReflectionPipeline(RagPipeline):
             rag_mode=rag_mode,
         )
 
-    async def run_stream(
+    async def run_stream(  # type: ignore[override]
         self,
         query: str,
         project_id: str,
@@ -62,23 +62,56 @@ class SelfReflectionPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
-        # Self-reflection evaluation happens before streaming — run non-stream to find best chunks,
-        # then stream the final answer.
+        import time as _time
+
         current_query = query
         best_chunks: list[dict] = []
 
         for iteration in range(_MAX_ITERATIONS):
+            # --- search event ---
+            yield self._sse_search_start()
             chunks = await self._retrieve(current_query, project_id, top_k, alpha)
             reranked = await self._rerank(query, chunks, rerank_top_n)
             best_chunks = reranked
+            yield self._sse_search_done(reranked)
 
+            # --- think: generate draft ---
+            t1 = _time.monotonic()
+            step_label = f"Wersja robocza (iteracja {iteration + 1})"
             answer, _ = await self._generate(query, reranked, conversation_history)
+            yield self._sse_think(
+                step=iteration * 2,
+                label=step_label,
+                text=answer[:300] + ("…" if len(answer) > 300 else ""),
+                duration_ms=int((_time.monotonic() - t1) * 1000),
+            )
+
+            # --- think: evaluate ---
+            t2 = _time.monotonic()
             score = await self._evaluate_answer(query, answer, reranked)
+            logger.info(
+                "self_reflection iteration",
+                iteration=iteration + 1,
+                score=score,
+                sufficient=score >= _SUFFICIENCY_THRESHOLD,
+            )
+            yield self._sse_think(
+                step=iteration * 2 + 1,
+                label="Ocena jakości odpowiedzi",
+                text=f"Wynik samooceny: {score:.2f} (próg: {_SUFFICIENCY_THRESHOLD}). "
+                + (
+                    "Odpowiedź wystarczająca."
+                    if score >= _SUFFICIENCY_THRESHOLD
+                    else "Wymagana poprawa."
+                ),
+                duration_ms=int((_time.monotonic() - t2) * 1000),
+            )
 
             if score >= _SUFFICIENCY_THRESHOLD or iteration == _MAX_ITERATIONS - 1:
                 break
             current_query = f"{query} (provide more detail and specific information)"
 
-        return self._stream_generation(
+        async for chunk in self._stream_generation(
             query, best_chunks, conversation_history, conversation_id, rag_mode
-        )
+        ):
+            yield chunk
