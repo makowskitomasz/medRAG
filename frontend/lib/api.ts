@@ -53,7 +53,7 @@ async function request<T>(
       if (typeof err.detail === "string") msg = err.detail;
       else if (Array.isArray(err.detail)) msg = err.detail.map((d: { msg?: string }) => d.msg).join(", ");
       else if (err.message) msg = err.message;
-    } catch {}
+    } catch {} // ignore non-JSON error body
     throw new Error(msg);
   }
   if (res.status === 204) return undefined as T;
@@ -360,7 +360,7 @@ export async function streamQuery(
           ...parsed,
         };
         onEvent(ev);
-      } catch {}
+      } catch {} // ignore malformed SSE lines
     }
   }
 }
