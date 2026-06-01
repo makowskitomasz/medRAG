@@ -44,6 +44,7 @@ class ProjectResponse(BaseModel):
     description: str
     settings: ProjectSettings
     created_by: str
+    member_ids: list[str] = []
     created_at: datetime
 
 

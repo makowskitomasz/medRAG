@@ -1,41 +1,45 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
   Stethoscope, Quote, Shield, Mail, Lock, Eye, EyeOff,
-  ChevronRight, Check, ArrowRight, Activity,
+  ArrowRight, Activity, UserRound,
 } from "lucide-react";
 import { auth } from "@/lib/api";
 import { saveToken, saveUser } from "@/lib/auth";
 
-function LoginForm() {
+export default function RegisterPage() {
   const router = useRouter();
-  const params = useSearchParams();
-  const returnTo = params.get("returnTo") || "/chat/new";
-  const t = useTranslations("login");
+  const t = useTranslations("register");
+  const tLogin = useTranslations("login");
 
-  const [email, setEmail] = useState("admin@mail.com");
-  const [password, setPassword] = useState("admin");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [remember, setRemember] = useState(true);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) { setError("Podaj email i hasło."); return; }
+    if (password.length < 8) { setError(t("errorShort")); return; }
+    if (password !== confirm) { setError(t("errorMismatch")); return; }
     setLoading(true);
     setError(null);
     try {
+      await auth.register(email, password, firstName || undefined, lastName || undefined);
       const { access_token, refresh_token } = await auth.login(email, password);
       saveToken(access_token, refresh_token);
       const user = await auth.me();
       saveUser(user);
-      router.replace(returnTo);
+      router.replace("/chat/new");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed.");
+      setError(err instanceof Error ? err.message : "Registration failed.");
     } finally {
       setLoading(false);
     }
@@ -52,38 +56,38 @@ function LoginForm() {
           </div>
 
           <div className="login-headline">
-            <h1>{t("brandHeadline").split("\n").map((line, i) => (
+            <h1>{tLogin("brandHeadline").split("\n").map((line, i) => (
               <span key={i}>{line}{i === 0 && <br />}</span>
             ))}</h1>
-            <p>{t("brandSubhead")}</p>
+            <p>{tLogin("brandSubhead")}</p>
           </div>
 
           <div className="login-feature-cards stagger">
             <div className="login-feat">
               <div className="login-feat-ic"><Stethoscope size={18} /></div>
               <div>
-                <div className="login-feat-t">{t("feat1Title")}</div>
-                <div className="login-feat-s">{t("feat1Desc")}</div>
+                <div className="login-feat-t">{tLogin("feat1Title")}</div>
+                <div className="login-feat-s">{tLogin("feat1Desc")}</div>
               </div>
             </div>
             <div className="login-feat">
               <div className="login-feat-ic"><Quote size={18} /></div>
               <div>
-                <div className="login-feat-t">{t("feat2Title")}</div>
-                <div className="login-feat-s">{t("feat2Desc")}</div>
+                <div className="login-feat-t">{tLogin("feat2Title")}</div>
+                <div className="login-feat-s">{tLogin("feat2Desc")}</div>
               </div>
             </div>
             <div className="login-feat">
               <div className="login-feat-ic"><Shield size={18} /></div>
               <div>
-                <div className="login-feat-t">{t("feat3Title")}</div>
-                <div className="login-feat-s">{t("feat3Desc")}</div>
+                <div className="login-feat-t">{tLogin("feat3Title")}</div>
+                <div className="login-feat-s">{tLogin("feat3Desc")}</div>
               </div>
             </div>
           </div>
 
           <div className="login-foot">
-            <span>{t("version")}</span>
+            <span>{tLogin("version")}</span>
             <span className="login-dot" />
             <span>PL · EN · DE</span>
           </div>
@@ -114,6 +118,35 @@ function LoginForm() {
             <p>{t("subhead")}</p>
           </div>
 
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <label className="login-field">
+              <span>{t("firstNameLabel")}</span>
+              <div className="login-input">
+                <UserRound size={16} />
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder={t("firstNamePlaceholder")}
+                  autoComplete="given-name"
+                />
+              </div>
+            </label>
+            <label className="login-field">
+              <span>{t("lastNameLabel")}</span>
+              <div className="login-input">
+                <UserRound size={16} />
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder={t("lastNamePlaceholder")}
+                  autoComplete="family-name"
+                />
+              </div>
+            </label>
+          </div>
+
           <label className="login-field">
             <span>{t("emailLabel")}</span>
             <div className="login-input">
@@ -124,6 +157,7 @@ function LoginForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={t("emailPlaceholder")}
                 autoComplete="email"
+                required
               />
             </div>
           </label>
@@ -137,7 +171,8 @@ function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                autoComplete="current-password"
+                autoComplete="new-password"
+                required
               />
               <button type="button" className="icon-btn login-eye" onClick={() => setShowPw(!showPw)}>
                 {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -145,16 +180,25 @@ function LoginForm() {
             </div>
           </label>
 
-          {error && <div className="login-error"><Shield size={13} />{error}</div>}
+          <label className="login-field">
+            <span>{t("confirmLabel")}</span>
+            <div className="login-input">
+              <Lock size={16} />
+              <input
+                type={showConfirm ? "text" : "password"}
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="new-password"
+                required
+              />
+              <button type="button" className="icon-btn login-eye" onClick={() => setShowConfirm(!showConfirm)}>
+                {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </label>
 
-          <div className="login-row">
-            <label className="login-check">
-              <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-              <span className="login-check-box">{remember && <Check size={11} />}</span>
-              <span>{t("remember")}</span>
-            </label>
-            <a href="#" className="login-link">{t("forgot")}</a>
-          </div>
+          {error && <div className="login-error"><Shield size={13} />{error}</div>}
 
           <button type="submit" className="btn btn-primary login-submit" disabled={loading}>
             {loading ? (
@@ -165,39 +209,10 @@ function LoginForm() {
           </button>
 
           <div className="login-foot-small">
-            {t("noAccount")} <a href="/register">{t("register")}</a>
+            {t("hasAccount")} <a href="/login">{t("login")}</a>
           </div>
         </form>
-
-        <button
-          className="login-demo-skip"
-          onClick={async () => {
-            setLoading(true);
-            try {
-              const { access_token, refresh_token } = await auth.login("admin@mail.com", "admin");
-              saveToken(access_token, refresh_token);
-              const user = await auth.me();
-              saveUser(user);
-              router.replace(returnTo);
-            } catch {
-              setError("Demo niedostępne — sprawdź czy backend działa.");
-            } finally {
-              setLoading(false);
-            }
-          }}
-        >
-          <ChevronRight size={14} />
-          {t("demoSkip")}
-        </button>
       </div>
     </div>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense>
-      <LoginForm />
-    </Suspense>
   );
 }

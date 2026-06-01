@@ -81,6 +81,7 @@ export default function ChatPage() {
 
   const [input, setInput] = useState("");
   const [focusedCiteId, setFocusedCiteId] = useState<string | null>(null);
+  const toggleCite = (id: string) => setFocusedCiteId((prev) => prev === id ? null : id);
   const [thinkOpen, setThinkOpen] = useState(true);
   const [citesOpen, setCitesOpen] = useState(true);
 
@@ -131,7 +132,7 @@ export default function ChatPage() {
     setInput("");
     await send(text, activeProject.project_id, ragMode);
     queryClient.invalidateQueries({ queryKey: ["conversations", activeProject.project_id] });
-  }, [input, isGenerating, projectsLoading, activeProject, send, queryClient]);
+  }, [input, isGenerating, projectsLoading, activeProject, send, queryClient, ragMode]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -213,6 +214,7 @@ export default function ChatPage() {
                         setCitesOpen={setCitesOpen}
                         focusedCiteId={focusedCiteId}
                         setFocusedCiteId={setFocusedCiteId}
+                        toggleCite={toggleCite}
                         citationLayout={citationLayout}
                         isLast={msg.id === messages.findLast((m) => m.role === "ai")?.id}
                       />
@@ -283,7 +285,7 @@ export default function ChatPage() {
               citations={lastAi.citations ?? []}
               revealed={phase === "done" ? (lastAi.citations?.length ?? 0) : (lastAi.citationsRevealed ?? 0)}
               focused={focusedCiteId}
-              onFocus={setFocusedCiteId}
+              onFocus={toggleCite}
               isLoading={phase === "searching"}
             />
           )}
@@ -302,13 +304,14 @@ interface AiMsgProps {
   setCitesOpen: (v: boolean) => void;
   focusedCiteId: string | null;
   setFocusedCiteId: (id: string | null) => void;
+  toggleCite: (id: string) => void;
   citationLayout: string;
   isLast: boolean;
 }
 
 function AiMessage({
   msg, phase, thinkOpen, setThinkOpen, citesOpen, setCitesOpen,
-  focusedCiteId, setFocusedCiteId, citationLayout, isLast,
+  focusedCiteId, setFocusedCiteId, toggleCite, citationLayout, isLast,
 }: AiMsgProps) {
   const t = useTranslations("chat");
   const msgPhase = isLast ? phase : "done";
@@ -369,6 +372,7 @@ function AiMessage({
                 live={msgPhase === "thinking"}
                 expanded={thinkOpen}
                 onToggle={() => setThinkOpen(!thinkOpen)}
+                ragMode={msg.ragMode ?? "vanilla"}
               />
         )}
 
@@ -378,7 +382,7 @@ function AiMessage({
             text={displayText}
             citations={citations}
             focusedId={focusedCiteId}
-            onCiteClick={(id) => setFocusedCiteId(id)}
+            onCiteClick={toggleCite}
             streaming={msgPhase === "streaming"}
           />
         )}
@@ -390,14 +394,14 @@ function AiMessage({
               citations={citations}
               revealed={revealed}
               focused={focusedCiteId}
-              onFocus={setFocusedCiteId}
+              onFocus={toggleCite}
             />
           ) : (
             <CitationsInline
               citations={citations}
               revealed={revealed}
               focused={focusedCiteId}
-              onFocus={setFocusedCiteId}
+              onFocus={toggleCite}
             />
           )
         )}

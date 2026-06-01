@@ -1,4 +1,23 @@
 {
+  "register": {
+    "eyebrow": "New account",
+    "headline": "Join medRAG",
+    "subhead": "Enter your details to create an account.",
+    "firstNameLabel": "First name",
+    "firstNamePlaceholder": "John",
+    "lastNameLabel": "Last name",
+    "lastNamePlaceholder": "Smith",
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "passwordLabel": "Password",
+    "confirmLabel": "Confirm password",
+    "submit": "Create account",
+    "submitting": "Creating account…",
+    "hasAccount": "Already have an account?",
+    "login": "Sign in",
+    "errorMismatch": "Passwords do not match.",
+    "errorShort": "Password must be at least 8 characters."
+  },
   "login": {
     "eyebrow": "Sign in",
     "headline": "Welcome back",

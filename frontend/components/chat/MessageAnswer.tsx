@@ -35,18 +35,36 @@ function renderAnswer(
     while ((m = regex.exec(s)) !== null) {
       if (m.index > last) parts.push(s.slice(last, m.index));
       if (m[1]) {
-        parts.push(<strong key={"b" + key++}>{m[1].slice(2, -2)}</strong>);
+        const boldText = m[1].slice(2, -2);
+        const boldParts: React.ReactNode[] = [];
+        const citeRx = /\[(\d+)\]/g;
+        let bLast = 0; let bm: RegExpExecArray | null;
+        while ((bm = citeRx.exec(boldText)) !== null) {
+          if (bm.index > bLast) boldParts.push(boldText.slice(bLast, bm.index));
+          const bn = parseInt(bm[1], 10);
+          const bcit = citations[bn - 1];
+          if (bcit) {
+            const bcid = bcit.chunk_id;
+            boldParts.push(
+              <button key={"r" + key++} className={`cite-ref${focusedId === bcid ? " cite-ref-focus" : ""}`} onClick={() => onCiteClick(bcid)}>{bn}</button>
+            );
+          }
+          bLast = bm.index + bm[0].length;
+        }
+        if (bLast < boldText.length) boldParts.push(boldText.slice(bLast));
+        parts.push(<strong key={"b" + key++}>{boldParts}</strong>);
       } else if (m[2]) {
         const refs = m[2].match(/\[\d+\]/g) ?? [];
         refs.forEach((r) => {
           const n = parseInt(r.slice(1, -1), 10);
           const cit = citations[n - 1];
-          const cid = cit?.chunk_id ?? null;
+          if (!cit) return; // orphaned citation — LLM numbered from larger pool
+          const cid = cit.chunk_id;
           parts.push(
             <button
               key={"r" + key++}
               className={`cite-ref${focusedId === cid ? " cite-ref-focus" : ""}`}
-              onClick={() => cid && onCiteClick(cid)}
+              onClick={() => onCiteClick(cid)}
             >
               {n}
             </button>

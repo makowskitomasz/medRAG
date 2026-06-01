@@ -93,11 +93,11 @@ class MultiAgentPipeline(RagPipeline):
     ) -> AsyncGenerator[str, None]:
         import time as _time
 
-        agent_names = ["Badacz", "Krytyk", "Redaktor"]
+        agent_names = ["Researcher", "Critic", "Editor"]
         agent_descs = [
-            "Wyszukiwanie semantyczne i mechanizmy działania",
-            "Ryzyko kliniczne, przeciwwskazania i skutki uboczne",
-            "Dawkowanie, monitorowanie i wytyczne zarządzania",
+            "Mechanism of action and pharmacokinetics",
+            "Clinical risks, contraindications and adverse effects",
+            "Dosing, monitoring and management guidelines",
         ]
         per_top_k = max(top_k // len(_AGENT_PERSPECTIVES), 3)
 
@@ -118,7 +118,7 @@ class MultiAgentPipeline(RagPipeline):
             yield self._sse_think(
                 step=i,
                 label=f"Agent: {name}",
-                text=f"{desc}. Znaleziono {len(agent_chunks)} fragmentów.",
+                text=f"{desc}. Found {len(agent_chunks)} fragments.",
                 duration_ms=int((_time.monotonic() - t0) * 1000),
             )
 
@@ -138,8 +138,8 @@ class MultiAgentPipeline(RagPipeline):
         yield self._sse_search_done(reranked)
         yield self._sse_think(
             step=len(_AGENT_PERSPECTIVES),
-            label="Scalanie i rerankowanie",
-            text=f"Połączono {len(merged)} unikalnych fragmentów → wybrono top {len(reranked)}.",
+            label="Merging and reranking",
+            text=f"Merged {len(merged)} unique fragments → selected top {len(reranked)}.",
             duration_ms=int((_time.monotonic() - t_rerank) * 1000),
         )
 

@@ -1,17 +1,29 @@
 "use client";
-import { Brain, ChevronDown, Check } from "lucide-react";
+import { Brain, ChevronDown, Check, Sparkles, RefreshCw, ShieldCheck, GitMerge, AlertTriangle, Shuffle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { ThinkStep } from "@/hooks/useChatStream";
 
+const MODE_PANEL: Record<string, { label: string; Icon: React.ComponentType<{ size: number }> }> = {
+  hyde:               { label: "HyDE",         Icon: Sparkles },
+  query_rewriting:    { label: "Query Rewriting", Icon: RefreshCw },
+  self_reflection:    { label: "Self-Reflection", Icon: Brain },
+  corrective_rag:     { label: "Corrective RAG",  Icon: ShieldCheck },
+  iterative_multihop: { label: "MultiHop",       Icon: GitMerge },
+  madam_rag:          { label: "MADAM RAG",      Icon: AlertTriangle },
+  rare_rag:           { label: "RARE RAG",       Icon: Shuffle },
+};
+
 interface Props {
   steps: ThinkStep[];
-  totalSteps?: number;   // known total (if backend provides it), otherwise undefined
+  totalSteps?: number;
   live: boolean;
   expanded: boolean;
   onToggle: () => void;
+  ragMode?: string;
 }
 
-export default function ThinkPanel({ steps, totalSteps, live, expanded, onToggle }: Props) {
+export default function ThinkPanel({ steps, totalSteps, live, expanded, onToggle, ragMode = "self_reflection" }: Props) {
+  const { label: modeLabel, Icon: ModeIcon } = MODE_PANEL[ragMode] ?? MODE_PANEL.self_reflection;
   const tr = useTranslations("chat");
   const totalMs = steps.reduce((s, t) => s + t.durationMs, 0);
   const totalSec = (totalMs / 1000).toFixed(1);
@@ -27,8 +39,8 @@ export default function ThinkPanel({ steps, totalSteps, live, expanded, onToggle
       <button className="think-head" onClick={onToggle}>
         <div className="think-head-l">
           <span className="think-badge">
-            <Brain size={13} />
-            Self-Reflection
+            <ModeIcon size={13} />
+            {modeLabel}
             {live && <span className="think-badge-dot" />}
           </span>
           <span className="think-summary">{summary}</span>

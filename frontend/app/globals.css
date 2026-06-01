@@ -138,6 +138,16 @@ a { color: inherit; text-decoration: none; }
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); background-clip: padding-box; border: 2px solid transparent; }
 
+/* ---------- NUMBER INPUT SPINNERS ---------- */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  opacity: 1;
+}
+:root[data-theme="dark"] input[type="number"]::-webkit-inner-spin-button,
+:root[data-theme="dark"] input[type="number"]::-webkit-outer-spin-button {
+  filter: invert(1) brightness(0.65);
+}
+
 /* ---------- UTILITIES ---------- */
 .icon-btn {
   display: inline-flex;
@@ -758,6 +768,8 @@ a { color: inherit; text-decoration: none; }
 :root[data-theme="dark"] .cite-ref { color: var(--accent); }
 .cite-ref:hover { background: var(--accent); color: var(--accent-on); transform: translateY(-1px); }
 .cite-ref-focus { background: var(--accent); color: var(--accent-on); box-shadow: var(--shadow-glow); }
+:root[data-theme="dark"] .cite-ref:hover { color: var(--accent-on); }
+:root[data-theme="dark"] .cite-ref.cite-ref-focus { background: var(--accent); color: var(--accent-on); }
 
 /* Searching state */
 .search-state {
@@ -902,6 +914,7 @@ a { color: inherit; text-decoration: none; }
 }
 :root[data-theme="dark"] .cite-num { color: var(--accent); }
 .cite-card-focus .cite-num { background: var(--accent); color: var(--accent-on); }
+:root[data-theme="dark"] .cite-card.cite-card-focus .cite-num { background: var(--accent); color: var(--accent-on); }
 .cite-num-sm { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }
 .cite-card-meta { flex: 1; min-width: 0; }
 .cite-card-doc { font-size: 12.5px; font-weight: 600; line-height: 1.4; color: var(--text); }
@@ -1079,7 +1092,8 @@ a { color: inherit; text-decoration: none; }
   transition: all var(--t-fast) var(--ease); flex-shrink: 0;
 }
 .chat-composer-send:hover { filter: brightness(0.96); }
-.chat-composer-stop { background: var(--text-2); }
+.chat-composer-send.chat-composer-stop { background: #EF4444; color: #fff; }
+.chat-composer-send.chat-composer-stop:hover { background: #DC2626; filter: none; }
 
 /* ============================================================
    EMPTY STATE

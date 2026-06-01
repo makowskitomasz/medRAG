@@ -21,7 +21,7 @@ fi
 SERVICES=$(docker compose $COMPOSE_FILES config --services | grep -v '^reranker$' | tr '\n' ' ')
 
 echo "▶ Starting Docker services..."
-docker compose $COMPOSE_FILES up -d $SERVICES
+docker compose $COMPOSE_FILES up -d $SERVICES || true
 
 echo "▶ Stopping Docker reranker container (port 8005 needed for native)..."
 docker compose $COMPOSE_FILES stop reranker 2>/dev/null || true
@@ -29,6 +29,12 @@ docker compose $COMPOSE_FILES rm -f reranker 2>/dev/null || true
 
 echo "▶ Freeing port 8005 (killing any leftover process)..."
 lsof -ti :8005 | xargs kill -9 2>/dev/null || true
+
+echo "▶ Loading .env..."
+set -a
+# shellcheck disable=SC1091
+[ -f "$ROOT/.env" ] && source "$ROOT/.env"
+set +a
 
 echo "▶ Starting native reranker on port 8005 (MPS)..."
 cd "$ROOT/services/reranker"

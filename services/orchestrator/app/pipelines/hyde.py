@@ -52,15 +52,15 @@ class HydePipeline(RagPipeline):
         # think: generate hypothetical document
         yield self._sse_think(
             step=0,
-            label="Generowanie dokumentu hipotetycznego",
-            text="Tworzę hipotetyczną odpowiedź do wzbogacenia wyszukiwania…",
+            label="Generating hypothetical document",
+            text="Creating a hypothetical answer to enrich the search query…",
             duration_ms=0,
         )
         t0 = _time.monotonic()
         hypothetical_doc = await self._hyde_query(query)
         yield self._sse_think(
             step=0,
-            label="Generowanie dokumentu hipotetycznego",
+            label="Hypothetical document",
             text=hypothetical_doc[:300] + ("…" if len(hypothetical_doc) > 300 else ""),
             duration_ms=int((_time.monotonic() - t0) * 1000),
         )

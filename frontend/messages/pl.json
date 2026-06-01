@@ -1,4 +1,23 @@
 {
+  "register": {
+    "eyebrow": "Nowe konto",
+    "headline": "Dołącz do medRAG",
+    "subhead": "Podaj swoje dane, żeby założyć konto.",
+    "firstNameLabel": "Imię",
+    "firstNamePlaceholder": "Jan",
+    "lastNameLabel": "Nazwisko",
+    "lastNamePlaceholder": "Kowalski",
+    "emailLabel": "E-mail",
+    "emailPlaceholder": "ty@example.com",
+    "passwordLabel": "Hasło",
+    "confirmLabel": "Potwierdź hasło",
+    "submit": "Załóż konto",
+    "submitting": "Zakładam konto…",
+    "hasAccount": "Masz już konto?",
+    "login": "Zaloguj się",
+    "errorMismatch": "Hasła nie są identyczne.",
+    "errorShort": "Hasło musi mieć co najmniej 8 znaków."
+  },
   "login": {
     "eyebrow": "Zaloguj się",
     "headline": "Witaj z powrotem",

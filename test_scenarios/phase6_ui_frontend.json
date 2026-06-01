@@ -36,7 +36,7 @@
         }
       ],
       "expected_outcome": "User is on /login and cannot see any app content without logging in",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.2",
@@ -64,7 +64,7 @@
         }
       ],
       "expected_outcome": "Error message visible on the page, user stays on /login",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.3",
@@ -98,7 +98,7 @@
         }
       ],
       "expected_outcome": "Admin is logged in and sees the main chat interface",
-      "status": "TODO",
+      "status": "DONE",
       "save_for_later": {
         "session": "Browser keeps JWT in localStorage — stays logged in on page reload"
       }
@@ -117,7 +117,7 @@
         }
       ],
       "expected_outcome": "Session survives reload — user stays on the chat screen",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.5",
@@ -139,7 +139,7 @@
         }
       ],
       "expected_outcome": "Admin page renders with correct two-column layout",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.6",
@@ -179,7 +179,7 @@
         }
       ],
       "expected_outcome": "New project 'Test Aspirin' visible in the list and selected",
-      "status": "TODO",
+      "status": "DONE",
       "save_for_later": {
         "project_name": "Test Aspirin — used in subsequent scenarios"
       }
@@ -198,7 +198,7 @@
         }
       ],
       "expected_outcome": "Stats show zeros / dashes for an empty project",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.8",
@@ -226,7 +226,7 @@
         }
       ],
       "expected_outcome": "Modal opens with correct defaults and closes without changes",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.9",
@@ -266,7 +266,7 @@
         }
       ],
       "expected_outcome": "Settings saved to backend, visible after reopening the modal",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.10",
@@ -306,7 +306,7 @@
         }
       ],
       "expected_outcome": "Document reaches 'Ready' status, chunk count appears in stats",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.11",
@@ -334,7 +334,7 @@
         }
       ],
       "expected_outcome": "Second document indexed, document count = 2",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.12",
@@ -356,7 +356,7 @@
         }
       ],
       "expected_outcome": "Filter works in real time without a page reload",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.13",
@@ -384,7 +384,7 @@
         }
       ],
       "expected_outcome": "Document removed from UI and stats updated",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.14",
@@ -430,7 +430,7 @@
         }
       ],
       "expected_outcome": "Full answer with citations rendered. Mode label shows 'Vanilla'.",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.15",
@@ -452,7 +452,7 @@
         }
       ],
       "expected_outcome": "Citation interaction works — snippet is readable",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.16",
@@ -480,7 +480,7 @@
         }
       ],
       "expected_outcome": "Multi-turn conversation works, conversation_id is reused across messages",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.17",
@@ -514,7 +514,7 @@
         }
       ],
       "expected_outcome": "HyDE mode renders thinking steps and produces cited answer",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.18",
@@ -548,7 +548,7 @@
         }
       ],
       "expected_outcome": "Self-Reflection shows iterative reasoning steps",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.19",
@@ -582,7 +582,7 @@
         }
       ],
       "expected_outcome": "Multi-Agent renders agent steps and produces detailed answer",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.20",
@@ -610,7 +610,7 @@
         }
       ],
       "expected_outcome": "Stop button aborts the stream, UI recovers cleanly",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.21",
@@ -819,16 +819,414 @@
       ],
       "expected_outcome": "User logged out, JWT cleared, all protected routes redirect to /login",
       "status": "TODO"
+    },
+    {
+      "id": "6.28",
+      "title": "Register page — navigate from login",
+      "description": "The 'Create account' link on the login page should lead to /register.",
+      "preconditions": ["Browser has no saved session (incognito or clear localStorage)", "On /login page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click the 'Create one in 30 seconds' / 'Załóż w 30 sekund' link at the bottom of the login form",
+          "where": "/login — footer of the form",
+          "expected": "Navigated to /register — registration form is displayed"
+        },
+        {
+          "step": 2,
+          "action": "Verify page elements",
+          "where": "/register",
+          "expected": "Visible: medRAG branding panel (left), form with Email, Password, Confirm password fields and 'Create account' button. 'Sign in' link at the bottom."
+        }
+      ],
+      "expected_outcome": "User lands on /register from the login link",
+      "status": "TODO"
+    },
+    {
+      "id": "6.29",
+      "title": "Register — happy path, auto-login, redirect",
+      "description": "Submitting valid credentials should register the user, auto-login and redirect to /chat/new.",
+      "preconditions": ["On /register page", "Email address not yet registered in the system"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Enter a new unique email, e.g. test@medrag.local",
+          "where": "email input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 2,
+          "action": "Enter a password with at least 8 characters, e.g. 'Test1234!'",
+          "where": "password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 3,
+          "action": "Enter the same password in the 'Confirm password' field",
+          "where": "confirm password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 4,
+          "action": "Click 'Create account' / 'Załóż konto'",
+          "where": "submit button",
+          "expected": "Button shows loading state ('Creating account…'), then page redirects to /chat/new"
+        },
+        {
+          "step": 5,
+          "action": "Verify the user is logged in",
+          "where": "sidebar / topbar after redirect",
+          "expected": "Sidebar visible, no login screen — user is authenticated"
+        }
+      ],
+      "expected_outcome": "New user created, auto-logged in, lands on /chat/new",
+      "status": "TODO",
+      "save_for_later": {
+        "test_user_email": "test@medrag.local",
+        "test_user_password": "Test1234!"
+      }
+    },
+    {
+      "id": "6.30",
+      "title": "Register — password too short shows inline error",
+      "description": "Submitting a password shorter than 8 characters should show a validation error without calling the backend.",
+      "preconditions": ["On /register page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Fill in a valid email",
+          "where": "email input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 2,
+          "action": "Enter a short password, e.g. 'abc'",
+          "where": "password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 3,
+          "action": "Enter the same short password in the confirm field",
+          "where": "confirm password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 4,
+          "action": "Click 'Create account'",
+          "where": "submit button",
+          "expected": "Error message appears: 'Password must be at least 8 characters' / 'Hasło musi mieć co najmniej 8 znaków'. Page does NOT redirect."
+        }
+      ],
+      "expected_outcome": "Client-side validation prevents submission, error shown inline",
+      "status": "TODO"
+    },
+    {
+      "id": "6.31",
+      "title": "Register — password mismatch shows inline error",
+      "description": "Submitting two different passwords should show a mismatch error without calling the backend.",
+      "preconditions": ["On /register page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Fill in a valid email",
+          "where": "email input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 2,
+          "action": "Enter a valid password, e.g. 'Password123'",
+          "where": "password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 3,
+          "action": "Enter a different password in the confirm field, e.g. 'DifferentPass1'",
+          "where": "confirm password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 4,
+          "action": "Click 'Create account'",
+          "where": "submit button",
+          "expected": "Error message: 'Passwords do not match' / 'Hasła nie są identyczne'. Page does NOT redirect."
+        }
+      ],
+      "expected_outcome": "Mismatch validation prevents submission, error shown inline",
+      "status": "TODO"
+    },
+    {
+      "id": "6.32",
+      "title": "Register — duplicate email shows backend error",
+      "description": "Registering with an already-used email should display the 409 error returned by the backend.",
+      "preconditions": ["On /register page", "Email 'test@medrag.local' already registered (scenario 6.29 passed)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Enter the already-registered email: test@medrag.local",
+          "where": "email input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 2,
+          "action": "Enter a valid password and confirm it",
+          "where": "password / confirm inputs",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 3,
+          "action": "Click 'Create account'",
+          "where": "submit button",
+          "expected": "Button shows loading state, then an inline error appears: 'Email already registered'. Page does NOT redirect."
+        }
+      ],
+      "expected_outcome": "Duplicate email error from backend displayed inline",
+      "status": "TODO"
+    },
+    {
+      "id": "6.33",
+      "title": "Register — 'Sign in' link goes back to /login",
+      "description": "The 'Already have an account? Sign in' link at the bottom of the register form should navigate back to /login.",
+      "preconditions": ["On /register page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click the 'Sign in' / 'Zaloguj się' link at the bottom of the form",
+          "where": "/register — form footer",
+          "expected": "Navigated to /login — login form displayed"
+        }
+      ],
+      "expected_outcome": "Back-to-login link works",
+      "status": "TODO"
+    },
+    {
+      "id": "6.34",
+      "title": "Register — first name and last name fields visible",
+      "description": "The registration form should display First name and Last name fields above the email field.",
+      "preconditions": ["On /register page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Navigate to /register",
+          "where": "browser address bar",
+          "expected": "Register page loads"
+        },
+        {
+          "step": 2,
+          "action": "Verify form fields",
+          "where": "/register form",
+          "expected": "Four fields visible in order: First name (left) + Last name (right) on the same row, then Email, Password, Confirm password. Fields are optional for first/last name."
+        }
+      ],
+      "expected_outcome": "Name fields present in the registration form",
+      "status": "TODO"
+    },
+    {
+      "id": "6.35",
+      "title": "Register — first and last name saved and shown in sidebar",
+      "description": "After registering with a first and last name, the sidebar should show the full name instead of email.",
+      "preconditions": ["On /register page", "Email 'named@medrag.local' not yet registered"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Fill in First name: 'Anna', Last name: 'Nowak'",
+          "where": "name fields",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 2,
+          "action": "Fill in email: named@medrag.local, password and confirm password",
+          "where": "email / password fields",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 3,
+          "action": "Click 'Create account'",
+          "where": "submit button",
+          "expected": "Account created, auto-login, redirect to /chat/new"
+        },
+        {
+          "step": 4,
+          "action": "Look at the sidebar bottom user section",
+          "where": "sidebar footer",
+          "expected": "Displays 'Anna Nowak' (not 'named@medrag.local'). Avatar shows initials 'AN'."
+        }
+      ],
+      "expected_outcome": "First name + last name displayed in sidebar. Avatar shows correct initials.",
+      "status": "TODO"
+    },
+    {
+      "id": "6.36",
+      "title": "Sidebar — gear icon navigates to admin panel",
+      "description": "The settings gear icon next to the user section should navigate directly to /admin without toggling the user menu.",
+      "preconditions": ["Logged in as admin"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click the gear (⚙) icon in the sidebar bottom-right, next to the user name",
+          "where": "sidebar footer",
+          "expected": "Navigated to /admin page (NOT showing a dropdown)"
+        }
+      ],
+      "expected_outcome": "Gear icon is a direct link to /admin",
+      "status": "TODO"
+    },
+    {
+      "id": "6.37",
+      "title": "Sidebar — user menu dropdown on avatar/name click",
+      "description": "Clicking the user name/avatar area (not the gear) should toggle the user dropdown with logout option.",
+      "preconditions": ["Logged in as any user"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click the user name or avatar in the sidebar footer (left side, not the gear icon)",
+          "where": "sidebar footer",
+          "expected": "Dropdown appears above the footer with: user display name, email, role label, and 'Log out' button"
+        },
+        {
+          "step": 2,
+          "action": "Click outside the dropdown",
+          "where": "anywhere on the page",
+          "expected": "Dropdown closes"
+        }
+      ],
+      "expected_outcome": "User dropdown opens and closes correctly",
+      "status": "TODO"
+    },
+    {
+      "id": "6.38",
+      "title": "Sidebar — admin panel accessible with no projects",
+      "description": "When no projects exist, an admin should still see a button to navigate to the admin panel.",
+      "preconditions": ["Logged in as admin", "No projects created yet (fresh environment or all projects deleted)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Verify sidebar state with no projects",
+          "where": "sidebar",
+          "expected": "Project selector area is absent. Instead a 'Manage projects' button appears in the sidebar top area."
+        },
+        {
+          "step": 2,
+          "action": "Click 'Manage projects'",
+          "where": "sidebar",
+          "expected": "Navigated to /admin with empty project list and '+ New project' button visible"
+        }
+      ],
+      "expected_outcome": "Admin can reach /admin even when no projects exist",
+      "status": "TODO"
+    },
+    {
+      "id": "6.39",
+      "title": "Admin — project Members tab visible in settings modal",
+      "description": "The project settings modal should have a 'Members' tab alongside 'Settings'.",
+      "preconditions": ["Logged in as admin", "At least one project exists"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "On /admin, click 'Edit' for any project",
+          "where": "project header actions",
+          "expected": "Settings modal opens with two tabs: 'Settings' and 'Members'"
+        },
+        {
+          "step": 2,
+          "action": "Click the 'Members' tab",
+          "where": "modal tab bar",
+          "expected": "Tab switches — shows 'Current members' section with at least the project creator listed. 'Add member' section below if other users exist."
+        }
+      ],
+      "expected_outcome": "Members tab renders with current member list",
+      "status": "TODO"
+    },
+    {
+      "id": "6.40",
+      "title": "Admin — add user to project",
+      "description": "Admin can add a registered user to a project from the Members tab.",
+      "preconditions": ["Logged in as admin", "At least one non-admin user registered (scenario 6.35)", "Project exists"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Open settings modal for a project, go to 'Members' tab",
+          "where": "/admin → Edit → Members",
+          "expected": "Members tab visible, 'Anna Nowak (named@medrag.local)' appears in 'Add member' section"
+        },
+        {
+          "step": 2,
+          "action": "Click '+ Add' next to Anna Nowak",
+          "where": "Add member section",
+          "expected": "User moves from 'Add member' list to 'Current members' list"
+        },
+        {
+          "step": 3,
+          "action": "Close the modal and reopen it",
+          "where": "modal X button → Edit again",
+          "expected": "Anna Nowak still listed in 'Current members'"
+        }
+      ],
+      "expected_outcome": "User added to project, persisted in backend",
+      "status": "TODO"
+    },
+    {
+      "id": "6.41",
+      "title": "Admin — remove user from project",
+      "description": "Admin can remove a user from a project via the X button in the Members tab.",
+      "preconditions": ["Anna Nowak is a member of the test project (scenario 6.40 passed)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Open project settings, go to 'Members' tab",
+          "where": "/admin → Edit → Members",
+          "expected": "Anna Nowak listed in 'Current members'"
+        },
+        {
+          "step": 2,
+          "action": "Click the X (remove) button next to Anna Nowak",
+          "where": "Current members list",
+          "expected": "Anna Nowak moves to 'Add member' section"
+        },
+        {
+          "step": 3,
+          "action": "Close and reopen the modal",
+          "where": "modal",
+          "expected": "Anna Nowak no longer in 'Current members'"
+        }
+      ],
+      "expected_outcome": "User removed from project, change persisted",
+      "status": "TODO"
+    },
+    {
+      "id": "6.42",
+      "title": "Regular user — sees only assigned projects in sidebar",
+      "description": "A non-admin user should only see projects they are a member of in the sidebar.",
+      "preconditions": ["Two projects exist", "Anna Nowak is member of project A but not project B", "Logged in as Anna Nowak"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Log in as named@medrag.local",
+          "where": "/login",
+          "expected": "Logged in, redirected to /chat/new"
+        },
+        {
+          "step": 2,
+          "action": "Check the project selector in the sidebar",
+          "where": "sidebar",
+          "expected": "Only project A is visible — project B (where Anna is not a member) is not shown"
+        }
+      ],
+      "expected_outcome": "Project list filtered per user membership",
+      "status": "TODO"
     }
   ],
   "test_order_recommendation": [
     "6.1 → 6.2 → 6.3 → 6.4",
+    "6.28 → 6.29 → 6.30 → 6.31 → 6.32 → 6.33",
+    "6.34 → 6.35",
     "6.5 → 6.6 → 6.7 → 6.8 → 6.9",
     "6.10 → 6.11 → 6.12 → 6.13",
     "6.14 → 6.15 → 6.16",
     "6.17 → 6.18 → 6.19",
     "6.20 → 6.21 → 6.22 → 6.23 → 6.24",
-    "6.25 → 6.26 → 6.27"
+    "6.25 → 6.26 → 6.27",
+    "6.36 → 6.37 → 6.38",
+    "6.39 → 6.40 → 6.41 → 6.42"
   ],
   "known_dependencies": {
     "6.10_requires": "ANTHROPIC_API_KEY in .env (ingestion uses embedding service)",

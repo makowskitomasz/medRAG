@@ -8,8 +8,8 @@ import {
 import { useUIStore } from "@/store";
 import { useProjects } from "@/hooks/useProjects";
 import { useConversations } from "@/hooks/useConversations";
-import { Project } from "@/lib/api";
-import { clearAuth, getUser } from "@/lib/auth";
+import { auth, Project } from "@/lib/api";
+import { clearAuth, getUser, saveUser } from "@/lib/auth";
 
 interface Props {
   onNewChat: () => void;
@@ -43,7 +43,16 @@ export default function Sidebar({ onNewChat, activeConvTitle }: Props) {
     }
   }, [activeProjectId, projectList, setActiveProjectId]);
 
-  const user = getUser<{ email: string; role: string }>();
+  type StoredUser = { email: string; role: string; first_name?: string | null; last_name?: string | null };
+  const [user, setUser] = useState<StoredUser | null>(null);
+  useEffect(() => {
+    setUser(getUser<StoredUser>());
+    auth.me().then((fresh) => { saveUser(fresh); setUser(fresh as StoredUser); }).catch(() => {});
+  }, []);
+  const displayName = [user?.first_name, user?.last_name].filter(Boolean).join(" ") || user?.email || "User";
+  const avatarText = user?.first_name
+    ? (user.first_name[0] + (user.last_name?.[0] ?? "")).toUpperCase()
+    : (user?.email?.slice(0, 2).toUpperCase() ?? "?");
   const activeProject = projectList.find((p) => p.project_id === activeProjectId) ?? projectList[0];
 
   const filteredConvs = convList.filter((c) =>
@@ -75,6 +84,19 @@ export default function Sidebar({ onNewChat, activeConvTitle }: Props) {
 
       {!sidebarCollapsed && (
         <>
+          {!activeProject && user?.role === "admin" && (
+            <div style={{ padding: "10px 12px" }}>
+              <button
+                className="chat-sb-proj-mng"
+                style={{ width: "100%", justifyContent: "center", padding: "8px 12px" }}
+                onClick={() => router.push("/admin")}
+              >
+                <Settings size={13} />
+                {t("manageProjects")}
+              </button>
+            </div>
+          )}
+
           {activeProject && (
             <div className="chat-sb-project">
               <button className="chat-sb-proj-btn" onClick={() => setShowProjMenu(!showProjMenu)}>
@@ -184,7 +206,10 @@ export default function Sidebar({ onNewChat, activeConvTitle }: Props) {
               >
                 <div style={{ padding: "12px 14px" }}>
                   <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--text)", wordBreak: "break-all" }}>
-                    {user?.email ?? "User"}
+                    {displayName}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, wordBreak: "break-all" }}>
+                    {user?.email}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>
                     <User size={11} />
@@ -205,18 +230,27 @@ export default function Sidebar({ onNewChat, activeConvTitle }: Props) {
                 </button>
               </div>
             )}
-            <button className="chat-sb-user" onClick={() => setShowUserMenu((v) => !v)}>
-              <div className="chat-sb-avatar">
-                {user?.email.slice(0, 2).toUpperCase() ?? "?"}
-              </div>
-              <div className="chat-sb-user-meta">
-                <div className="chat-sb-user-name">{user?.email ?? "User"}</div>
-                <div className="chat-sb-user-plan">
-                  {user?.role === "admin" ? t("admin") : t("user")}
+            <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+              <button className="chat-sb-user" style={{ flex: 1 }} onClick={() => setShowUserMenu((v) => !v)}>
+                <div className="chat-sb-avatar">
+                  {avatarText}
                 </div>
-              </div>
-              <Settings size={14} className="chat-sb-user-cog" />
-            </button>
+                <div className="chat-sb-user-meta">
+                  <div className="chat-sb-user-name">{displayName}</div>
+                  <div className="chat-sb-user-plan">
+                    {user?.role === "admin" ? t("admin") : t("user")}
+                  </div>
+                </div>
+              </button>
+              <button
+                className="icon-btn chat-sb-user-cog"
+                style={{ padding: "6px 10px", flexShrink: 0 }}
+                title="Admin panel"
+                onClick={() => router.push("/admin")}
+              >
+                <Settings size={14} />
+              </button>
+            </div>
           </div>
         </>
       )}

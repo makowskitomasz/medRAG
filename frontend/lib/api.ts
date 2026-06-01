@@ -70,6 +70,8 @@ export interface User {
   id: string;
   email: string;
   role: string;
+  first_name?: string | null;
+  last_name?: string | null;
 }
 
 export const auth = {
@@ -78,7 +80,13 @@ export const auth = {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }, false),
+  register: (email: string, password: string, first_name?: string, last_name?: string) =>
+    request<User>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password, first_name, last_name }),
+    }, false),
   me: () => request<User>("/auth/me"),
+  listUsers: () => request<User[]>("/auth/users"),
 };
 
 /* ---- Projects ---- */
@@ -96,6 +104,7 @@ export interface Project {
   name: string;
   description: string;
   settings: ProjectSettings;
+  member_ids: string[];
   created_at: string;
   color?: string;
   initials?: string;
@@ -193,6 +202,10 @@ export const projects = {
     request<SettingsOptions>("/admin/projects/settings/options"),
   delete: (id: string) =>
     request<void>(`/admin/projects/${id}`, { method: "DELETE" }),
+  addMember: (projectId: string, userId: string) =>
+    request<Project>(`/admin/projects/${projectId}/members/${userId}`, { method: "POST" }).then(enrichProject),
+  removeMember: (projectId: string, userId: string) =>
+    request<Project>(`/admin/projects/${projectId}/members/${userId}`, { method: "DELETE" }).then(enrichProject),
 };
 
 /* ---- Documents ---- */

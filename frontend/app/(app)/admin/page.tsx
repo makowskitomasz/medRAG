@@ -6,9 +6,9 @@ import { useTranslations } from "next-intl";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronRight, Plus, Upload, Search, FileText,
-  Layers, Brain, MessageSquare, Trash2, User, Settings, Check, X as XIcon,
+  Layers, Brain, MessageSquare, Trash2, User, Settings, Check, X as XIcon, Users,
 } from "lucide-react";
-import { projects, documents, Project, Document, CreateProjectInput } from "@/lib/api";
+import { projects, documents, auth, Project, Document, CreateProjectInput, User as UserType } from "@/lib/api";
 import { useUIStore } from "@/store";
 import { useSettingsOptions, useUpdateSettings, useUpdateProject } from "@/hooks/useProjects";
 
@@ -73,7 +73,9 @@ const hintStyle: React.CSSProperties = {
 
 function SettingsModal({ project, onClose }: { project: Project; onClose: () => void }) {
   const t = useTranslations("admin");
+  const qc = useQueryClient();
   const [saved, setSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState<"settings" | "members">("settings");
 
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description);
@@ -87,6 +89,26 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
   const { data: options } = useSettingsOptions();
   const updateSettings = useUpdateSettings(project.id);
   const updateProject = useUpdateProject(project.id);
+
+  const { data: allUsers = [] } = useQuery<UserType[]>({
+    queryKey: ["users"],
+    queryFn: auth.listUsers,
+    staleTime: 60_000,
+  });
+
+  const addMember = useMutation({
+    mutationFn: (userId: string) => projects.addMember(project.id, userId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+  });
+
+  const removeMember = useMutation({
+    mutationFn: (userId: string) => projects.removeMember(project.id, userId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+  });
+
+  const memberIds = project.member_ids ?? [];
+  const members = allUsers.filter((u) => memberIds.includes(u.id));
+  const nonMembers = allUsers.filter((u) => !memberIds.includes(u.id));
 
   const isPending = updateSettings.isPending || updateProject.isPending;
   const isError = updateSettings.isError || updateProject.isError;
@@ -112,6 +134,22 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
     ]);
     setSaved(true);
     setTimeout(() => { setSaved(false); onClose(); }, 1200);
+  };
+
+  const tabBtnStyle = (active: boolean): React.CSSProperties => ({
+    padding: "6px 14px",
+    fontSize: 13,
+    fontWeight: 600,
+    borderRadius: "var(--r-md)",
+    border: "none",
+    cursor: "pointer",
+    background: active ? "var(--bg-subtle)" : "none",
+    color: active ? "var(--text)" : "var(--text-muted)",
+  });
+
+  const userDisplayName = (u: UserType) => {
+    const full = [u.first_name, u.last_name].filter(Boolean).join(" ");
+    return full ? `${full} (${u.email})` : u.email;
   };
 
   return (
@@ -156,71 +194,145 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
           </button>
         </div>
 
-        {/* Body */}
-        <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 20 }}>
-
-          {/* Name + description */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-              <label style={labelStyle}>{t("field_name")}</label>
-              <input style={inputStyle} type="text" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
-              <label style={labelStyle}>{t("field_description")}</label>
-              <input style={inputStyle} type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div style={{ borderTop: "1px solid var(--border)", marginTop: -4 }} />
-
-          {/* Strategy dropdowns */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-            <div style={fieldStyle}>
-              <label style={labelStyle}>{t("field_rag_mode")}</label>
-              <select style={inputStyle} value={ragMode} onChange={(e) => setRagMode(e.target.value)}>
-                {ragOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-            <div style={fieldStyle}>
-              <label style={labelStyle}>{t("field_chunking_strategy")}</label>
-              <select style={inputStyle} value={chunkingStrategy} onChange={(e) => setChunkingStrategy(e.target.value)}>
-                {chunkingOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-            <div style={fieldStyle}>
-              <label style={labelStyle}>{t("field_embedding_provider")}</label>
-              <select style={inputStyle} value={embeddingProvider} onChange={(e) => setEmbeddingProvider(e.target.value)}>
-                {embeddingOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Numeric params */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-            <div style={fieldStyle}>
-              <label style={labelStyle}>{t("field_hybrid_alpha")}</label>
-              <input style={inputStyle} type="number" value={hybridAlpha}
-                step={alphaConstraint?.step ?? 0.05} min={alphaConstraint?.min ?? 0} max={alphaConstraint?.max ?? 1}
-                onChange={(e) => setHybridAlpha(parseFloat(e.target.value))} />
-              <span style={hintStyle}>{t("hint_hybrid_alpha")}</span>
-            </div>
-            <div style={fieldStyle}>
-              <label style={labelStyle}>{t("field_top_k")}</label>
-              <input style={inputStyle} type="number" value={topK}
-                step={topKConstraint?.step ?? 1} min={topKConstraint?.min ?? 1} max={topKConstraint?.max ?? 100}
-                onChange={(e) => setTopK(parseInt(e.target.value))} />
-              <span style={hintStyle}>{t("hint_top_k")}</span>
-            </div>
-            <div style={fieldStyle}>
-              <label style={labelStyle}>{t("field_rerank_top_n")}</label>
-              <input style={inputStyle} type="number" value={rerankTopN}
-                step={rerankConstraint?.step ?? 1} min={rerankConstraint?.min ?? 1} max={rerankConstraint?.max ?? 20}
-                onChange={(e) => setRerankTopN(parseInt(e.target.value))} />
-              <span style={hintStyle}>{t("hint_rerank_top_n")}</span>
-            </div>
-          </div>
+        {/* Tabs */}
+        <div style={{
+          display: "flex", gap: 4, padding: "10px 24px 0",
+          borderBottom: "1px solid var(--border)",
+        }}>
+          <button style={tabBtnStyle(activeTab === "settings")} onClick={() => setActiveTab("settings")}>
+            <Settings size={13} style={{ display: "inline", marginRight: 5, verticalAlign: "middle" }} />
+            Settings
+          </button>
+          <button style={tabBtnStyle(activeTab === "members")} onClick={() => setActiveTab("members")}>
+            <Users size={13} style={{ display: "inline", marginRight: 5, verticalAlign: "middle" }} />
+            Members
+          </button>
         </div>
+
+        {/* Body */}
+        {activeTab === "settings" && (
+          <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 20 }}>
+
+            {/* Name + description */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+                <label style={labelStyle}>{t("field_name")}</label>
+                <input style={inputStyle} type="text" value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+                <label style={labelStyle}>{t("field_description")}</label>
+                <input style={inputStyle} type="text" value={description} onChange={(e) => setDescription(e.target.value)} />
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div style={{ borderTop: "1px solid var(--border)", marginTop: -4 }} />
+
+            {/* Strategy dropdowns */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>{t("field_rag_mode")}</label>
+                <select style={inputStyle} value={ragMode} onChange={(e) => setRagMode(e.target.value)}>
+                  {ragOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>{t("field_chunking_strategy")}</label>
+                <select style={inputStyle} value={chunkingStrategy} onChange={(e) => setChunkingStrategy(e.target.value)}>
+                  {chunkingOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>{t("field_embedding_provider")}</label>
+                <select style={inputStyle} value={embeddingProvider} onChange={(e) => setEmbeddingProvider(e.target.value)}>
+                  {embeddingOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Numeric params */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>{t("field_hybrid_alpha")}</label>
+                <input style={inputStyle} type="number" value={hybridAlpha}
+                  step={alphaConstraint?.step ?? 0.05} min={alphaConstraint?.min ?? 0} max={alphaConstraint?.max ?? 1}
+                  onChange={(e) => setHybridAlpha(parseFloat(e.target.value))} />
+                <span style={hintStyle}>{t("hint_hybrid_alpha")}</span>
+              </div>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>{t("field_top_k")}</label>
+                <input style={inputStyle} type="number" value={topK}
+                  step={topKConstraint?.step ?? 1} min={topKConstraint?.min ?? 1} max={topKConstraint?.max ?? 100}
+                  onChange={(e) => setTopK(parseInt(e.target.value))} />
+                <span style={hintStyle}>{t("hint_top_k")}</span>
+              </div>
+              <div style={fieldStyle}>
+                <label style={labelStyle}>{t("field_rerank_top_n")}</label>
+                <input style={inputStyle} type="number" value={rerankTopN}
+                  step={rerankConstraint?.step ?? 1} min={rerankConstraint?.min ?? 1} max={rerankConstraint?.max ?? 20}
+                  onChange={(e) => setRerankTopN(parseInt(e.target.value))} />
+                <span style={hintStyle}>{t("hint_rerank_top_n")}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "members" && (
+          <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>Current members ({members.length})</label>
+              {members.length === 0 && (
+                <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>No members yet.</p>
+              )}
+              {members.map((u) => (
+                <div key={u.id} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "7px 10px",
+                  borderRadius: "var(--r-md)",
+                  border: "1px solid var(--border-strong)",
+                  background: "var(--bg-elev)",
+                  fontSize: 13,
+                }}>
+                  <span style={{ color: "var(--text)" }}>{userDisplayName(u)}</span>
+                  <button
+                    onClick={() => removeMember.mutate(u.id)}
+                    disabled={removeMember.isPending}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: "2px 4px", borderRadius: 4, lineHeight: 1 }}
+                    title="Remove member"
+                  >
+                    <XIcon size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            {nonMembers.length > 0 && (
+              <div style={fieldStyle}>
+                <label style={labelStyle}>Add member</label>
+                {nonMembers.map((u) => (
+                  <div key={u.id} style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "7px 10px",
+                    borderRadius: "var(--r-md)",
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-elev)",
+                    fontSize: 13,
+                  }}>
+                    <span style={{ color: "var(--text-muted)" }}>{userDisplayName(u)}</span>
+                    <button
+                      onClick={() => addMember.mutate(u.id)}
+                      disabled={addMember.isPending}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: "var(--c-accent-mint, #6EE7B7)", padding: "2px 4px", borderRadius: 4, lineHeight: 1, fontSize: 12, fontWeight: 600 }}
+                      title="Add member"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Footer */}
         <div style={{
@@ -234,9 +346,11 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn" onClick={onClose} disabled={isPending}>{t("cancel")}</button>
-            <button className="btn btn-primary" onClick={handleSave} disabled={isPending}>
-              {isPending ? t("savingSettings") : t("saveSettings")}
-            </button>
+            {activeTab === "settings" && (
+              <button className="btn btn-primary" onClick={handleSave} disabled={isPending}>
+                {isPending ? t("savingSettings") : t("saveSettings")}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -359,13 +473,19 @@ export default function AdminPage() {
             <input
               autoFocus
               value={newName}
-              onChange={(e) => setNewName(e.target.value)}
+              onChange={(e) => { setNewName(e.target.value); createProject.reset(); }}
               placeholder={t("projectNamePlaceholder")}
               style={{
-                padding: "8px 10px", borderRadius: "var(--r-md)", border: "1px solid var(--border-strong)",
+                padding: "8px 10px", borderRadius: "var(--r-md)",
+                border: `1px solid ${createProject.isError ? "#EF4444" : "var(--border-strong)"}`,
                 background: "var(--bg-elev)", color: "var(--text)", fontSize: 13,
               }}
             />
+            {createProject.isError && (
+              <div style={{ fontSize: 11, color: "#EF4444", paddingLeft: 2 }}>
+                {createProject.error?.message ?? "Failed to create project"}
+              </div>
+            )}
             <input
               value={newDesc}
               onChange={(e) => setNewDesc(e.target.value)}

@@ -96,6 +96,7 @@ export function useChatStream(): UseChatStreamReturn {
         id: aiMsgId,
         role: "ai",
         text: "",
+        ragMode: ragMode,
         phase: "searching",
         streamedText: "",
         citationsRevealed: 0,

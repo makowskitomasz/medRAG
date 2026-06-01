@@ -77,7 +77,7 @@ class SelfReflectionPipeline(RagPipeline):
 
             # --- think: generate draft ---
             t1 = _time.monotonic()
-            step_label = f"Wersja robocza (iteracja {iteration + 1})"
+            step_label = f"Draft answer (iteration {iteration + 1})"
             answer, _ = await self._generate(query, reranked, conversation_history)
             yield self._sse_think(
                 step=iteration * 2,
@@ -97,12 +97,12 @@ class SelfReflectionPipeline(RagPipeline):
             )
             yield self._sse_think(
                 step=iteration * 2 + 1,
-                label="Ocena jakości odpowiedzi",
-                text=f"Wynik samooceny: {score:.2f} (próg: {_SUFFICIENCY_THRESHOLD}). "
+                label="Quality evaluation",
+                text=f"Self-score: {score:.2f} (threshold: {_SUFFICIENCY_THRESHOLD}). "
                 + (
-                    "Odpowiedź wystarczająca."
+                    "Answer is sufficient."
                     if score >= _SUFFICIENCY_THRESHOLD
-                    else "Wymagana poprawa."
+                    else "Improvement required."
                 ),
                 duration_ms=int((_time.monotonic() - t2) * 1000),
             )
