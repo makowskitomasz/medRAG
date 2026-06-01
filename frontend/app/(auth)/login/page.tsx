@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
   Stethoscope, Quote, Shield, Mail, Lock, Eye, EyeOff,
-  ChevronRight, Check, ArrowRight, Activity,
+  Check, ArrowRight, Activity,
 } from "lucide-react";
 import { auth } from "@/lib/api";
 import { saveToken, saveUser } from "@/lib/auth";
@@ -82,11 +82,6 @@ function LoginForm() {
             </div>
           </div>
 
-          <div className="login-foot">
-            <span>{t("version")}</span>
-            <span className="login-dot" />
-            <span>PL · EN · DE</span>
-          </div>
         </div>
 
         <svg className="login-bg" viewBox="0 0 600 600" preserveAspectRatio="none" aria-hidden="true">
@@ -169,26 +164,6 @@ function LoginForm() {
           </div>
         </form>
 
-        <button
-          className="login-demo-skip"
-          onClick={async () => {
-            setLoading(true);
-            try {
-              const { access_token, refresh_token } = await auth.login("admin@mail.com", "admin");
-              saveToken(access_token, refresh_token);
-              const user = await auth.me();
-              saveUser(user);
-              router.replace(returnTo);
-            } catch {
-              setError("Demo niedostępne — sprawdź czy backend działa.");
-            } finally {
-              setLoading(false);
-            }
-          }}
-        >
-          <ChevronRight size={14} />
-          {t("demoSkip")}
-        </button>
       </div>
     </div>
   );

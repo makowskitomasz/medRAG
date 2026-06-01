@@ -65,6 +65,7 @@
     "emptyTitle": "Start with a question",
     "emptyDesc": "Ask a question about project \"{project}\"",
     "emptyNoProject": "Select a project in the sidebar",
+    "noProjectAccess": "You don't have access to any project. Contact your administrator.",
     "editQuestion": "Edit question",
     "aiGenerating": "AI is answering…",
     "sendHint": "send",

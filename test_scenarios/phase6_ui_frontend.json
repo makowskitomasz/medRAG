@@ -616,7 +616,7 @@
       "id": "6.21",
       "title": "Conversation history — list view",
       "description": "Navigate to the history page and verify previous conversations are listed.",
-      "preconditions": ["At least 2 conversations created (scenarios 6.14–6.19)"],
+      "preconditions": ["At least 2 conversations created (scenarios 6.14-6.19)"],
       "steps": [
         {
           "step": 1,
@@ -638,7 +638,7 @@
         }
       ],
       "expected_outcome": "History page shows all previous conversations",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.22",
@@ -666,7 +666,7 @@
         }
       ],
       "expected_outcome": "Project filter works correctly",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.23",
@@ -694,7 +694,7 @@
         }
       ],
       "expected_outcome": "Past conversation opens and can be continued",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.24",
@@ -728,7 +728,7 @@
         }
       ],
       "expected_outcome": "Active project switches and new chat uses correct document set",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.25",
@@ -756,7 +756,7 @@
         }
       ],
       "expected_outcome": "Theme toggle works and preference is saved across reloads",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.26",
@@ -790,7 +790,7 @@
         }
       ],
       "expected_outcome": "Project deleted from UI and no longer accessible",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.27",
@@ -818,7 +818,7 @@
         }
       ],
       "expected_outcome": "User logged out, JWT cleared, all protected routes redirect to /login",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.28",
@@ -840,7 +840,7 @@
         }
       ],
       "expected_outcome": "User lands on /register from the login link",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.29",
@@ -880,7 +880,7 @@
         }
       ],
       "expected_outcome": "New user created, auto-logged in, lands on /chat/new",
-      "status": "TODO",
+      "status": "DONE",
       "save_for_later": {
         "test_user_email": "test@medrag.local",
         "test_user_password": "Test1234!"
@@ -918,7 +918,7 @@
         }
       ],
       "expected_outcome": "Client-side validation prevents submission, error shown inline",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.31",
@@ -952,7 +952,7 @@
         }
       ],
       "expected_outcome": "Mismatch validation prevents submission, error shown inline",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.32",
@@ -980,7 +980,7 @@
         }
       ],
       "expected_outcome": "Duplicate email error from backend displayed inline",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.33",
@@ -996,7 +996,7 @@
         }
       ],
       "expected_outcome": "Back-to-login link works",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.34",
@@ -1018,7 +1018,7 @@
         }
       ],
       "expected_outcome": "Name fields present in the registration form",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.35",
@@ -1052,7 +1052,7 @@
         }
       ],
       "expected_outcome": "First name + last name displayed in sidebar. Avatar shows correct initials.",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.36",
@@ -1068,7 +1068,7 @@
         }
       ],
       "expected_outcome": "Gear icon is a direct link to /admin",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.37",
@@ -1090,7 +1090,7 @@
         }
       ],
       "expected_outcome": "User dropdown opens and closes correctly",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.38",
@@ -1112,7 +1112,7 @@
         }
       ],
       "expected_outcome": "Admin can reach /admin even when no projects exist",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.39",
@@ -1134,7 +1134,7 @@
         }
       ],
       "expected_outcome": "Members tab renders with current member list",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.40",
@@ -1162,7 +1162,7 @@
         }
       ],
       "expected_outcome": "User added to project, persisted in backend",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.41",
@@ -1190,7 +1190,7 @@
         }
       ],
       "expected_outcome": "User removed from project, change persisted",
-      "status": "TODO"
+      "status": "DONE"
     },
     {
       "id": "6.42",
@@ -1212,7 +1212,7 @@
         }
       ],
       "expected_outcome": "Project list filtered per user membership",
-      "status": "TODO"
+      "status": "DONE"
     }
   ],
   "test_order_recommendation": [

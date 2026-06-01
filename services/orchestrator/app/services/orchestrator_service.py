@@ -26,6 +26,7 @@ async def handle_query(
     http_client: httpx.AsyncClient,
     settings,  # type: ignore[type-arg]
     trace_id: str | None = None,
+    user_id: str | None = None,
 ) -> QueryResponse:
     project_settings = await get_project_settings(request.project_id, db)
     rag_mode = (
@@ -35,7 +36,7 @@ async def handle_query(
     )
 
     conversation = await get_or_create_conversation(
-        request.conversation_id, request.project_id, rag_mode.value, db
+        request.conversation_id, request.project_id, rag_mode.value, db, user_id=user_id
     )
     history = build_history(conversation)
 
@@ -72,6 +73,7 @@ async def handle_query_stream(
     http_client: httpx.AsyncClient,
     settings,  # type: ignore[type-arg]
     trace_id: str | None = None,
+    user_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
     project_settings = await get_project_settings(request.project_id, db)
     rag_mode = (
@@ -81,7 +83,7 @@ async def handle_query_stream(
     )
 
     conversation = await get_or_create_conversation(
-        request.conversation_id, request.project_id, rag_mode.value, db
+        request.conversation_id, request.project_id, rag_mode.value, db, user_id=user_id
     )
     history = build_history(conversation)
 

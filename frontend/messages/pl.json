@@ -65,6 +65,7 @@
     "emptyTitle": "Zacznij od pytania",
     "emptyDesc": "Zadaj pytanie o projekt „{project}”",
     "emptyNoProject": "Wybierz projekt w sidebarze",
+    "noProjectAccess": "Nie masz dostępu do żadnego projektu. Skontaktuj się z administratorem.",
     "editQuestion": "Edytuj pytanie",
     "aiGenerating": "AI odpowiada…",
     "sendHint": "wyślij",

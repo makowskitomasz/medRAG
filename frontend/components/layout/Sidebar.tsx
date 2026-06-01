@@ -10,6 +10,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { useConversations } from "@/hooks/useConversations";
 import { auth, Project } from "@/lib/api";
 import { clearAuth, getUser, saveUser } from "@/lib/auth";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Props {
   onNewChat: () => void;
@@ -20,6 +21,7 @@ export default function Sidebar({ onNewChat, activeConvTitle }: Props) {
   const router = useRouter();
   const t = useTranslations("sidebar");
   const { sidebarCollapsed, setSidebarCollapsed, activeProjectId, setActiveProjectId } = useUIStore();
+  const qc = useQueryClient();
   const [showProjMenu, setShowProjMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [search, setSearch] = useState("");
@@ -63,6 +65,7 @@ export default function Sidebar({ onNewChat, activeConvTitle }: Props) {
 
   const handleLogout = () => {
     clearAuth();
+    qc.clear();
     router.replace("/login");
   };
 
@@ -131,12 +134,14 @@ export default function Sidebar({ onNewChat, activeConvTitle }: Props) {
                       </div>
                     </button>
                   ))}
-                  <div className="chat-sb-proj-foot">
-                    <button className="chat-sb-proj-mng" onClick={() => { setShowProjMenu(false); router.push("/admin"); }}>
-                      <Settings size={13} />
-                      {t("manageProjects")}
-                    </button>
-                  </div>
+                  {user?.role === "admin" && (
+                    <div className="chat-sb-proj-foot">
+                      <button className="chat-sb-proj-mng" onClick={() => { setShowProjMenu(false); router.push("/admin"); }}>
+                        <Settings size={13} />
+                        {t("manageProjects")}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -242,14 +247,16 @@ export default function Sidebar({ onNewChat, activeConvTitle }: Props) {
                   </div>
                 </div>
               </button>
-              <button
-                className="icon-btn chat-sb-user-cog"
-                style={{ padding: "6px 10px", flexShrink: 0 }}
-                title="Admin panel"
-                onClick={() => router.push("/admin")}
-              >
-                <Settings size={14} />
-              </button>
+              {user?.role === "admin" && (
+                <button
+                  className="icon-btn chat-sb-user-cog"
+                  style={{ padding: "6px 10px", flexShrink: 0 }}
+                  title="Admin panel"
+                  onClick={() => router.push("/admin")}
+                >
+                  <Settings size={14} />
+                </button>
+              )}
             </div>
           </div>
         </>

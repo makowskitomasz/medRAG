@@ -29,6 +29,9 @@ async def proxy_ingest(
     return await proxy(request, f"{settings.ingestion_url}/{path}", http, user)
 
 
+_USER_ALLOWED_ADMIN_PREFIXES = ("projects",)
+
+
 @router.api_route("/admin/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def proxy_admin(
     path: str,
@@ -36,7 +39,10 @@ async def proxy_admin(
     user: dict = Depends(require_auth),
     http: httpx.AsyncClient = Depends(get_http),
 ) -> Response:
-    if user["role"] != "admin":
+    is_admin = user["role"] == "admin"
+    is_read = request.method == "GET"
+    top = path.split("/")[0]
+    if not is_admin and not (is_read and top in _USER_ALLOWED_ADMIN_PREFIXES):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin only")
     return await proxy(request, f"{settings.admin_url}/{path}", http, user)
 
@@ -49,6 +55,16 @@ async def proxy_eval(
     http: httpx.AsyncClient = Depends(get_http),
 ) -> Response:
     return await proxy(request, f"{settings.eval_url}/{path}", http, user)
+
+
+@router.api_route("/auth/users", methods=["GET"])
+async def proxy_auth_users(
+    request: Request,
+    user: dict = Depends(require_auth),
+    http: httpx.AsyncClient = Depends(get_http),
+) -> Response:
+    """Protected — injects X-User-Role so auth service can enforce admin-only."""
+    return await proxy(request, f"{settings.auth_url}/auth/users", http, user)
 
 
 @router.api_route("/auth/{path:path}", methods=["GET", "POST"])

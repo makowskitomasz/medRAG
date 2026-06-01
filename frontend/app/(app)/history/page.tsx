@@ -1,13 +1,16 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import {
-  ChevronRight, Search, X, Sparkles, Filter, MoreHorizontal,
+  ChevronRight, Search, X, Sparkles, MoreHorizontal, ExternalLink, Link,
 } from "lucide-react";
-import { conversations, projects, ConversationSummary } from "@/lib/api";
+import { conversations, projects, auth, ConversationSummary } from "@/lib/api";
+import { useUIStore } from "@/store";
+import { getUser } from "@/lib/auth";
 
 const MODE_LABELS: Record<string, string> = {
   vanilla: "Vanilla",
@@ -21,18 +24,66 @@ const MODE_LABELS: Record<string, string> = {
   rare_rag: "RARE",
 };
 
+type StoredUser = { id?: string; email: string; role: string; first_name?: string | null; last_name?: string | null };
+
 export default function HistoryPage() {
   const router = useRouter();
+  const { setActiveProjectId } = useUIStore();
+  const currentUser = getUser<StoredUser>();
+  const isAdmin = currentUser?.role === "admin";
   const [query, setQuery] = useState("");
   const [filterProjectId, setFilterProjectId] = useState("all");
   const [filterMode, setFilterMode] = useState("all");
   const [view, setView] = useState<"list" | "grid">("list");
+  const [menu, setMenu] = useState<{ id: string; top: number; right: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const t = useTranslations("history");
+
+  useEffect(() => {
+    if (!menu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenu(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menu]);
+
+  const openMenu = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (menu?.id === id) { setMenu(null); return; }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setMenu({ id, top: rect.bottom + 6, right: window.innerWidth - rect.right });
+  };
 
   const { data: projectList = [] } = useQuery({
     queryKey: ["projects"],
     queryFn: projects.list,
   });
+
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ["users"],
+    queryFn: auth.listUsers,
+    enabled: isAdmin,
+    staleTime: 60_000,
+  });
+
+  const userDisplayName = (userId: string | null) => {
+    if (!userId) return null;
+    const u = allUsers.find((x) => x.id === userId);
+    if (!u) return userId.slice(-6);
+    const full = [u.first_name, u.last_name].filter(Boolean).join(" ");
+    return full || u.email;
+  };
+
+  const userInitials = (userId: string | null) => {
+    if (!userId) return "?";
+    const u = allUsers.find((x) => x.id === userId);
+    if (!u) return "?";
+    if (u.first_name) return (u.first_name[0] + (u.last_name?.[0] ?? "")).toUpperCase();
+    return u.email.slice(0, 2).toUpperCase();
+  };
 
   const { data: allConvs = [], isLoading } = useQuery<ConversationSummary[]>({
     queryKey: ["all-conversations", projectList.map((p) => p.id).join(",")],
@@ -65,7 +116,18 @@ export default function HistoryPage() {
     return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
   };
 
+  const openConversation = (c: ConversationSummary) => {
+    setActiveProjectId(c.project_id);
+    router.push(`/chat/${c.id}`);
+  };
+
+  const copyLink = (id: string) => {
+    navigator.clipboard.writeText(`${window.location.origin}/chat/${id}`);
+    setMenu(null);
+  };
+
   return (
+    <>
     <div className="hist-root fade-in">
       <div className="hist-header">
         <div className="hist-header-l">
@@ -109,7 +171,6 @@ export default function HistoryPage() {
               <option value="multi_agent">Multi-Agent</option>
             </select>
           </div>
-          <button className="hist-filter hist-filter-btn"><Filter size={12} /> {t("dateFilter")}</button>
         </div>
       </div>
 
@@ -132,7 +193,7 @@ export default function HistoryPage() {
         {!isLoading && view === "list" && filtered.length > 0 && (
           <div className="hist-list stagger">
             {filtered.map((c) => (
-              <button key={c.id} className="hist-row" onClick={() => router.push(`/chat/${c.id}`)}>
+              <div key={c.id} className="hist-row" onClick={() => openConversation(c)} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && openConversation(c)}>
                 <div className="hist-row-l">
                   <span className="hist-row-title">{c.first_user_message ?? `Conversation ${c.id.slice(-6)}`}</span>
                 </div>
@@ -143,16 +204,23 @@ export default function HistoryPage() {
                   <span className="hist-row-proj-name">{projectName(c.project_id)}</span>
                   <span className="hist-row-mode"><Sparkles size={11} />{MODE_LABELS[c.rag_mode] ?? c.rag_mode}</span>
                   <span className="hist-row-time">{formatTime(c.updated_at)}</span>
-                  <button className="icon-btn hist-row-more" onClick={(e) => e.stopPropagation()}><MoreHorizontal size={14} /></button>
+                  {isAdmin && c.user_id && (
+                    <span className="hist-row-owner" title={userDisplayName(c.user_id) ?? undefined}>
+                      {userInitials(c.user_id)}
+                    </span>
+                  )}
+                  <button className="icon-btn hist-row-more" onClick={(e) => openMenu(e, c.id)}>
+                    <MoreHorizontal size={14} />
+                  </button>
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         )}
         {!isLoading && view === "grid" && filtered.length > 0 && (
           <div className="hist-grid stagger">
             {filtered.map((c) => (
-              <button key={c.id} className="hist-card" onClick={() => router.push(`/chat/${c.id}`)}>
+              <button key={c.id} className="hist-card" onClick={() => openConversation(c)}>
                 <div className="hist-card-head">
                   <span className="hist-row-proj" style={{ background: projectColor(c.project_id) + "20", color: projectColor(c.project_id) }}>
                     {projectInitials(c.project_id)}
@@ -162,7 +230,14 @@ export default function HistoryPage() {
                 <div className="hist-card-title">{c.first_user_message ?? `Conversation ${c.id.slice(-6)}`}</div>
                 <div className="hist-card-foot">
                   <span className="hist-row-mode"><Sparkles size={11} />{MODE_LABELS[c.rag_mode] ?? c.rag_mode}</span>
-                  <span className="hist-card-proj-name">{projectName(c.project_id)}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span className="hist-card-proj-name">{projectName(c.project_id)}</span>
+                    {isAdmin && c.user_id && (
+                      <span className="hist-row-owner" title={userDisplayName(c.user_id) ?? undefined}>
+                        {userInitials(c.user_id)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </button>
             ))}
@@ -170,5 +245,22 @@ export default function HistoryPage() {
         )}
       </div>
     </div>
+
+    {menu && createPortal(
+      <div
+        ref={menuRef}
+        className="hist-row-menu"
+        style={{ position: "fixed", top: menu.top, right: menu.right }}
+      >
+        <button onClick={(e) => { e.stopPropagation(); const c = filtered.find((x) => x.id === menu.id)!; setMenu(null); openConversation(c); }}>
+          <ExternalLink size={13} /> Open
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); copyLink(menu.id); }}>
+          <Link size={13} /> Copy link
+        </button>
+      </div>,
+      document.body
+    )}
+    </>
   );
 }

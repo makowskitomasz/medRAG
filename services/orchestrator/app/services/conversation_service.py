@@ -9,10 +9,13 @@ async def list_conversations(
     project_id: str,
     db: AsyncIOMotorDatabase,
     limit: int = 50,
+    user_id: str | None = None,
+    role: str = "user",
 ) -> list[Conversation]:
-    cursor = (
-        db["conversations"].find({"project_id": project_id}).sort("updated_at", -1).limit(limit)
-    )
+    query: dict = {"project_id": project_id}
+    if role != "admin" and user_id:
+        query["user_id"] = user_id
+    cursor = db["conversations"].find(query).sort("updated_at", -1).limit(limit)
     docs = await cursor.to_list(length=limit)
     return [Conversation(**d) for d in docs]
 
@@ -30,13 +33,14 @@ async def get_or_create_conversation(
     project_id: str,
     rag_mode: str,
     db: AsyncIOMotorDatabase,
+    user_id: str | None = None,
 ) -> Conversation:
     if conversation_id:
         doc = await db["conversations"].find_one({"_id": conversation_id})
         if doc:
             return Conversation(**doc)
 
-    conv = Conversation(project_id=project_id, rag_mode=rag_mode)
+    conv = Conversation(project_id=project_id, rag_mode=rag_mode, user_id=user_id)
     await db["conversations"].insert_one(conv.model_dump(by_alias=True))
     return conv
 

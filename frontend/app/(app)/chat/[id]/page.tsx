@@ -20,6 +20,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { useTranslations } from "next-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { conversations } from "@/lib/api";
+import { getUser } from "@/lib/auth";
 
 const MODE_ICONS: Record<string, React.ComponentType<{ size: number }>> = {
   vanilla: Zap,
@@ -84,11 +85,16 @@ export default function ChatPage() {
   const toggleCite = (id: string) => setFocusedCiteId((prev) => prev === id ? null : id);
   const [thinkOpen, setThinkOpen] = useState(true);
   const [citesOpen, setCitesOpen] = useState(true);
+  const [convOwnerId, setConvOwnerId] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const currentUser = getUser<{ id?: string; role?: string }>();
   const activeProject = projectList.find((p) => p.project_id === activeProjectId) ?? projectList[0];
+
+  // true when viewing another user's conversation (admin read-only mode)
+  const isReadOnly = convOwnerId !== null && convOwnerId !== currentUser?.id;
 
   const lastAi = messages.findLast((m) => m.role === "ai");
   const convTitle = messages.find((m) => m.role === "user")?.text;
@@ -97,6 +103,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!id || id === "session") return;
     conversations.get(id).then((conv) => {
+      setConvOwnerId(conv.user_id ?? null);
       loadHistory(conv.id, conv.rag_mode, conv.messages);
     }).catch(() => {/* conversation not found, stay empty */});
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -189,6 +196,8 @@ export default function ChatPage() {
                     <p>
                       {activeProject
                         ? t("emptyDesc", { project: activeProject.name })
+                        : projectList.length === 0
+                        ? t("noProjectAccess")
                         : t("emptyNoProject")}
                     </p>
                   </div>
@@ -226,57 +235,68 @@ export default function ChatPage() {
               </div>
             </div>
 
-            {/* Composer */}
-            <div className="chat-composer-wrap">
-              <div className="chat-composer-wrap-inner">
-                <ModeSelector />
-                <div className="chat-composer">
-                  <textarea
-                    ref={textareaRef}
-                    className="chat-input"
-                    placeholder={
-                      isGenerating
-                        ? t("aiGenerating")
-                        : activeProject
-                        ? t("emptyDesc", { project: activeProject.name })
-                        : t("emptyNoProject")
-                    }
-                    rows={1}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    disabled={isGenerating}
-                  />
-                  <div className="chat-composer-foot" style={{ justifyContent: "flex-end" }}>
-                    <div className="chat-composer-send-wrap">
-                      <span className="chat-composer-hint">
+            {/* Composer / Read-only / No-access banner */}
+            {isReadOnly || (!projectsLoading && projectList.length === 0) ? (
+              <div className="chat-readonly-banner">
+                <Shield size={14} />
+                <span>
+                  {isReadOnly
+                    ? "Read-only — this conversation belongs to another user."
+                    : t("noProjectAccess")}
+                </span>
+              </div>
+            ) : (
+              <div className="chat-composer-wrap">
+                <div className="chat-composer-wrap-inner">
+                  <ModeSelector />
+                  <div className="chat-composer">
+                    <textarea
+                      ref={textareaRef}
+                      className="chat-input"
+                      placeholder={
+                        isGenerating
+                          ? t("aiGenerating")
+                          : activeProject
+                          ? t("emptyDesc", { project: activeProject.name })
+                          : t("emptyNoProject")
+                      }
+                      rows={1}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      disabled={isGenerating}
+                    />
+                    <div className="chat-composer-foot" style={{ justifyContent: "flex-end" }}>
+                      <div className="chat-composer-send-wrap">
+                        <span className="chat-composer-hint">
+                          {isGenerating ? (
+                            <span className="chat-composer-hint-live">
+                              <span className="msg-live-dot" /> {t("generating")}
+                            </span>
+                          ) : (
+                            <><kbd>⏎</kbd> {t("sendHint")} · <kbd>⇧⏎</kbd> {t("newLineHint")}</>
+                          )}
+                        </span>
                         {isGenerating ? (
-                          <span className="chat-composer-hint-live">
-                            <span className="msg-live-dot" /> {t("generating")}
-                          </span>
+                          <button className="chat-composer-send chat-composer-stop" onClick={stop} title="Zatrzymaj">
+                            <Square size={12} />
+                          </button>
                         ) : (
-                          <><kbd>⏎</kbd> {t("sendHint")} · <kbd>⇧⏎</kbd> {t("newLineHint")}</>
+                          <button
+                            className="chat-composer-send"
+                            onClick={handleSend}
+                            title="Wyślij"
+                            disabled={!input.trim() || !activeProject?.project_id || projectsLoading}
+                          >
+                            <ArrowUp size={16} />
+                          </button>
                         )}
-                      </span>
-                      {isGenerating ? (
-                        <button className="chat-composer-send chat-composer-stop" onClick={stop} title="Zatrzymaj">
-                          <Square size={12} />
-                        </button>
-                      ) : (
-                        <button
-                          className="chat-composer-send"
-                          onClick={handleSend}
-                          title="Wyślij"
-                          disabled={!input.trim() || !activeProject?.project_id || projectsLoading}
-                        >
-                          <ArrowUp size={16} />
-                        </button>
-                      )}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Right sidebar citations */}

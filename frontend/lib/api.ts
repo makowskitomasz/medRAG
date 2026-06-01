@@ -389,6 +389,7 @@ export interface ConversationMessage {
 export interface ConversationSummary {
   id: string;
   project_id: string;
+  user_id: string | null;
   rag_mode: string;
   message_count: number;
   first_user_message: string | null;

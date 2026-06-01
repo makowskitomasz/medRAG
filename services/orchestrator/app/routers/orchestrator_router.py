@@ -30,8 +30,9 @@ async def query(
     db: AsyncIOMotorDatabase = Depends(get_db),
     http_client: httpx.AsyncClient = Depends(get_http_client),
     x_trace_id: str | None = Header(default=None),
+    x_user_id: str | None = Header(default=None),
 ) -> QueryResponse:
-    return await handle_query(request, db, http_client, settings, x_trace_id)
+    return await handle_query(request, db, http_client, settings, x_trace_id, user_id=x_user_id)
 
 
 @router.post("/query/stream")
@@ -40,8 +41,11 @@ async def query_stream(
     db: AsyncIOMotorDatabase = Depends(get_db),
     http_client: httpx.AsyncClient = Depends(get_http_client),
     x_trace_id: str | None = Header(default=None),
+    x_user_id: str | None = Header(default=None),
 ) -> StreamingResponse:
-    gen = await handle_query_stream(request, db, http_client, settings, x_trace_id)
+    gen = await handle_query_stream(
+        request, db, http_client, settings, x_trace_id, user_id=x_user_id
+    )
     return StreamingResponse(
         gen,
         media_type="text/event-stream",
@@ -55,6 +59,7 @@ async def query_stream(
 class ConversationSummary(BaseModel):
     id: str
     project_id: str
+    user_id: str | None
     rag_mode: str
     message_count: int
     first_user_message: str | None
@@ -65,6 +70,7 @@ class ConversationSummary(BaseModel):
 class ConversationDetail(BaseModel):
     id: str
     project_id: str
+    user_id: str | None
     rag_mode: str
     messages: list[ConversationMessage]
     created_at: str
@@ -76,6 +82,7 @@ def _to_summary(conv: Conversation) -> ConversationSummary:
     return ConversationSummary(
         id=conv.id,
         project_id=conv.project_id,
+        user_id=conv.user_id,
         rag_mode=conv.rag_mode,
         message_count=len(conv.messages),
         first_user_message=first_msg,
@@ -88,6 +95,7 @@ def _to_detail(conv: Conversation) -> ConversationDetail:
     return ConversationDetail(
         id=conv.id,
         project_id=conv.project_id,
+        user_id=conv.user_id,
         rag_mode=conv.rag_mode,
         messages=conv.messages,
         created_at=conv.created_at.isoformat(),
@@ -100,8 +108,10 @@ async def list_conversations_endpoint(
     project_id: str = Query(..., description="Filter by project ID"),
     limit: int = Query(default=50, ge=1, le=200),
     db: AsyncIOMotorDatabase = Depends(get_db),
+    x_user_id: str | None = Header(default=None),
+    x_user_role: str = Header(default="user"),
 ) -> list[ConversationSummary]:
-    convs = await list_conversations(project_id, db, limit)
+    convs = await list_conversations(project_id, db, limit, user_id=x_user_id, role=x_user_role)
     return [_to_summary(c) for c in convs]
 
 
