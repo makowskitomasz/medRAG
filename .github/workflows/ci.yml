@@ -136,31 +136,35 @@ jobs:
       - uses: actions/setup-node@v4
         if: steps.exists.outputs.found == 'true'
         with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
+          node-version: "22"
+
+      - name: Install pnpm
+        if: steps.exists.outputs.found == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
 
       - name: Install dependencies
         if: steps.exists.outputs.found == 'true'
         working-directory: frontend
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Type check
         if: steps.exists.outputs.found == 'true'
         working-directory: frontend
-        run: npx tsc --noEmit
+        run: pnpm run typecheck
 
       - name: Lint
         if: steps.exists.outputs.found == 'true'
         working-directory: frontend
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Tests
         if: steps.exists.outputs.found == 'true'
         working-directory: frontend
         run: |
-          if npm run | grep -q "test"; then
-            npm run test -- --run
+          if pnpm run | grep -q "test"; then
+            pnpm test -- --run
           else
             echo "No test script yet — skipping"
           fi

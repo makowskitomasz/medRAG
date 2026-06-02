@@ -1,0 +1,1236 @@
+{
+  "phase": "6 — Frontend UI (Next.js)",
+  "goal": "Verify that all user-facing screens and interactions work correctly: authentication, project management, document ingestion, RAG chat with all modes, conversation history, and project settings.",
+  "type": "manual_ui",
+  "note": "These are click-by-click UI steps — no Postman or curl needed. Open http://localhost:3000 in the browser before starting.",
+  "preconditions_global": [
+    "docker-compose up -d — all backend services running and healthy",
+    "pnpm dev running — frontend available at http://localhost:3000",
+    "At least one PDF file ready on disk for upload tests (any medical PDF, e.g. drug leaflet)",
+    "ANTHROPIC_API_KEY set in .env (needed for chat scenarios)"
+  ],
+  "credentials": {
+    "admin_email": "admin@medrag.local (from .env ADMIN_EMAIL)",
+    "admin_password": "changeme (from .env ADMIN_PASSWORD)",
+    "test_user_email": "test@medrag.local",
+    "test_user_password": "Test1234!"
+  },
+  "scenarios": [
+    {
+      "id": "6.1",
+      "title": "Login page — initial redirect",
+      "description": "Opening the app without a session should redirect to the login page.",
+      "preconditions": ["Browser has no saved session (open in incognito or clear localStorage)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Open http://localhost:3000 in the browser",
+          "where": "address bar",
+          "expected": "Redirected to /login — login page is displayed with email and password fields"
+        },
+        {
+          "step": 2,
+          "action": "Verify page elements",
+          "where": "login page",
+          "expected": "Visible: medRAG branding, email field, password field, 'Sign in' button. No dashboard content visible."
+        }
+      ],
+      "expected_outcome": "User is on /login and cannot see any app content without logging in",
+      "status": "DONE"
+    },
+    {
+      "id": "6.2",
+      "title": "Login — wrong password shows error",
+      "description": "Submitting incorrect credentials should show an inline error, not crash the page.",
+      "preconditions": ["On /login page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Type any email in the email field",
+          "where": "email input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 2,
+          "action": "Type a wrong password (e.g. 'wrongpass')",
+          "where": "password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 3,
+          "action": "Click 'Sign in'",
+          "where": "submit button",
+          "expected": "Button shows loading state ('Checking…'), then an error message appears inline — page does NOT redirect"
+        }
+      ],
+      "expected_outcome": "Error message visible on the page, user stays on /login",
+      "status": "DONE"
+    },
+    {
+      "id": "6.3",
+      "title": "Login — happy path as admin",
+      "description": "Logging in with valid admin credentials should land on the chat screen.",
+      "preconditions": ["On /login page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Enter admin email (from .env ADMIN_EMAIL)",
+          "where": "email input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 2,
+          "action": "Enter admin password (from .env ADMIN_PASSWORD)",
+          "where": "password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 3,
+          "action": "Click 'Sign in'",
+          "where": "submit button",
+          "expected": "Button shows loading state, then page redirects to /chat/new (or home)"
+        },
+        {
+          "step": 4,
+          "action": "Verify you are logged in",
+          "where": "sidebar / topbar",
+          "expected": "Sidebar visible with 'New chat' button. Admin label or user email visible. No login screen."
+        }
+      ],
+      "expected_outcome": "Admin is logged in and sees the main chat interface",
+      "status": "DONE",
+      "save_for_later": {
+        "session": "Browser keeps JWT in localStorage — stays logged in on page reload"
+      }
+    },
+    {
+      "id": "6.4",
+      "title": "Session persistence — page reload",
+      "description": "After login, refreshing the page should NOT log the user out.",
+      "preconditions": ["Logged in as admin (scenario 6.3 passed)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Press Cmd+R (or F5) to reload the page",
+          "where": "browser",
+          "expected": "Page reloads and user is still logged in — no redirect to /login"
+        }
+      ],
+      "expected_outcome": "Session survives reload — user stays on the chat screen",
+      "status": "DONE"
+    },
+    {
+      "id": "6.5",
+      "title": "Admin panel — open and verify layout",
+      "description": "Navigate to the admin panel and check the two-column layout.",
+      "preconditions": ["Logged in as admin"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click the 'Manage projects' link or gear icon in the sidebar",
+          "where": "sidebar bottom",
+          "expected": "Redirected to /admin"
+        },
+        {
+          "step": 2,
+          "action": "Verify layout",
+          "where": "/admin page",
+          "expected": "Left rail with project list and '+ New project' button. Right main area with either empty state or first project detail."
+        }
+      ],
+      "expected_outcome": "Admin page renders with correct two-column layout",
+      "status": "DONE"
+    },
+    {
+      "id": "6.6",
+      "title": "Create new project",
+      "description": "Create a project via the UI form in the left rail.",
+      "preconditions": ["On /admin page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click '+ New project'",
+          "where": "left rail",
+          "expected": "Inline form appears with fields: project name, description, RAG mode selector"
+        },
+        {
+          "step": 2,
+          "action": "Type a project name, e.g. 'Test Aspirin'",
+          "where": "project name input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 3,
+          "action": "Type a description, e.g. 'Aspirin drug interaction test'",
+          "where": "description input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 4,
+          "action": "Leave RAG mode as 'Vanilla' (default)",
+          "where": "RAG mode dropdown",
+          "expected": "Vanilla selected"
+        },
+        {
+          "step": 5,
+          "action": "Click 'Create'",
+          "where": "create button",
+          "expected": "Form disappears, new project appears in the left rail list, main area shows the project detail"
+        }
+      ],
+      "expected_outcome": "New project 'Test Aspirin' visible in the list and selected",
+      "status": "DONE",
+      "save_for_later": {
+        "project_name": "Test Aspirin — used in subsequent scenarios"
+      }
+    },
+    {
+      "id": "6.7",
+      "title": "Project stats — initial state",
+      "description": "A newly created project should show zero documents, zero chunks.",
+      "preconditions": ["Project 'Test Aspirin' created and selected"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Look at the stat cards below the project title",
+          "where": "main area, stats row",
+          "expected": "Documents = 0, Fragments = 0 (or '—'), embedding model and chunking strategy shown with their defaults"
+        }
+      ],
+      "expected_outcome": "Stats show zeros / dashes for an empty project",
+      "status": "DONE"
+    },
+    {
+      "id": "6.8",
+      "title": "Project settings modal — open and verify fields",
+      "description": "Open the settings modal and verify all fields are pre-filled with current values.",
+      "preconditions": ["Project 'Test Aspirin' selected on /admin"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click the 'Edit' button (settings icon) in the project header actions",
+          "where": "top-right of the main area",
+          "expected": "Modal overlay opens with title 'Project settings'"
+        },
+        {
+          "step": 2,
+          "action": "Verify the modal fields",
+          "where": "modal",
+          "expected": "Project name = 'Test Aspirin', Description filled, RAG mode = vanilla, Chunking = recursive, Embedding = local_bge, Hybrid alpha = 0.5, Top K = 20, Rerank top N = 5"
+        },
+        {
+          "step": 3,
+          "action": "Click outside the modal (on the backdrop) or the X button",
+          "where": "modal backdrop or X icon",
+          "expected": "Modal closes without saving anything"
+        }
+      ],
+      "expected_outcome": "Modal opens with correct defaults and closes without changes",
+      "status": "DONE"
+    },
+    {
+      "id": "6.9",
+      "title": "Project settings — update RAG mode and save",
+      "description": "Change the RAG mode and verify it's persisted after saving and reopening.",
+      "preconditions": ["Project 'Test Aspirin' selected, settings modal can be opened"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click 'Edit' to open the settings modal",
+          "where": "project header",
+          "expected": "Modal opens"
+        },
+        {
+          "step": 2,
+          "action": "Change RAG Mode to 'HyDE'",
+          "where": "RAG Mode dropdown in modal",
+          "expected": "Dropdown shows HyDE selected"
+        },
+        {
+          "step": 3,
+          "action": "Change Top K to 10",
+          "where": "Top K number input",
+          "expected": "Field shows 10"
+        },
+        {
+          "step": 4,
+          "action": "Click 'Save changes'",
+          "where": "modal footer",
+          "expected": "Button shows 'Saving…', then a green 'Settings saved ✓' confirmation appears, modal closes automatically"
+        },
+        {
+          "step": 5,
+          "action": "Reopen settings modal by clicking 'Edit' again",
+          "where": "project header",
+          "expected": "Modal reopens — RAG Mode = HyDE, Top K = 10 (changes persisted)"
+        }
+      ],
+      "expected_outcome": "Settings saved to backend, visible after reopening the modal",
+      "status": "DONE"
+    },
+    {
+      "id": "6.10",
+      "title": "Document upload — drag and drop PDF",
+      "description": "Upload a PDF via drag-and-drop and watch it progress through the ingestion pipeline.",
+      "preconditions": ["Project 'Test Aspirin' selected, have a PDF file ready"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Drag a PDF file from Finder onto the drop zone ('Drag PDF here')",
+          "where": "drop zone in main area",
+          "expected": "Drop zone highlights (border turns blue), file is released"
+        },
+        {
+          "step": 2,
+          "action": "Watch the upload progress",
+          "where": "below the drop zone",
+          "expected": "'Uploading file…' spinner appears briefly"
+        },
+        {
+          "step": 3,
+          "action": "Check the documents table",
+          "where": "documents table below",
+          "expected": "New row appears with filename, status = 'Uploaded' (then auto-refreshes every 3s)"
+        },
+        {
+          "step": 4,
+          "action": "Wait 30–120 seconds for ingestion pipeline to process",
+          "where": "documents table",
+          "expected": "Status progresses: Uploaded → Parsed → Chunked → Embedded → Ready (indexed). Table refreshes automatically."
+        },
+        {
+          "step": 5,
+          "action": "Check the stat cards after indexing",
+          "where": "stat cards at the top",
+          "expected": "Documents count = 1, Fragments > 0 (number of chunks created)"
+        }
+      ],
+      "expected_outcome": "Document reaches 'Ready' status, chunk count appears in stats",
+      "status": "DONE"
+    },
+    {
+      "id": "6.11",
+      "title": "Document upload — file picker button",
+      "description": "Upload a second PDF using the 'Upload PDF' button in the header.",
+      "preconditions": ["Project 'Test Aspirin' selected, have a second PDF"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click 'Upload PDF' button in the top-right action bar",
+          "where": "project header actions",
+          "expected": "System file picker opens"
+        },
+        {
+          "step": 2,
+          "action": "Select a PDF file",
+          "where": "file picker",
+          "expected": "File picker closes, upload starts"
+        },
+        {
+          "step": 3,
+          "action": "Wait for status to reach 'Ready'",
+          "where": "documents table",
+          "expected": "Second document appears and eventually shows 'Ready'"
+        }
+      ],
+      "expected_outcome": "Second document indexed, document count = 2",
+      "status": "DONE"
+    },
+    {
+      "id": "6.12",
+      "title": "Document filter — search in documents table",
+      "description": "The filter input above the documents table should narrow results.",
+      "preconditions": ["At least 2 documents uploaded in 'Test Aspirin'"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Type part of a filename in the 'Filter…' input",
+          "where": "filter input above documents table",
+          "expected": "Table updates instantly showing only matching documents"
+        },
+        {
+          "step": 2,
+          "action": "Clear the filter (delete text)",
+          "where": "filter input",
+          "expected": "All documents reappear"
+        }
+      ],
+      "expected_outcome": "Filter works in real time without a page reload",
+      "status": "DONE"
+    },
+    {
+      "id": "6.13",
+      "title": "Delete a document",
+      "description": "Delete one document and verify it disappears from the list.",
+      "preconditions": ["At least 2 documents in 'Test Aspirin'"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click the trash icon on the right side of any document row",
+          "where": "documents table, action column",
+          "expected": "Confirmation dialog appears: 'Delete \"filename.pdf\"?'"
+        },
+        {
+          "step": 2,
+          "action": "Click 'OK' / confirm in the dialog",
+          "where": "browser confirm dialog",
+          "expected": "Dialog closes, document row disappears from the table"
+        },
+        {
+          "step": 3,
+          "action": "Verify the document count in stats",
+          "where": "stat cards",
+          "expected": "Document count decreased by 1"
+        }
+      ],
+      "expected_outcome": "Document removed from UI and stats updated",
+      "status": "DONE"
+    },
+    {
+      "id": "6.14",
+      "title": "Start a chat — Vanilla RAG",
+      "description": "Navigate to chat, select the project and ask a question using Vanilla mode.",
+      "preconditions": ["Project 'Test Aspirin' has at least 1 indexed document", "RAG mode set to 'vanilla' in project settings"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click 'Conversations' button in the admin project header, OR click 'New chat' in the sidebar",
+          "where": "admin header or sidebar",
+          "expected": "Navigated to /chat/new"
+        },
+        {
+          "step": 2,
+          "action": "Verify the active project is 'Test Aspirin' in the sidebar project selector",
+          "where": "sidebar",
+          "expected": "'Test Aspirin' appears as selected project"
+        },
+        {
+          "step": 3,
+          "action": "Type a query in the input, e.g. 'What are the contraindications of aspirin?'",
+          "where": "chat input at the bottom",
+          "expected": "Text entered"
+        },
+        {
+          "step": 4,
+          "action": "Press Enter or click 'Send'",
+          "where": "chat input / send button",
+          "expected": "Input clears, 'searching…' indicator appears, then 'writing answer…'"
+        },
+        {
+          "step": 5,
+          "action": "Wait for the answer to appear",
+          "where": "chat area",
+          "expected": "AI response streams in token by token. Citation markers [1], [2] etc. appear at the end."
+        },
+        {
+          "step": 6,
+          "action": "Look for the source citations panel",
+          "where": "below or beside the answer",
+          "expected": "Cited sources section shows document name(s) and snippet previews"
+        }
+      ],
+      "expected_outcome": "Full answer with citations rendered. Mode label shows 'Vanilla'.",
+      "status": "DONE"
+    },
+    {
+      "id": "6.15",
+      "title": "Chat — citation click interaction",
+      "description": "Clicking a citation marker [n] in the answer should highlight or scroll to the source.",
+      "preconditions": ["A chat message with citations is visible (scenario 6.14 completed)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click on a citation marker, e.g. [1] inside the AI answer text",
+          "where": "AI message body",
+          "expected": "Citation panel expands or scrolls to the relevant source snippet. The snippet from the document is shown."
+        },
+        {
+          "step": 2,
+          "action": "Verify citation content",
+          "where": "citation panel",
+          "expected": "Shows: document filename, page number (if available), text snippet"
+        }
+      ],
+      "expected_outcome": "Citation interaction works — snippet is readable",
+      "status": "DONE"
+    },
+    {
+      "id": "6.16",
+      "title": "Chat — multi-turn follow-up question",
+      "description": "Ask a follow-up question in the same conversation to test context continuity.",
+      "preconditions": ["At least one exchange in the current chat (scenario 6.14)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Type a follow-up question referencing the previous answer, e.g. 'What about interactions with ibuprofen?'",
+          "where": "chat input",
+          "expected": "Text entered"
+        },
+        {
+          "step": 2,
+          "action": "Send the message",
+          "where": "send button",
+          "expected": "Second AI response appears below the first, streaming as before"
+        },
+        {
+          "step": 3,
+          "action": "Verify conversation thread",
+          "where": "chat area",
+          "expected": "Both exchanges visible: user message → AI response → user message → AI response"
+        }
+      ],
+      "expected_outcome": "Multi-turn conversation works, conversation_id is reused across messages",
+      "status": "DONE"
+    },
+    {
+      "id": "6.17",
+      "title": "Chat — HyDE mode",
+      "description": "Switch project to HyDE mode and verify the 'think' steps appear in the UI.",
+      "preconditions": ["Project 'Test Aspirin' accessible, at least 1 indexed doc"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Go to /admin, open project settings modal, change RAG Mode to 'HyDE', save",
+          "where": "/admin → Edit modal",
+          "expected": "Settings saved"
+        },
+        {
+          "step": 2,
+          "action": "Go to /chat/new and ask the same question as in 6.14",
+          "where": "/chat/new",
+          "expected": "Request sent"
+        },
+        {
+          "step": 3,
+          "action": "Watch the thinking progress indicator",
+          "where": "chat area during generation",
+          "expected": "A 'Reasoning' or thinking steps panel appears showing HyDE hypothesis generation steps"
+        },
+        {
+          "step": 4,
+          "action": "Verify final answer has citations",
+          "where": "chat area",
+          "expected": "Answer with citations, mode label shows 'HyDE'"
+        }
+      ],
+      "expected_outcome": "HyDE mode renders thinking steps and produces cited answer",
+      "status": "DONE"
+    },
+    {
+      "id": "6.18",
+      "title": "Chat — Self-Reflection mode",
+      "description": "Test self_reflection mode — should show multiple reasoning steps.",
+      "preconditions": ["Project with indexed docs"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "In project settings, change RAG Mode to 'Self-Reflection', save",
+          "where": "/admin → Edit modal",
+          "expected": "Saved"
+        },
+        {
+          "step": 2,
+          "action": "New chat, ask a question",
+          "where": "/chat/new",
+          "expected": "Query sent"
+        },
+        {
+          "step": 3,
+          "action": "Observe the thinking steps panel",
+          "where": "chat area",
+          "expected": "Multiple steps visible (e.g. Step 1 · Xs, Step 2 · Xs). More steps than HyDE."
+        },
+        {
+          "step": 4,
+          "action": "Verify final answer",
+          "where": "chat",
+          "expected": "Answer with citations, mode = self_reflection"
+        }
+      ],
+      "expected_outcome": "Self-Reflection shows iterative reasoning steps",
+      "status": "DONE"
+    },
+    {
+      "id": "6.19",
+      "title": "Chat — Multi-Agent mode",
+      "description": "Test multi_agent mode — should show agent labels (Researcher / Critic / Editor).",
+      "preconditions": ["Project with indexed docs"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "In project settings, change RAG Mode to 'Multi-Agent', save",
+          "where": "/admin → Edit modal",
+          "expected": "Saved"
+        },
+        {
+          "step": 2,
+          "action": "New chat, ask a complex question, e.g. 'Explain all risks of combining aspirin, warfarin, and ibuprofen'",
+          "where": "/chat/new",
+          "expected": "Query sent"
+        },
+        {
+          "step": 3,
+          "action": "Watch the thinking steps for agent labels",
+          "where": "chat area",
+          "expected": "Steps show agent names (Researcher, Critic, Editor) or similar multi-agent labels"
+        },
+        {
+          "step": 4,
+          "action": "Verify final answer is longer and more detailed than Vanilla",
+          "where": "chat",
+          "expected": "Longer, more structured answer with citations"
+        }
+      ],
+      "expected_outcome": "Multi-Agent renders agent steps and produces detailed answer",
+      "status": "DONE"
+    },
+    {
+      "id": "6.20",
+      "title": "Chat — stop generation mid-stream",
+      "description": "Clicking 'Stop' during streaming should halt the response immediately.",
+      "preconditions": ["Logged in, project with indexed docs"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Send a long-form question",
+          "where": "chat input",
+          "expected": "Streaming starts"
+        },
+        {
+          "step": 2,
+          "action": "While tokens are streaming, click the 'Stop generation' button",
+          "where": "chat input area (stop button replaces send button during streaming)",
+          "expected": "Streaming stops immediately, partial answer remains visible"
+        },
+        {
+          "step": 3,
+          "action": "Verify the input is available again",
+          "where": "chat input",
+          "expected": "Send button returns, input is editable — user can ask a new question"
+        }
+      ],
+      "expected_outcome": "Stop button aborts the stream, UI recovers cleanly",
+      "status": "DONE"
+    },
+    {
+      "id": "6.21",
+      "title": "Conversation history — list view",
+      "description": "Navigate to the history page and verify previous conversations are listed.",
+      "preconditions": ["At least 2 conversations created (scenarios 6.14-6.19)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click 'Show all conversations' in the sidebar",
+          "where": "sidebar",
+          "expected": "Navigated to /history"
+        },
+        {
+          "step": 2,
+          "action": "Verify the list",
+          "where": "/history",
+          "expected": "List of conversations with: project name, first message preview, date, RAG mode badge"
+        },
+        {
+          "step": 3,
+          "action": "Check the subtitle counter",
+          "where": "page header",
+          "expected": "Shows total count, e.g. '3 conversations · 1 project'"
+        }
+      ],
+      "expected_outcome": "History page shows all previous conversations",
+      "status": "DONE"
+    },
+    {
+      "id": "6.22",
+      "title": "Conversation history — filter by project",
+      "description": "The project filter dropdown should narrow conversations to a single project.",
+      "preconditions": ["At least 2 projects exist with conversations"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click the project filter dropdown ('All projects')",
+          "where": "/history, filter bar",
+          "expected": "Dropdown opens showing list of projects"
+        },
+        {
+          "step": 2,
+          "action": "Select 'Test Aspirin'",
+          "where": "dropdown",
+          "expected": "Dropdown closes, list filters to show only conversations from 'Test Aspirin'"
+        },
+        {
+          "step": 3,
+          "action": "Select 'All projects' again",
+          "where": "project filter",
+          "expected": "All conversations reappear"
+        }
+      ],
+      "expected_outcome": "Project filter works correctly",
+      "status": "DONE"
+    },
+    {
+      "id": "6.23",
+      "title": "Conversation history — open a past conversation",
+      "description": "Clicking a conversation in history should open it with all messages intact.",
+      "preconditions": ["At least one conversation in history"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click on any conversation in the list",
+          "where": "/history",
+          "expected": "Navigated to /chat/[id] with the full conversation thread"
+        },
+        {
+          "step": 2,
+          "action": "Verify messages",
+          "where": "/chat/[id]",
+          "expected": "All user and AI messages visible in the correct order with citations"
+        },
+        {
+          "step": 3,
+          "action": "Type a new follow-up question and send",
+          "where": "chat input",
+          "expected": "Response appears — conversation continues from the same context"
+        }
+      ],
+      "expected_outcome": "Past conversation opens and can be continued",
+      "status": "DONE"
+    },
+    {
+      "id": "6.24",
+      "title": "Sidebar — switch active project",
+      "description": "The project selector in the sidebar should switch the active project for new chats.",
+      "preconditions": ["At least 2 projects exist with indexed documents"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Expand the project list in the sidebar",
+          "where": "sidebar",
+          "expected": "List of projects visible"
+        },
+        {
+          "step": 2,
+          "action": "Click a different project than the currently active one",
+          "where": "sidebar project list",
+          "expected": "Selected project is highlighted"
+        },
+        {
+          "step": 3,
+          "action": "Start a new chat",
+          "where": "'New chat' button in sidebar",
+          "expected": "Empty chat opens with the new project name in the context"
+        },
+        {
+          "step": 4,
+          "action": "Send a question",
+          "where": "chat input",
+          "expected": "Answer is based on the new project's documents, not the previous one"
+        }
+      ],
+      "expected_outcome": "Active project switches and new chat uses correct document set",
+      "status": "DONE"
+    },
+    {
+      "id": "6.25",
+      "title": "Dark / light mode toggle",
+      "description": "The theme toggle in the topbar should switch between dark and light themes.",
+      "preconditions": ["Logged in, any page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Note the current theme (dark or light)",
+          "where": "page background",
+          "expected": "Background is either dark (#0F172A-ish) or light"
+        },
+        {
+          "step": 2,
+          "action": "Click the sun/moon icon in the topbar",
+          "where": "topbar right side",
+          "expected": "Theme switches — background, text and borders change colours"
+        },
+        {
+          "step": 3,
+          "action": "Reload the page (Cmd+R)",
+          "where": "browser",
+          "expected": "Theme preference persisted — page loads with the switched theme"
+        }
+      ],
+      "expected_outcome": "Theme toggle works and preference is saved across reloads",
+      "status": "DONE"
+    },
+    {
+      "id": "6.26",
+      "title": "Delete project — cascade cleanup",
+      "description": "Deleting a project should remove it from the list and clear all associated documents.",
+      "preconditions": ["A test project exists with at least one document (NOT 'Test Aspirin' if still needed)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Create a throwaway project: '+ New project' → name 'Delete Me' → Create",
+          "where": "/admin",
+          "expected": "'Delete Me' appears in project list"
+        },
+        {
+          "step": 2,
+          "action": "With 'Delete Me' selected, click the 'Delete' button in the header",
+          "where": "project header actions",
+          "expected": "Browser confirm dialog: 'Delete project \"Delete Me\"?'"
+        },
+        {
+          "step": 3,
+          "action": "Confirm deletion",
+          "where": "dialog",
+          "expected": "Project removed from the left rail list"
+        },
+        {
+          "step": 4,
+          "action": "Verify main area",
+          "where": "/admin",
+          "expected": "Main area shows either another project or the 'No projects' empty state. 'Delete Me' is gone."
+        }
+      ],
+      "expected_outcome": "Project deleted from UI and no longer accessible",
+      "status": "DONE"
+    },
+    {
+      "id": "6.27",
+      "title": "Logout",
+      "description": "Logging out should clear the session and redirect to /login.",
+      "preconditions": ["Logged in as admin"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click the user avatar or logout button in the sidebar footer",
+          "where": "sidebar bottom",
+          "expected": "Logout option visible"
+        },
+        {
+          "step": 2,
+          "action": "Click 'Log out'",
+          "where": "logout button",
+          "expected": "Redirected to /login"
+        },
+        {
+          "step": 3,
+          "action": "Try navigating to /chat/new directly in the address bar",
+          "where": "browser address bar",
+          "expected": "Redirected back to /login — session is cleared, protected routes inaccessible"
+        }
+      ],
+      "expected_outcome": "User logged out, JWT cleared, all protected routes redirect to /login",
+      "status": "DONE"
+    },
+    {
+      "id": "6.28",
+      "title": "Register page — navigate from login",
+      "description": "The 'Create account' link on the login page should lead to /register.",
+      "preconditions": ["Browser has no saved session (incognito or clear localStorage)", "On /login page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click the 'Create one in 30 seconds' / 'Załóż w 30 sekund' link at the bottom of the login form",
+          "where": "/login — footer of the form",
+          "expected": "Navigated to /register — registration form is displayed"
+        },
+        {
+          "step": 2,
+          "action": "Verify page elements",
+          "where": "/register",
+          "expected": "Visible: medRAG branding panel (left), form with Email, Password, Confirm password fields and 'Create account' button. 'Sign in' link at the bottom."
+        }
+      ],
+      "expected_outcome": "User lands on /register from the login link",
+      "status": "DONE"
+    },
+    {
+      "id": "6.29",
+      "title": "Register — happy path, auto-login, redirect",
+      "description": "Submitting valid credentials should register the user, auto-login and redirect to /chat/new.",
+      "preconditions": ["On /register page", "Email address not yet registered in the system"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Enter a new unique email, e.g. test@medrag.local",
+          "where": "email input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 2,
+          "action": "Enter a password with at least 8 characters, e.g. 'Test1234!'",
+          "where": "password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 3,
+          "action": "Enter the same password in the 'Confirm password' field",
+          "where": "confirm password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 4,
+          "action": "Click 'Create account' / 'Załóż konto'",
+          "where": "submit button",
+          "expected": "Button shows loading state ('Creating account…'), then page redirects to /chat/new"
+        },
+        {
+          "step": 5,
+          "action": "Verify the user is logged in",
+          "where": "sidebar / topbar after redirect",
+          "expected": "Sidebar visible, no login screen — user is authenticated"
+        }
+      ],
+      "expected_outcome": "New user created, auto-logged in, lands on /chat/new",
+      "status": "DONE",
+      "save_for_later": {
+        "test_user_email": "test@medrag.local",
+        "test_user_password": "Test1234!"
+      }
+    },
+    {
+      "id": "6.30",
+      "title": "Register — password too short shows inline error",
+      "description": "Submitting a password shorter than 8 characters should show a validation error without calling the backend.",
+      "preconditions": ["On /register page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Fill in a valid email",
+          "where": "email input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 2,
+          "action": "Enter a short password, e.g. 'abc'",
+          "where": "password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 3,
+          "action": "Enter the same short password in the confirm field",
+          "where": "confirm password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 4,
+          "action": "Click 'Create account'",
+          "where": "submit button",
+          "expected": "Error message appears: 'Password must be at least 8 characters' / 'Hasło musi mieć co najmniej 8 znaków'. Page does NOT redirect."
+        }
+      ],
+      "expected_outcome": "Client-side validation prevents submission, error shown inline",
+      "status": "DONE"
+    },
+    {
+      "id": "6.31",
+      "title": "Register — password mismatch shows inline error",
+      "description": "Submitting two different passwords should show a mismatch error without calling the backend.",
+      "preconditions": ["On /register page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Fill in a valid email",
+          "where": "email input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 2,
+          "action": "Enter a valid password, e.g. 'Password123'",
+          "where": "password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 3,
+          "action": "Enter a different password in the confirm field, e.g. 'DifferentPass1'",
+          "where": "confirm password input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 4,
+          "action": "Click 'Create account'",
+          "where": "submit button",
+          "expected": "Error message: 'Passwords do not match' / 'Hasła nie są identyczne'. Page does NOT redirect."
+        }
+      ],
+      "expected_outcome": "Mismatch validation prevents submission, error shown inline",
+      "status": "DONE"
+    },
+    {
+      "id": "6.32",
+      "title": "Register — duplicate email shows backend error",
+      "description": "Registering with an already-used email should display the 409 error returned by the backend.",
+      "preconditions": ["On /register page", "Email 'test@medrag.local' already registered (scenario 6.29 passed)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Enter the already-registered email: test@medrag.local",
+          "where": "email input",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 2,
+          "action": "Enter a valid password and confirm it",
+          "where": "password / confirm inputs",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 3,
+          "action": "Click 'Create account'",
+          "where": "submit button",
+          "expected": "Button shows loading state, then an inline error appears: 'Email already registered'. Page does NOT redirect."
+        }
+      ],
+      "expected_outcome": "Duplicate email error from backend displayed inline",
+      "status": "DONE"
+    },
+    {
+      "id": "6.33",
+      "title": "Register — 'Sign in' link goes back to /login",
+      "description": "The 'Already have an account? Sign in' link at the bottom of the register form should navigate back to /login.",
+      "preconditions": ["On /register page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click the 'Sign in' / 'Zaloguj się' link at the bottom of the form",
+          "where": "/register — form footer",
+          "expected": "Navigated to /login — login form displayed"
+        }
+      ],
+      "expected_outcome": "Back-to-login link works",
+      "status": "DONE"
+    },
+    {
+      "id": "6.34",
+      "title": "Register — first name and last name fields visible",
+      "description": "The registration form should display First name and Last name fields above the email field.",
+      "preconditions": ["On /register page"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Navigate to /register",
+          "where": "browser address bar",
+          "expected": "Register page loads"
+        },
+        {
+          "step": 2,
+          "action": "Verify form fields",
+          "where": "/register form",
+          "expected": "Four fields visible in order: First name (left) + Last name (right) on the same row, then Email, Password, Confirm password. Fields are optional for first/last name."
+        }
+      ],
+      "expected_outcome": "Name fields present in the registration form",
+      "status": "DONE"
+    },
+    {
+      "id": "6.35",
+      "title": "Register — first and last name saved and shown in sidebar",
+      "description": "After registering with a first and last name, the sidebar should show the full name instead of email.",
+      "preconditions": ["On /register page", "Email 'named@medrag.local' not yet registered"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Fill in First name: 'Anna', Last name: 'Nowak'",
+          "where": "name fields",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 2,
+          "action": "Fill in email: named@medrag.local, password and confirm password",
+          "where": "email / password fields",
+          "expected": "Text accepted"
+        },
+        {
+          "step": 3,
+          "action": "Click 'Create account'",
+          "where": "submit button",
+          "expected": "Account created, auto-login, redirect to /chat/new"
+        },
+        {
+          "step": 4,
+          "action": "Look at the sidebar bottom user section",
+          "where": "sidebar footer",
+          "expected": "Displays 'Anna Nowak' (not 'named@medrag.local'). Avatar shows initials 'AN'."
+        }
+      ],
+      "expected_outcome": "First name + last name displayed in sidebar. Avatar shows correct initials.",
+      "status": "DONE"
+    },
+    {
+      "id": "6.36",
+      "title": "Sidebar — gear icon navigates to admin panel",
+      "description": "The settings gear icon next to the user section should navigate directly to /admin without toggling the user menu.",
+      "preconditions": ["Logged in as admin"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click the gear (⚙) icon in the sidebar bottom-right, next to the user name",
+          "where": "sidebar footer",
+          "expected": "Navigated to /admin page (NOT showing a dropdown)"
+        }
+      ],
+      "expected_outcome": "Gear icon is a direct link to /admin",
+      "status": "DONE"
+    },
+    {
+      "id": "6.37",
+      "title": "Sidebar — user menu dropdown on avatar/name click",
+      "description": "Clicking the user name/avatar area (not the gear) should toggle the user dropdown with logout option.",
+      "preconditions": ["Logged in as any user"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Click the user name or avatar in the sidebar footer (left side, not the gear icon)",
+          "where": "sidebar footer",
+          "expected": "Dropdown appears above the footer with: user display name, email, role label, and 'Log out' button"
+        },
+        {
+          "step": 2,
+          "action": "Click outside the dropdown",
+          "where": "anywhere on the page",
+          "expected": "Dropdown closes"
+        }
+      ],
+      "expected_outcome": "User dropdown opens and closes correctly",
+      "status": "DONE"
+    },
+    {
+      "id": "6.38",
+      "title": "Sidebar — admin panel accessible with no projects",
+      "description": "When no projects exist, an admin should still see a button to navigate to the admin panel.",
+      "preconditions": ["Logged in as admin", "No projects created yet (fresh environment or all projects deleted)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Verify sidebar state with no projects",
+          "where": "sidebar",
+          "expected": "Project selector area is absent. Instead a 'Manage projects' button appears in the sidebar top area."
+        },
+        {
+          "step": 2,
+          "action": "Click 'Manage projects'",
+          "where": "sidebar",
+          "expected": "Navigated to /admin with empty project list and '+ New project' button visible"
+        }
+      ],
+      "expected_outcome": "Admin can reach /admin even when no projects exist",
+      "status": "DONE"
+    },
+    {
+      "id": "6.39",
+      "title": "Admin — project Members tab visible in settings modal",
+      "description": "The project settings modal should have a 'Members' tab alongside 'Settings'.",
+      "preconditions": ["Logged in as admin", "At least one project exists"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "On /admin, click 'Edit' for any project",
+          "where": "project header actions",
+          "expected": "Settings modal opens with two tabs: 'Settings' and 'Members'"
+        },
+        {
+          "step": 2,
+          "action": "Click the 'Members' tab",
+          "where": "modal tab bar",
+          "expected": "Tab switches — shows 'Current members' section with at least the project creator listed. 'Add member' section below if other users exist."
+        }
+      ],
+      "expected_outcome": "Members tab renders with current member list",
+      "status": "DONE"
+    },
+    {
+      "id": "6.40",
+      "title": "Admin — add user to project",
+      "description": "Admin can add a registered user to a project from the Members tab.",
+      "preconditions": ["Logged in as admin", "At least one non-admin user registered (scenario 6.35)", "Project exists"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Open settings modal for a project, go to 'Members' tab",
+          "where": "/admin → Edit → Members",
+          "expected": "Members tab visible, 'Anna Nowak (named@medrag.local)' appears in 'Add member' section"
+        },
+        {
+          "step": 2,
+          "action": "Click '+ Add' next to Anna Nowak",
+          "where": "Add member section",
+          "expected": "User moves from 'Add member' list to 'Current members' list"
+        },
+        {
+          "step": 3,
+          "action": "Close the modal and reopen it",
+          "where": "modal X button → Edit again",
+          "expected": "Anna Nowak still listed in 'Current members'"
+        }
+      ],
+      "expected_outcome": "User added to project, persisted in backend",
+      "status": "DONE"
+    },
+    {
+      "id": "6.41",
+      "title": "Admin — remove user from project",
+      "description": "Admin can remove a user from a project via the X button in the Members tab.",
+      "preconditions": ["Anna Nowak is a member of the test project (scenario 6.40 passed)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Open project settings, go to 'Members' tab",
+          "where": "/admin → Edit → Members",
+          "expected": "Anna Nowak listed in 'Current members'"
+        },
+        {
+          "step": 2,
+          "action": "Click the X (remove) button next to Anna Nowak",
+          "where": "Current members list",
+          "expected": "Anna Nowak moves to 'Add member' section"
+        },
+        {
+          "step": 3,
+          "action": "Close and reopen the modal",
+          "where": "modal",
+          "expected": "Anna Nowak no longer in 'Current members'"
+        }
+      ],
+      "expected_outcome": "User removed from project, change persisted",
+      "status": "DONE"
+    },
+    {
+      "id": "6.42",
+      "title": "Regular user — sees only assigned projects in sidebar",
+      "description": "A non-admin user should only see projects they are a member of in the sidebar.",
+      "preconditions": ["Two projects exist", "Anna Nowak is member of project A but not project B", "Logged in as Anna Nowak"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Log in as named@medrag.local",
+          "where": "/login",
+          "expected": "Logged in, redirected to /chat/new"
+        },
+        {
+          "step": 2,
+          "action": "Check the project selector in the sidebar",
+          "where": "sidebar",
+          "expected": "Only project A is visible — project B (where Anna is not a member) is not shown"
+        }
+      ],
+      "expected_outcome": "Project list filtered per user membership",
+      "status": "DONE"
+    }
+  ],
+  "test_order_recommendation": [
+    "6.1 → 6.2 → 6.3 → 6.4",
+    "6.28 → 6.29 → 6.30 → 6.31 → 6.32 → 6.33",
+    "6.34 → 6.35",
+    "6.5 → 6.6 → 6.7 → 6.8 → 6.9",
+    "6.10 → 6.11 → 6.12 → 6.13",
+    "6.14 → 6.15 → 6.16",
+    "6.17 → 6.18 → 6.19",
+    "6.20 → 6.21 → 6.22 → 6.23 → 6.24",
+    "6.25 → 6.26 → 6.27",
+    "6.36 → 6.37 → 6.38",
+    "6.39 → 6.40 → 6.41 → 6.42"
+  ],
+  "known_dependencies": {
+    "6.10_requires": "ANTHROPIC_API_KEY in .env (ingestion uses embedding service)",
+    "6.14_requires": "indexed document + ANTHROPIC_API_KEY for LLM generation",
+    "6.17_to_6.19_require": "ANTHROPIC_API_KEY + document indexed"
+  }
+}

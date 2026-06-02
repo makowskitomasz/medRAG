@@ -80,7 +80,7 @@ class MultiAgentPipeline(RagPipeline):
             rag_mode=rag_mode,
         )
 
-    async def run_stream(
+    async def run_stream(  # type: ignore[override]
         self,
         query: str,
         project_id: str,
@@ -91,7 +91,59 @@ class MultiAgentPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
-        reranked = await self._aggregate_chunks(query, project_id, top_k, alpha, rerank_top_n)
-        return self._stream_generation(
-            query, reranked, conversation_history, conversation_id, rag_mode
+        import time as _time
+
+        agent_names = ["Researcher", "Critic", "Editor"]
+        agent_descs = [
+            "Mechanism of action and pharmacokinetics",
+            "Clinical risks, contraindications and adverse effects",
+            "Dosing, monitoring and management guidelines",
+        ]
+        per_top_k = max(top_k // len(_AGENT_PERSPECTIVES), 3)
+
+        # Stream each agent's search as a think step
+        per_agent_results: list[list[dict]] = []
+        for i, (pq, name, desc) in enumerate(
+            zip(
+                [p.format(query=query) for p in _AGENT_PERSPECTIVES],
+                agent_names,
+                agent_descs,
+                strict=False,
+            )
+        ):
+            yield self._sse_search_start()
+            t0 = _time.monotonic()
+            agent_chunks = await self._agent_retrieve(pq, project_id, per_top_k, alpha)
+            per_agent_results.append(agent_chunks)
+            yield self._sse_think(
+                step=i,
+                label=f"Agent: {name}",
+                text=f"{desc}. Found {len(agent_chunks)} fragments.",
+                duration_ms=int((_time.monotonic() - t0) * 1000),
+            )
+
+        # Aggregate + rerank
+        seen: set[str] = set()
+        merged: list[dict] = []
+        for chunks in per_agent_results:
+            for chunk in chunks:
+                cid = chunk.get("chunk_id", "")
+                if cid not in seen:
+                    seen.add(cid)
+                    merged.append(chunk)
+
+        logger.info("multi_agent aggregation", total_unique_chunks=len(merged))
+        t_rerank = _time.monotonic()
+        reranked = await self._rerank(query, merged, rerank_top_n)
+        yield self._sse_search_done(reranked)
+        yield self._sse_think(
+            step=len(_AGENT_PERSPECTIVES),
+            label="Merging and reranking",
+            text=f"Merged {len(merged)} unique fragments → selected top {len(reranked)}.",
+            duration_ms=int((_time.monotonic() - t_rerank) * 1000),
         )
+
+        async for chunk in self._stream_generation(
+            query, reranked, conversation_history, conversation_id, rag_mode
+        ):
+            yield chunk

@@ -19,11 +19,22 @@ from app.schemas.project_schemas import (
     UpdateProjectRequest,
     UpdateSettingsRequest,
 )
+from app.services.settings_options_service import get_settings_options
+
+
+def _default_prompt_overrides() -> dict[str, str]:
+    opts = get_settings_options()
+    return {s.slug: s.default_template for s in opts.prompt_slots if s.default_template}
+
 
 logger = get_logger(__name__)
 
 
 async def create_project(body: CreateProjectRequest, user_id: str = "") -> ProjectResponse:
+    if await project_repository.find_by_name(body.name):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Project name already exists"
+        )
     proj_settings = ProjectSettings(
         chunking_strategy=body.chunking_strategy,
         embedding_provider=body.embedding_provider,
@@ -31,12 +42,14 @@ async def create_project(body: CreateProjectRequest, user_id: str = "") -> Proje
         hybrid_alpha=body.hybrid_alpha,
         top_k=body.top_k,
         rerank_top_n=body.rerank_top_n,
+        prompt_overrides=_default_prompt_overrides(),
     )
     project = Project(
         name=body.name,
         description=body.description,
         settings=proj_settings,
         created_by=user_id,
+        member_ids=[user_id] if user_id else [],
     )
     return await project_repository.create(project)
 
@@ -94,6 +107,28 @@ async def delete_prompt_override(project_id: str, slug: str) -> ProjectResponse:
 
 async def list_projects() -> list[ProjectResponse]:
     return await project_repository.list_all()
+
+
+async def list_projects_for_user(user_id: str, role: str) -> list[ProjectResponse]:
+    if role == "admin":
+        return await project_repository.list_all()
+    return await project_repository.list_for_user(user_id)
+
+
+async def add_member(project_id: str, user_id: str) -> ProjectResponse:
+    doc = await project_repository.get_by_id(project_id)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    updated = await project_repository.add_member(project_id, user_id)
+    return project_repository._to_response(updated)
+
+
+async def remove_member(project_id: str, user_id: str) -> ProjectResponse:
+    doc = await project_repository.get_by_id(project_id)
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    updated = await project_repository.remove_member(project_id, user_id)
+    return project_repository._to_response(updated)
 
 
 async def get_project(project_id: str) -> ProjectResponse:

@@ -27,7 +27,7 @@ jobs:
       WEAVIATE_URL: http://weaviate:8080
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       LLM_PROVIDER: anthropic
-      LLM_MODEL: claude-sonnet-4-6
+      LLM_MODEL: openai/gpt-oss-120b
       EMBEDDING_PROVIDER: local_bge
     steps:
       - uses: actions/checkout@v4

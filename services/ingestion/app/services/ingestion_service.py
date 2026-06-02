@@ -47,6 +47,7 @@ async def upload(
         content_hash=content_hash,
         status=DocumentStatus.UPLOADED,
         status_history=[StatusHistoryEntry(status=DocumentStatus.UPLOADED, trace_id=trace_id)],
+        stats={"file_size": len(content)},
     )
     await document_repository.create(doc)
 

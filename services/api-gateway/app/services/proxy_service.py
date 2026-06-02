@@ -13,17 +13,31 @@ async def proxy(request: Request, target_url: str, http: httpx.AsyncClient, user
 
     accept = request.headers.get("accept", "")
     if "text/event-stream" in accept:
+        # Open the upstream connection and check status BEFORE committing to 200 SSE response.
+        # This lets validation errors (400/404) propagate properly to the client.
+        upstream = http.stream(
+            method=request.method,
+            url=target_url,
+            headers=headers,
+            content=body,
+            params=dict(request.query_params),
+        )
+        resp_ctx = await upstream.__aenter__()
+        if resp_ctx.status_code >= 400:
+            error_body = await resp_ctx.aread()
+            await upstream.__aexit__(None, None, None)
+            return Response(
+                content=error_body,
+                status_code=resp_ctx.status_code,
+                headers={"Content-Type": "application/json"},
+            )
 
         async def event_stream():
-            async with http.stream(
-                method=request.method,
-                url=target_url,
-                headers=headers,
-                content=body,
-                params=dict(request.query_params),
-            ) as resp:
-                async for chunk in resp.aiter_bytes():
+            try:
+                async for chunk in resp_ctx.aiter_bytes():
                     yield chunk
+            finally:
+                await upstream.__aexit__(None, None, None)
 
         return StreamingResponse(
             event_stream(),

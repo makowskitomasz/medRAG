@@ -32,7 +32,7 @@ class RagPipeline(ABC):
     ) -> QueryResponse: ...
 
     @abstractmethod
-    def run_stream(
+    async def run_stream(
         self,
         query: str,
         project_id: str,
@@ -43,6 +43,44 @@ class RagPipeline(ABC):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]: ...
+
+    # ---- helpers ----
+
+    @staticmethod
+    def _sse(event: dict) -> str:
+        return f"data: {json.dumps(event)}\n\n"
+
+    @staticmethod
+    def _sse_search_start() -> str:
+        return RagPipeline._sse({"type": "search", "status": "start"})
+
+    @staticmethod
+    def _sse_search_done(chunks: list[dict]) -> str:
+        filenames = list(
+            dict.fromkeys(
+                c.get("filename") or c.get("metadata", {}).get("filename") or "" for c in chunks
+            )
+        )
+        return RagPipeline._sse(
+            {
+                "type": "search",
+                "status": "done",
+                "count": len(chunks),
+                "filenames": [f for f in filenames if f],
+            }
+        )
+
+    @staticmethod
+    def _sse_think(step: int, label: str, text: str, duration_ms: int) -> str:
+        return RagPipeline._sse(
+            {
+                "type": "think",
+                "step": step,
+                "label": label,
+                "text": text,
+                "durationMs": duration_ms,
+            }
+        )
 
     async def _retrieve(
         self,

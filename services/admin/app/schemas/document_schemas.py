@@ -17,6 +17,9 @@ class DocumentResponse(BaseModel):
     status: DocumentStatus
     created_at: datetime
     status_history: list[StatusHistoryEntry] = []
+    file_size: int | None = None
+    page_count: int | None = None
+    chunk_count: int | None = None
 
 
 class PaginatedDocumentsResponse(BaseModel):

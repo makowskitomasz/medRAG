@@ -10,6 +10,7 @@ class QueryRequest(BaseModel):
     conversation_id: str | None = None
     stream: bool = False
     gold_answer: str | None = None
+    rag_mode_override: str | None = None
 
 
 class Citation(BaseModel):
@@ -17,6 +18,7 @@ class Citation(BaseModel):
     filename: str | None = None
     page: int | None = None
     snippet: str
+    relevance: float | None = None
 
 
 class QueryResponse(BaseModel):
@@ -30,6 +32,7 @@ class QueryResponse(BaseModel):
 class ConversationMessage(BaseModel):
     role: str
     content: str
+    citations: list[Citation] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 

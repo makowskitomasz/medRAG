@@ -98,6 +98,9 @@ services:
     ports:
       - "8012:8000"
     env_file: .env
+    volumes:
+      - ./services/generation/app/prompts:/app/generation_prompts:ro
+      - ./services/query-processor/app/prompts:/app/query_processor_prompts:ro
     depends_on:
       mongo: { condition: service_healthy }
       weaviate: { condition: service_healthy }
@@ -318,6 +321,26 @@ services:
       embedding: { condition: service_healthy }
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        API_GATEWAY_URL: http://api-gateway:8000
+    ports:
+      - "3000:3000"
+    environment:
+      API_GATEWAY_URL: http://api-gateway:8000
+      NEXT_OUTPUT: standalone
+    depends_on:
+      api-gateway: { condition: service_healthy }
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
       interval: 15s
       timeout: 5s
       retries: 3

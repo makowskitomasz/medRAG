@@ -1,18 +1,33 @@
 import asyncio
+import logging
 from concurrent.futures import ThreadPoolExecutor
 
+import torch
 from sentence_transformers import CrossEncoder
 
 from app.schemas.reranker_schemas import ChunkInput, RerankRequest, RerankResponse
+
+logger = logging.getLogger(__name__)
 
 _executor = ThreadPoolExecutor(max_workers=2)
 _model: CrossEncoder | None = None
 
 
+def _best_device() -> str:
+    if torch.backends.mps.is_available():
+        return "mps"
+    if torch.cuda.is_available():
+        return "cuda"
+    return "cpu"
+
+
 def _load_model(model_name: str) -> CrossEncoder:
     global _model
     if _model is None:
-        _model = CrossEncoder(model_name)
+        device = _best_device()
+        logger.info("loading reranker model", extra={"model": model_name, "device": device})
+        _model = CrossEncoder(model_name, device=device)
+        logger.info("reranker model loaded", extra={"device": device})
     return _model
 
 

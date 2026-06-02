@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Header, status
+from fastapi import APIRouter, Header, HTTPException, status
 
 from app.schemas.project_schemas import (
     CreateProjectRequest,
@@ -30,8 +30,33 @@ async def create_project(
 
 
 @router.get("", response_model=list[ProjectResponse])
-async def list_projects() -> list[ProjectResponse]:
-    return await project_service.list_projects()
+async def list_projects(
+    x_user_id: str = Header(default=""),
+    x_user_role: str = Header(default=""),
+) -> list[ProjectResponse]:
+    return await project_service.list_projects_for_user(x_user_id, x_user_role)
+
+
+@router.post("/{project_id}/members/{user_id}", response_model=ProjectResponse)
+async def add_member(
+    project_id: str,
+    user_id: str,
+    x_user_role: str = Header(default=""),
+) -> ProjectResponse:
+    if x_user_role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    return await project_service.add_member(project_id, user_id)
+
+
+@router.delete("/{project_id}/members/{user_id}", response_model=ProjectResponse)
+async def remove_member(
+    project_id: str,
+    user_id: str,
+    x_user_role: str = Header(default=""),
+) -> ProjectResponse:
+    if x_user_role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    return await project_service.remove_member(project_id, user_id)
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)

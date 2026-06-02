@@ -10,7 +10,9 @@ def test_extract_txt():
     with tempfile.NamedTemporaryFile(suffix=".txt", mode="w", delete=False) as f:
         f.write("Hello world\n\nSecond paragraph")
         tmp = f.name
-    assert "Hello world" in extract_text(tmp)
+    text, page_count = extract_text(tmp)
+    assert "Hello world" in text
+    assert page_count == 0
 
 
 def test_unsupported_extension():
@@ -27,6 +29,7 @@ def test_extract_pdf():
     mock_reader.pages = [mock_page]
 
     with patch("pypdf.PdfReader", return_value=mock_reader):
-        result = extract_text("test.pdf")
+        text, page_count = extract_text("test.pdf")
 
-    assert result == "Page content"
+    assert text == "Page content"
+    assert page_count == 1

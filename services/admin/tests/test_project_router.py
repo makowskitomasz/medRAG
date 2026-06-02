@@ -84,6 +84,7 @@ def test_settings_options_returns_field_constraints():
 
 
 def test_create_project_returns_201(mock_deps):
+    mock_deps.projects.find_one = AsyncMock(return_value=None)
     mock_deps.projects.insert_one = AsyncMock()
 
     resp = client.post(
@@ -99,6 +100,7 @@ def test_create_project_returns_201(mock_deps):
 
 
 def test_create_project_defaults(mock_deps):
+    mock_deps.projects.find_one = AsyncMock(return_value=None)
     mock_deps.projects.insert_one = AsyncMock()
 
     resp = client.post("/projects", json={"name": "Minimal"})
