@@ -61,6 +61,11 @@ jobs:
             echo "Attempt $i/30 — $unhealthy service(s) not yet healthy, waiting 10s..."
             sleep 10
           done
+          if [ "$unhealthy" != "0" ]; then
+            echo "ERROR: $unhealthy service(s) never became healthy after 300s"
+            docker compose ps
+            exit 1
+          fi
 
       - name: Check infrastructure health
         run: |
