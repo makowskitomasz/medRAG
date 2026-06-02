@@ -19,6 +19,13 @@ from app.schemas.project_schemas import (
     UpdateProjectRequest,
     UpdateSettingsRequest,
 )
+from app.services.settings_options_service import get_settings_options
+
+
+def _default_prompt_overrides() -> dict[str, str]:
+    opts = get_settings_options()
+    return {s.slug: s.default_template for s in opts.prompt_slots if s.default_template}
+
 
 logger = get_logger(__name__)
 
@@ -35,6 +42,7 @@ async def create_project(body: CreateProjectRequest, user_id: str = "") -> Proje
         hybrid_alpha=body.hybrid_alpha,
         top_k=body.top_k,
         rerank_top_n=body.rerank_top_n,
+        prompt_overrides=_default_prompt_overrides(),
     )
     project = Project(
         name=body.name,

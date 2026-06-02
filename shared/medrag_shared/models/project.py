@@ -33,6 +33,7 @@ class ProjectSettings(BaseModel):
     chunking_strategy: ChunkingStrategy = ChunkingStrategy.RECURSIVE
     embedding_provider: EmbeddingProvider = EmbeddingProvider.LOCAL_BGE
     rag_mode: RagMode = RagMode.VANILLA
+    llm_model: str = "openai/gpt-oss-120b"
     hybrid_alpha: float = Field(default=0.5, ge=0.0, le=1.0)
     top_k: int = Field(default=20, ge=1, le=100)
     rerank_top_n: int = Field(default=5, ge=1, le=20)

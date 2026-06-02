@@ -92,11 +92,13 @@ export const auth = {
 /* ---- Projects ---- */
 export interface ProjectSettings {
   rag_mode: string;
+  llm_model: string;
   chunking_strategy: string;
   embedding_provider: string;
   hybrid_alpha: number;
   top_k: number;
   rerank_top_n: number;
+  prompt_overrides: Record<string, string>;
 }
 export interface Project {
   id: string;
@@ -123,11 +125,13 @@ export interface UpdateProjectInput {
 
 export interface UpdateSettingsInput {
   rag_mode?: string;
+  llm_model?: string;
   chunking_strategy?: string;
   embedding_provider?: string;
   hybrid_alpha?: number;
   top_k?: number;
   rerank_top_n?: number;
+  prompt_overrides?: Record<string, string>;
 }
 
 export interface EnumOption {
@@ -156,6 +160,7 @@ export interface SettingsOptions {
   rag_modes: EnumOption[];
   chunking_strategies: EnumOption[];
   embedding_providers: EnumOption[];
+  llm_models: EnumOption[];
   hybrid_alpha: FieldConstraint;
   top_k: FieldConstraint;
   rerank_top_n: FieldConstraint;
@@ -200,6 +205,8 @@ export const projects = {
     request<Project>(`/admin/projects/${id}/settings`, { method: "PATCH", body: JSON.stringify(data) }).then(enrichProject),
   getSettingsOptions: () =>
     request<SettingsOptions>("/admin/projects/settings/options"),
+  deletePromptOverride: (projectId: string, slug: string) =>
+    request<Project>(`/admin/projects/${projectId}/settings/prompts/${slug}`, { method: "DELETE" }).then(enrichProject),
   delete: (id: string) =>
     request<void>(`/admin/projects/${id}`, { method: "DELETE" }),
   addMember: (projectId: string, userId: string) =>

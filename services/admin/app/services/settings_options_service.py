@@ -7,8 +7,33 @@ from app.schemas.project_schemas import (
     SettingsOptions,
 )
 
-_GENERATION_PROMPTS = Path("/app/generation_prompts")
-_QP_PROMPTS = Path("/app/query_processor_prompts")
+
+def _find_prompts_dir(container_path: str, *repo_relative_parts: str) -> Path:
+    container = Path(container_path)
+    if container.exists():
+        return container
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent.joinpath(*repo_relative_parts)
+        if candidate.exists():
+            return candidate
+    return container
+
+
+_GENERATION_PROMPTS = _find_prompts_dir(
+    "/app/generation_prompts",
+    "services",
+    "generation",
+    "app",
+    "prompts",
+)
+_QP_PROMPTS = _find_prompts_dir(
+    "/app/query_processor_prompts",
+    "services",
+    "query-processor",
+    "app",
+    "prompts",
+)
 
 _RAG_MODES: list[EnumOption] = [
     EnumOption(value="vanilla", label="Classic RAG", description="Baseline: retrieve → generate."),
@@ -69,6 +94,24 @@ _CHUNKING_STRATEGIES: list[EnumOption] = [
         value="semantic",
         label="Semantic",
         description="Splits at semantic boundaries using embedding similarity.",
+    ),
+]
+
+_LLM_MODELS: list[EnumOption] = [
+    EnumOption(
+        value="anthropic/claude-haiku-4-5",
+        label="Claude Haiku 4.5",
+        description="Fast, cheap Anthropic model — good for prototyping.",
+    ),
+    EnumOption(
+        value="openai/gpt-4o-mini",
+        label="GPT-4o-mini",
+        description="OpenAI lightweight model — low cost, solid quality.",
+    ),
+    EnumOption(
+        value="openai/gpt-oss-120b",
+        label="GPT-OSS 120B",
+        description="OpenAI open-source 120B model.",
     ),
 ]
 
@@ -148,6 +191,7 @@ def get_settings_options() -> SettingsOptions:
         rag_modes=_RAG_MODES,
         chunking_strategies=_CHUNKING_STRATEGIES,
         embedding_providers=_EMBEDDING_PROVIDERS,
+        llm_models=_LLM_MODELS,
         hybrid_alpha=FieldConstraint(
             type="float",
             min=0.0,

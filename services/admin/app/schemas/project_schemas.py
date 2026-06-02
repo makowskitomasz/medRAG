@@ -21,6 +21,7 @@ class UpdateSettingsRequest(BaseModel):
     chunking_strategy: ChunkingStrategy | None = None
     embedding_provider: EmbeddingProvider | None = None
     rag_mode: RagMode | None = None
+    llm_model: str | None = None
     hybrid_alpha: float | None = Field(default=None, ge=0.0, le=1.0)
     top_k: int | None = Field(default=None, ge=1, le=100)
     rerank_top_n: int | None = Field(default=None, ge=1, le=20)
@@ -77,6 +78,7 @@ class SettingsOptions(BaseModel):
     rag_modes: list[EnumOption]
     chunking_strategies: list[EnumOption]
     embedding_providers: list[EnumOption]
+    llm_models: list[EnumOption]
     hybrid_alpha: FieldConstraint
     top_k: FieldConstraint
     rerank_top_n: FieldConstraint

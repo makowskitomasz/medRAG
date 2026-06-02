@@ -1,14 +1,15 @@
 "use client";
 export const dynamic = "force-dynamic";
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronRight, Plus, Upload, Search, FileText,
   Layers, Brain, MessageSquare, Trash2, User, Settings, Check, X as XIcon, Users,
+  ChevronDown, ChevronUp, RotateCcw,
 } from "lucide-react";
-import { projects, documents, auth, Project, Document, CreateProjectInput, User as UserType } from "@/lib/api";
+import { projects, documents, auth, Project, Document, CreateProjectInput, User as UserType, PromptSlot } from "@/lib/api";
 import { useUIStore } from "@/store";
 import { useSettingsOptions, useUpdateSettings, useUpdateProject } from "@/hooks/useProjects";
 
@@ -24,7 +25,6 @@ const RAG_MODE_LABEL: Record<string, string> = {
   rare_rag: "RARE RAG (auto-routing)",
 };
 
-const RAG_MODES = Object.entries(RAG_MODE_LABEL).map(([id, label]) => ({ id, label }));
 
 function StatusBadge({ status }: { status: string }) {
   const t = useTranslations("admin");
@@ -71,15 +71,114 @@ const hintStyle: React.CSSProperties = {
   marginTop: 1,
 };
 
+function PromptSlotRow({
+  slot,
+  override,
+  onSave,
+  onReset,
+}: {
+  slot: PromptSlot;
+  override: string | undefined;
+  onSave: (slug: string, value: string) => void;
+  onReset: (slug: string) => void;
+}) {
+  const isOverridden = override !== undefined;
+  const [expanded, setExpanded] = useState(false);
+  const [draft, setDraft] = useState(override ?? slot.default_template);
+
+  const handleExpand = () => {
+    if (!expanded) setDraft(override ?? slot.default_template);
+    setExpanded((v) => !v);
+  };
+
+  const handleSave = () => {
+    onSave(slot.slug, draft);
+    setExpanded(false);
+  };
+
+  const handleReset = () => {
+    onReset(slot.slug);
+    setDraft(slot.default_template);
+    setExpanded(false);
+  };
+
+  return (
+    <div style={{
+      borderRadius: "var(--r-md)",
+      border: "1px solid var(--border)",
+      overflow: "hidden",
+    }}>
+      <button
+        onClick={handleExpand}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", gap: 10,
+          padding: "10px 14px", background: "none", border: "none",
+          cursor: "pointer", textAlign: "left",
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{slot.label}</span>
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{slot.description}</div>
+        </div>
+        {expanded ? <ChevronUp size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} /> : <ChevronDown size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />}
+      </button>
+
+      {expanded && (
+        <div style={{ padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={10}
+            style={{
+              ...inputStyle,
+              fontFamily: "monospace",
+              fontSize: 12,
+              resize: "vertical",
+              lineHeight: 1.5,
+              opacity: isOverridden ? 1 : 0.55,
+            }}
+          />
+          {!isOverridden && (
+            <p style={{ fontSize: 11, color: "var(--text-muted)", margin: 0 }}>
+              Currently using default template. Edit above and save to override.
+            </p>
+          )}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            {isOverridden && (
+              <button
+                className="btn"
+                onClick={handleReset}
+                style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}
+                title="Revert to default"
+              >
+                <RotateCcw size={12} /> Reset to default
+              </button>
+            )}
+            <button
+              className="btn btn-primary"
+              onClick={handleSave}
+              style={{ fontSize: 12 }}
+            >
+              Save override
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingsModal({ project, onClose }: { project: Project; onClose: () => void }) {
   const t = useTranslations("admin");
   const qc = useQueryClient();
   const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState<"settings" | "members">("settings");
+  const [activeTab, setActiveTab] = useState<"settings" | "members" | "prompts">("settings");
 
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description);
-  const [ragMode, setRagMode] = useState(project.settings.rag_mode);
+  const [llmModel, setLlmModel] = useState(project.settings.llm_model ?? "openai/gpt-oss-120b");
   const [chunkingStrategy, setChunkingStrategy] = useState(project.settings.chunking_strategy);
   const [embeddingProvider, setEmbeddingProvider] = useState(project.settings.embedding_provider);
   const [hybridAlpha, setHybridAlpha] = useState(project.settings.hybrid_alpha);
@@ -89,6 +188,11 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
   const { data: options } = useSettingsOptions();
   const updateSettings = useUpdateSettings(project.id);
   const updateProject = useUpdateProject(project.id);
+
+  const deletePromptOverride = useMutation({
+    mutationFn: (slug: string) => projects.deletePromptOverride(project.id, slug),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
+  });
 
   const { data: allUsers = [] } = useQuery<UserType[]>({
     queryKey: ["users"],
@@ -113,18 +217,20 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
   const isPending = updateSettings.isPending || updateProject.isPending;
   const isError = updateSettings.isError || updateProject.isError;
 
-  const ragOptions = options?.rag_modes ?? [{ value: ragMode, label: ragMode, description: "" }];
+  const llmOptions = options?.llm_models ?? [{ value: llmModel, label: llmModel, description: "" }];
   const chunkingOptions = options?.chunking_strategies ?? [{ value: chunkingStrategy, label: chunkingStrategy, description: "" }];
   const embeddingOptions = options?.embedding_providers ?? [{ value: embeddingProvider, label: embeddingProvider, description: "" }];
   const alphaConstraint = options?.hybrid_alpha;
   const topKConstraint = options?.top_k;
   const rerankConstraint = options?.rerank_top_n;
+  const promptSlots = options?.prompt_slots ?? [];
+  const promptOverrides: Record<string, string> = project.settings.prompt_overrides ?? {};
 
   const handleSave = async () => {
     await Promise.all([
       updateProject.mutateAsync({ name, description }),
       updateSettings.mutateAsync({
-        rag_mode: ragMode,
+        llm_model: llmModel,
         chunking_strategy: chunkingStrategy,
         embedding_provider: embeddingProvider,
         hybrid_alpha: hybridAlpha,
@@ -134,6 +240,15 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
     ]);
     setSaved(true);
     setTimeout(() => { setSaved(false); onClose(); }, 1200);
+  };
+
+  const handlePromptSave = async (slug: string, value: string) => {
+    await updateSettings.mutateAsync({ prompt_overrides: { [slug]: value } });
+    qc.invalidateQueries({ queryKey: ["projects"] });
+  };
+
+  const handlePromptReset = (slug: string) => {
+    deletePromptOverride.mutate(slug);
   };
 
   const tabBtnStyle = (active: boolean): React.CSSProperties => ({
@@ -151,6 +266,7 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
     const full = [u.first_name, u.last_name].filter(Boolean).join(" ");
     return full ? `${full} (${u.email})` : u.email;
   };
+
 
   return (
     <div
@@ -207,9 +323,13 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
             <Users size={13} style={{ display: "inline", marginRight: 5, verticalAlign: "middle" }} />
             Members
           </button>
+          <button style={tabBtnStyle(activeTab === "prompts")} onClick={() => setActiveTab("prompts")}>
+            <Brain size={13} style={{ display: "inline", marginRight: 5, verticalAlign: "middle" }} />
+            Prompts
+          </button>
         </div>
 
-        {/* Body */}
+        {/* Body — Settings */}
         {activeTab === "settings" && (
           <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 20 }}>
 
@@ -231,9 +351,9 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
             {/* Strategy dropdowns */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
               <div style={fieldStyle}>
-                <label style={labelStyle}>{t("field_rag_mode")}</label>
-                <select style={inputStyle} value={ragMode} onChange={(e) => setRagMode(e.target.value)}>
-                  {ragOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                <label style={labelStyle}>LLM Model</label>
+                <select style={inputStyle} value={llmModel} onChange={(e) => setLlmModel(e.target.value)}>
+                  {llmOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div style={fieldStyle}>
@@ -277,6 +397,7 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
           </div>
         )}
 
+        {/* Body — Members */}
         {activeTab === "members" && (
           <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={fieldStyle}>
@@ -334,6 +455,27 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
           </div>
         )}
 
+        {/* Body — Prompts */}
+        {activeTab === "prompts" && (
+          <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 10 }}>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 4px" }}>
+              Override Jinja2 prompt templates per project. Grayed-out = using the file default. Overridden prompts are highlighted.
+            </p>
+            {promptSlots.length === 0 && (
+              <p style={{ fontSize: 12, color: "var(--text-muted)" }}>No prompt slots available.</p>
+            )}
+            {promptSlots.map((slot) => (
+              <PromptSlotRow
+                key={slot.slug}
+                slot={slot}
+                override={promptOverrides[slot.slug]}
+                onSave={handlePromptSave}
+                onReset={handlePromptReset}
+              />
+            ))}
+          </div>
+        )}
+
         {/* Footer */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -371,7 +513,6 @@ export default function AdminPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
-  const [newRagMode, setNewRagMode] = useState("vanilla");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: projectList = [], isLoading: projLoading } = useQuery({
@@ -404,7 +545,6 @@ export default function AdminPage() {
       setShowNewForm(false);
       setNewName("");
       setNewDesc("");
-      setNewRagMode("vanilla");
     },
   });
 
@@ -467,7 +607,7 @@ export default function AdminPage() {
             style={{ margin: "0 12px 12px", display: "flex", flexDirection: "column", gap: 8 }}
             onSubmit={(e) => {
               e.preventDefault();
-              if (newName.trim()) createProject.mutate({ name: newName, description: newDesc, rag_mode: newRagMode });
+              if (newName.trim()) createProject.mutate({ name: newName, description: newDesc });
             }}
           >
             <input
@@ -495,21 +635,6 @@ export default function AdminPage() {
                 background: "var(--bg-elev)", color: "var(--text)", fontSize: 12,
               }}
             />
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <label style={{ fontSize: 11, color: "var(--text-muted)", paddingLeft: 2 }}>{t("ragModeLabel")}</label>
-              <select
-                value={newRagMode}
-                onChange={(e) => setNewRagMode(e.target.value)}
-                style={{
-                  padding: "7px 10px", borderRadius: "var(--r-md)", border: "1px solid var(--border)",
-                  background: "var(--bg-elev)", color: "var(--text)", fontSize: 12, cursor: "pointer",
-                }}
-              >
-                {RAG_MODES.map(({ id, label }) => (
-                  <option key={id} value={id}>{label}</option>
-                ))}
-              </select>
-            </div>
             <div style={{ display: "flex", gap: 6 }}>
               <button
                 type="submit"
