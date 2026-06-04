@@ -20,8 +20,8 @@ fi
 # All services except reranker
 SERVICES=$(docker compose $COMPOSE_FILES config --services | grep -v '^reranker$' | tr '\n' ' ')
 
-echo "▶ Starting Docker services..."
-docker compose $COMPOSE_FILES up -d $SERVICES || true
+echo "▶ Starting Docker services (no build)..."
+docker compose $COMPOSE_FILES up -d --no-build $SERVICES || true
 
 echo "▶ Stopping Docker reranker container (port 8005 needed for native)..."
 docker compose $COMPOSE_FILES stop reranker 2>/dev/null || true
