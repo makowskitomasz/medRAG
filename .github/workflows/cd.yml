@@ -11,7 +11,7 @@ jobs:
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       JWT_SECRET: ci-test-secret
-      ADMIN_EMAIL: admin@test.local
+      ADMIN_EMAIL: admin@medrag-ci.example.com
       ADMIN_PASSWORD: testpassword
       MONGODB_URI: mongodb://mongo:27017/medrag
       WEAVIATE_URL: http://weaviate:8080
