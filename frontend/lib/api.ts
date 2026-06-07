@@ -227,13 +227,25 @@ export interface Document {
   chunk_count?: number | null;
 }
 
+export interface DocumentsPage {
+  items: Document[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export const documents = {
+  listPage: async (projectId: string, page = 1, limit = 50): Promise<DocumentsPage> => {
+    return request<DocumentsPage>(`/admin/projects/${projectId}/documents?page=${page}&limit=${limit}`);
+  },
   list: async (projectId: string): Promise<Document[]> => {
-    const res = await request<{ items: Document[] }>(`/admin/projects/${projectId}/documents?limit=100`);
+    const res = await request<{ items: Document[]; total: number }>(`/admin/projects/${projectId}/documents?limit=100`);
     return res.items;
   },
   projectStats: (projectId: string) =>
-    request<{ total_chunks: number }>(`/admin/projects/${projectId}/documents/stats`),
+    request<{ total_chunks: number; total_documents: number; indexed_count: number; failed_count: number }>(
+      `/admin/projects/${projectId}/documents/stats`
+    ),
   upload: async (projectId: string, file: File): Promise<Document> => {
     const token = getToken();
     const form = new FormData();

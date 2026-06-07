@@ -42,6 +42,7 @@ async def handle_query(
 
     overrides = dict(project_settings.prompt_overrides)
     pipeline = get_pipeline(rag_mode, http_client, settings, overrides)
+    pipeline.llm_model = project_settings.llm_model or None
 
     t0 = time.monotonic()
     result = await pipeline.run(
@@ -56,6 +57,11 @@ async def handle_query(
     )
     latency_ms = int((time.monotonic() - t0) * 1000)
 
+    # Populate retrieved_filenames from all chunks passed to LLM (not just cited ones)
+    result.retrieved_filenames = list(
+        dict.fromkeys(c.get("filename", "") for c in pipeline._last_chunks if c.get("filename"))
+    )
+
     await append_messages(
         conversation.id,
         request.query,
@@ -63,7 +69,17 @@ async def handle_query(
         db,
         citations=[c.model_dump() for c in result.citations],
     )
-    await _publish_query_completed(result, request, trace_id, latency_ms, project_settings.top_k)
+    await _publish_query_completed(
+        result,
+        request,
+        trace_id,
+        latency_ms,
+        project_settings.top_k,
+        all_chunks=pipeline._last_chunks,
+        input_tokens=pipeline._last_input_tokens,
+        output_tokens=pipeline._last_output_tokens,
+        llm_model=project_settings.llm_model or None,
+    )
     return result
 
 
@@ -89,6 +105,7 @@ async def handle_query_stream(
 
     overrides = dict(project_settings.prompt_overrides)
     pipeline = get_pipeline(rag_mode, http_client, settings, overrides)
+    pipeline.llm_model = project_settings.llm_model or None
 
     answer_parts: list[str] = []
     captured_citations: list[dict] = []
@@ -133,10 +150,16 @@ async def _publish_query_completed(
     trace_id: str | None,
     latency_ms: int = 0,
     top_k: int = 20,
+    all_chunks: list[dict] | None = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    llm_model: str | None = None,
 ) -> None:
     try:
-        contexts = [c.snippet for c in result.citations]
-        token_count = len(result.answer.split())
+        # Use ALL chunks passed to LLM for faithfulness (not just cited ones)
+        contexts = [c.get("content", "") for c in (all_chunks or []) if c.get("content")]
+        if not contexts:
+            contexts = [c.snippet for c in result.citations]
         await publish(
             exchange_name="queries",
             routing_key="query.completed",
@@ -148,10 +171,15 @@ async def _publish_query_completed(
                 "rag_mode": result.rag_mode,
                 "citations": [c.model_dump() for c in result.citations],
                 "latency_ms": latency_ms,
-                "token_count": token_count,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "token_count": input_tokens + output_tokens,
                 "contexts": contexts,
+                "retrieved_filenames": result.retrieved_filenames,
                 "top_k": top_k,
                 "gold_answer": request.gold_answer,
+                "gold_context_titles": request.gold_context_titles,
+                "llm_model": llm_model,
             },
             trace_id=trace_id,
         )

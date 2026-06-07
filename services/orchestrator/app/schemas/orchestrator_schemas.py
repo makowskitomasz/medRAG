@@ -11,6 +11,7 @@ class QueryRequest(BaseModel):
     stream: bool = False
     gold_answer: str | None = None
     rag_mode_override: str | None = None
+    gold_context_titles: list[str] = Field(default_factory=list)
 
 
 class Citation(BaseModel):
@@ -27,6 +28,7 @@ class QueryResponse(BaseModel):
     citations: list[Citation]
     rag_mode: str
     abstained: bool = False
+    retrieved_filenames: list[str] = Field(default_factory=list)
 
 
 class ConversationMessage(BaseModel):

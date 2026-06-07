@@ -7,7 +7,7 @@ from app.schemas.orchestrator_schemas import QueryResponse
 
 logger = get_logger(__name__)
 
-_GROUNDING_THRESHOLD = 0.5
+_GROUNDING_THRESHOLD = 0.3
 _ABSTENTION_RETRY_SCORE = 0.3
 
 _ROUTE_TO_MODE = {
@@ -26,12 +26,11 @@ class RareRagPipeline(RagPipeline):
     async def _triage(self, query: str) -> str:
         """Returns the routed rag_mode string."""
         try:
-            resp = await self.http.post(
+            data = await self._tracked_post(
                 f"{self.settings.query_processor_url}/triage",
-                json={"query": query},
+                {"query": query},
             )
-            resp.raise_for_status()
-            route = resp.json().get("route", "vanilla")
+            route = data.get("route", "vanilla")
             return _ROUTE_TO_MODE.get(route, "vanilla")
         except Exception as exc:
             logger.warning("rare_rag triage failed, defaulting to vanilla", error=str(exc))
@@ -47,7 +46,9 @@ class RareRagPipeline(RagPipeline):
             rag_mode_enum = RagMode(mode)
         except ValueError:
             rag_mode_enum = RagMode.VANILLA
-        return get_pipeline(rag_mode_enum, self.http, self.settings)
+        sub = get_pipeline(rag_mode_enum, self.http, self.settings, self.prompt_overrides)
+        sub.llm_model = self.llm_model
+        return sub
 
     async def _run_with_grounding(
         self,
@@ -72,9 +73,12 @@ class RareRagPipeline(RagPipeline):
             alpha=alpha,
             rerank_top_n=rerank_top_n,
         )
+        # Propagate chunks and token usage from sub-pipeline
+        self._last_chunks = pipeline._last_chunks
+        self._last_input_tokens += pipeline._last_input_tokens
+        self._last_output_tokens += pipeline._last_output_tokens
 
-        chunks = await self._retrieve(query, project_id, top_k, alpha)
-        score = await self._evaluate_answer(query, response.answer, chunks)
+        score = await self._evaluate_answer(query, response.answer, self._last_chunks or [])
         return response, score
 
     async def run(

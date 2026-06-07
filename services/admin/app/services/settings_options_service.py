@@ -113,6 +113,11 @@ _LLM_MODELS: list[EnumOption] = [
         label="GPT-OSS 120B",
         description="OpenAI open-source 120B model.",
     ),
+    EnumOption(
+        value="openai/gpt-5-nano",
+        label="GPT-5 Nano",
+        description="OpenAI GPT-5 Nano — ultra-fast, minimal cost.",
+    ),
 ]
 
 _EMBEDDING_PROVIDERS: list[EnumOption] = [

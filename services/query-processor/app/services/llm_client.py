@@ -20,7 +20,10 @@ def get_instructor_client(base_url: str, api_key: str) -> instructor.AsyncInstru
     return _instructor_client
 
 
-async def chat_complete(client: AsyncOpenAI, model: str, system: str, user: str) -> str:
+async def chat_complete(
+    client: AsyncOpenAI, model: str, system: str, user: str
+) -> tuple[str, int, int]:
+    """Returns (text, input_tokens, output_tokens)."""
     response = await client.chat.completions.create(
         model=model,
         messages=[
@@ -28,4 +31,9 @@ async def chat_complete(client: AsyncOpenAI, model: str, system: str, user: str)
             {"role": "user", "content": user},
         ],
     )
-    return response.choices[0].message.content or ""
+    usage = response.usage
+    return (
+        response.choices[0].message.content or "",
+        usage.prompt_tokens if usage else 0,
+        usage.completion_tokens if usage else 0,
+    )

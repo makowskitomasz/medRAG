@@ -42,8 +42,19 @@ async def rewrite(
     cfg: Settings = Depends(get_settings),
     client: AsyncOpenAI = Depends(get_client),
 ) -> QueryRewriteResponse:
-    rewritten = await rewrite_query(request.query, request.context, client, cfg.llm_model)
-    return QueryRewriteResponse(original_query=request.query, rewritten_query=rewritten)
+    rewritten, inp, out = await rewrite_query(
+        request.query,
+        request.context,
+        client,
+        request.llm_model or cfg.llm_model,
+        request.prompt_overrides,
+    )
+    return QueryRewriteResponse(
+        original_query=request.query,
+        rewritten_query=rewritten,
+        input_tokens=inp,
+        output_tokens=out,
+    )
 
 
 @router.post("/hyde", response_model=HyDEResponse)
@@ -52,8 +63,15 @@ async def hyde(
     cfg: Settings = Depends(get_settings),
     client: AsyncOpenAI = Depends(get_client),
 ) -> HyDEResponse:
-    doc = await generate_hypothetical_document(request.query, client, cfg.llm_model)
-    return HyDEResponse(query=request.query, hypothetical_document=doc)
+    doc, inp, out = await generate_hypothetical_document(
+        request.query, client, request.llm_model or cfg.llm_model, request.prompt_overrides
+    )
+    return HyDEResponse(
+        query=request.query,
+        hypothetical_document=doc,
+        input_tokens=inp,
+        output_tokens=out,
+    )
 
 
 @router.post("/decompose", response_model=DecomposeResponse)
@@ -62,8 +80,18 @@ async def decompose(
     cfg: Settings = Depends(get_settings),
     iclient: instructor.AsyncInstructor = Depends(get_iclient),
 ) -> DecomposeResponse:
-    sub_questions = await decompose_query(request.query, iclient, cfg.llm_model)
-    return DecomposeResponse(original_query=request.query, sub_questions=sub_questions)
+    sub_questions, inp, out = await decompose_query(
+        request.query,
+        iclient,
+        request.llm_model or cfg.llm_model,
+        prompt_overrides=request.prompt_overrides,
+    )
+    return DecomposeResponse(
+        original_query=request.query,
+        sub_questions=sub_questions,
+        input_tokens=inp,
+        output_tokens=out,
+    )
 
 
 @router.post("/triage", response_model=TriageResponse)
@@ -72,9 +100,13 @@ async def triage(
     cfg: Settings = Depends(get_settings),
     iclient: instructor.AsyncInstructor = Depends(get_iclient),
 ) -> TriageResponse:
-    result = await triage_query(request.query, iclient, cfg.llm_model)
+    result = await triage_query(
+        request.query, iclient, request.llm_model or cfg.llm_model, request.prompt_overrides
+    )
     return TriageResponse(
         complexity=result["complexity"],
         conflict_risk=result["conflict_risk"],
         route=result["route"],
+        input_tokens=result.get("input_tokens", 0),
+        output_tokens=result.get("output_tokens", 0),
     )

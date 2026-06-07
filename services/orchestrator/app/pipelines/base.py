@@ -17,6 +17,10 @@ class RagPipeline(ABC):
         self.http = http_client
         self.settings = settings
         self.prompt_overrides: dict[str, str] = prompt_overrides or {}
+        self.llm_model: str | None = None
+        self._last_chunks: list[dict] = []  # all reranked chunks passed to LLM
+        self._last_input_tokens: int = 0
+        self._last_output_tokens: int = 0
 
     @abstractmethod
     async def run(
@@ -106,29 +110,51 @@ class RagPipeline(ABC):
     async def _generate(
         self, query: str, chunks: list[dict], history: list[dict]
     ) -> tuple[str, list[Citation]]:
-        payload = {
+        self._last_chunks = chunks  # capture for eval contexts
+        payload: dict = {
             "query": query,
             "chunks": chunks,
             "conversation_history": history,
             "prompt_overrides": self.prompt_overrides,
         }
+        if self.llm_model:
+            payload["llm_model"] = self.llm_model
         resp = await self.http.post(f"{self.settings.generation_url}/generate", json=payload)
         resp.raise_for_status()
         data = resp.json()
         citations = [Citation(**c) for c in data.get("citations", [])]
+        self._last_input_tokens += data.get("input_tokens", 0)
+        self._last_output_tokens += data.get("output_tokens", 0)
         return data["answer"], citations
+
+    async def _tracked_post(self, url: str, payload: dict) -> dict:
+        """HTTP POST that automatically accumulates LLM token usage from the response."""
+        extra: dict = {}
+        if self.llm_model:
+            extra["llm_model"] = self.llm_model
+        if self.prompt_overrides:
+            extra["prompt_overrides"] = self.prompt_overrides
+        if extra:
+            payload = {**payload, **extra}
+        resp = await self.http.post(url, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        self._last_input_tokens += data.get("input_tokens", 0)
+        self._last_output_tokens += data.get("output_tokens", 0)
+        return data
 
     async def _evaluate_answer(self, query: str, answer: str, chunks: list[dict]) -> float:
         """Ask generation service to score answer sufficiency (0.0–1.0)."""
-        payload = {
+        payload: dict = {
             "query": query,
             "answer": answer,
             "chunks": chunks,
             "prompt_overrides": self.prompt_overrides,
         }
-        resp = await self.http.post(f"{self.settings.generation_url}/evaluate", json=payload)
-        resp.raise_for_status()
-        return float(resp.json().get("score", 1.0))
+        if self.llm_model:
+            payload["llm_model"] = self.llm_model
+        data = await self._tracked_post(f"{self.settings.generation_url}/evaluate", payload)
+        return float(data.get("score", 1.0))
 
     async def _stream_generation(
         self,
@@ -138,12 +164,14 @@ class RagPipeline(ABC):
         conversation_id: str,
         rag_mode: str,
     ) -> AsyncGenerator[str, None]:
-        payload = {
+        payload: dict = {
             "query": query,
             "chunks": chunks,
             "conversation_history": conversation_history,
             "prompt_overrides": self.prompt_overrides,
         }
+        if self.llm_model:
+            payload["llm_model"] = self.llm_model
         url = f"{self.settings.generation_url}/generate/stream"
 
         async with self.http.stream("POST", url, json=payload) as resp:

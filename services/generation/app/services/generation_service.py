@@ -8,6 +8,8 @@ from app.schemas.generation_schemas import (
     ConflictDetectionRequest,
     ConflictDetectionResult,
     ContextChunk,
+    CorrectnessRequest,
+    CorrectnessResult,
     EvaluationRequest,
     EvaluationResult,
     GenerationRequest,
@@ -19,8 +21,10 @@ from app.services.prompt_loader import render
 
 _MAX_RETRIES = 2
 
+_STRUCTURED_OUTPUTS_MODELS = {"openai/gpt-oss-120b"}
+
 _raw_client: AsyncOpenAI | None = None
-_instructor_client: instructor.AsyncInstructor | None = None
+_instructor_clients: dict[instructor.Mode, instructor.AsyncInstructor] = {}
 
 
 def get_llm_client(base_url: str, api_key: str) -> AsyncOpenAI:
@@ -30,14 +34,18 @@ def get_llm_client(base_url: str, api_key: str) -> AsyncOpenAI:
     return _raw_client
 
 
-def get_instructor_client(base_url: str, api_key: str) -> instructor.AsyncInstructor:
-    global _instructor_client
-    if _instructor_client is None:
+def get_instructor_client(
+    base_url: str, api_key: str, model: str = ""
+) -> instructor.AsyncInstructor:
+    mode = (
+        instructor.Mode.OPENROUTER_STRUCTURED_OUTPUTS
+        if model in _STRUCTURED_OUTPUTS_MODELS
+        else instructor.Mode.JSON
+    )
+    if mode not in _instructor_clients:
         raw = get_llm_client(base_url, api_key)
-        _instructor_client = instructor.from_openai(
-            raw, mode=instructor.Mode.OPENROUTER_STRUCTURED_OUTPUTS
-        )
-    return _instructor_client
+        _instructor_clients[mode] = instructor.from_openai(raw, mode=mode)
+    return _instructor_clients[mode]
 
 
 async def generate(
@@ -58,7 +66,13 @@ async def generate(
     )
     answer = response.choices[0].message.content or ""
     citations = extract_citations(answer, request.chunks)
-    return GenerationResult(answer=answer, citations=citations)
+    usage = response.usage
+    return GenerationResult(
+        answer=answer,
+        citations=citations,
+        input_tokens=usage.prompt_tokens if usage else 0,
+        output_tokens=usage.completion_tokens if usage else 0,
+    )
 
 
 async def generate_stream(
@@ -110,7 +124,7 @@ async def evaluate_answer(
         strict_mode=False,
     )
     context = _format_context(request.chunks)
-    return await client.chat.completions.create(
+    result, completion = await client.chat.completions.create_with_completion(
         model=model,
         messages=[
             {"role": "system", "content": system},
@@ -124,6 +138,10 @@ async def evaluate_answer(
         response_model=EvaluationResult,
         max_retries=_MAX_RETRIES,
     )
+    usage = completion.usage
+    result.input_tokens = usage.prompt_tokens if usage else 0
+    result.output_tokens = usage.completion_tokens if usage else 0
+    return result
 
 
 async def detect_conflict(
@@ -137,7 +155,7 @@ async def detect_conflict(
         topic_hint=None,
     )
     context = _format_context(request.chunks)
-    return await client.chat.completions.create(
+    result, completion = await client.chat.completions.create_with_completion(
         model=model,
         messages=[
             {"role": "system", "content": system},
@@ -149,3 +167,35 @@ async def detect_conflict(
         response_model=ConflictDetectionResult,
         max_retries=_MAX_RETRIES,
     )
+    usage = completion.usage
+    result.input_tokens = usage.prompt_tokens if usage else 0
+    result.output_tokens = usage.completion_tokens if usage else 0
+    return result
+
+
+async def assess_correctness(
+    request: CorrectnessRequest,
+    client: instructor.AsyncInstructor,
+    model: str,
+) -> CorrectnessResult:
+    system = render("correctness_system.j2")
+    result, completion = await client.chat.completions.create_with_completion(
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": (
+                    f"Question: {request.query}\n\n"
+                    f"Gold answer: {request.gold_answer}\n\n"
+                    f"Generated answer: {request.answer}"
+                ),
+            },
+        ],
+        response_model=CorrectnessResult,
+        max_retries=_MAX_RETRIES,
+    )
+    usage = completion.usage
+    result.input_tokens = usage.prompt_tokens if usage else 0
+    result.output_tokens = usage.completion_tokens if usage else 0
+    return result
