@@ -18,70 +18,75 @@ related work in clinical decision support.
 % ------------------------------------------------------------------
 \begin{figure}[htbp]
 \centering
+% resizebox ensures it never overflows the text width
+\resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
   font=\small,
   year/.style={
     rectangle, rounded corners=3pt,
-    fill=gray!20, draw=gray!60,
-    minimum width=1.0cm, minimum height=0.55cm,
+    fill=gray!20, draw=gray!50,
+    minimum width=1.1cm, minimum height=0.6cm,
     align=center, font=\bfseries\small
   },
-  above item/.style={
-    rectangle, rounded corners=2pt,
-    fill=blue!12, draw=blue!35,
-    text width=2.7cm, align=center,
-    minimum height=0.5cm, font=\footnotesize
+  aitem/.style={   % architecture / generation papers — blue
+    rectangle, rounded corners=3pt,
+    fill=blue!10, draw=blue!40,
+    text width=2.4cm, minimum height=0.65cm,
+    align=center, font=\footnotesize
   },
-  below item/.style={
-    rectangle, rounded corners=2pt,
-    fill=teal!12, draw=teal!35,
-    text width=2.7cm, align=center,
-    minimum height=0.5cm, font=\footnotesize
+  bitem/.style={   % retrieval / evaluation papers — teal
+    rectangle, rounded corners=3pt,
+    fill=teal!10, draw=teal!40,
+    text width=2.4cm, minimum height=0.65cm,
+    align=center, font=\footnotesize
   },
-  tick/.style={gray!60, line width=0.4pt}
+  tick/.style={gray!50, line width=0.5pt},
+  conn/.style={line width=0.5pt}
 ]
 
-% Main axis
-\draw[-{Stealth[length=5pt]}, line width=1.2pt, gray!70]
-  (0,0) -- (13.8,0) node[right, font=\small\bfseries, gray!70] {};
+% ---- axis (15 cm total, years evenly spaced at 2.14 cm) ----
+\draw[-{Stealth[length=6pt]}, line width=1.2pt, gray!60]
+  (-0.3, 0) -- (15.2, 0);
 
-% Year positions: 2020=0, 2021=2.3, 2022=4.6, 2023=6.9, 2024=9.2, 2025=11.5, 2026=13.5
-\foreach \x/\yr in {0/2020, 2.3/2021, 4.6/2022, 6.9/2023, 9.2/2024, 11.5/2025, 13.5/2026}{
-  \draw[tick] (\x, -0.25) -- (\x, 0.25);
+\foreach \x/\yr in {0/2020, 2.14/2021, 4.28/2022, 6.42/2023, 8.56/2024, 10.70/2025, 13.50/2026}{
+  \draw[tick] (\x,-0.3) -- (\x,0.3);
   \node[year] at (\x, 0) {\yr};
 }
 
-% ABOVE axis items (odd ones, to avoid overlap)
-\node[above item] (rag)    at (0,   1.5)  {RAG\\{\tiny Lewis et al.}};
-\node[above item] (dpr)    at (0,   2.55) {DPR\\{\tiny Karpukhin et al.}};
-\node[above item] (hyde)   at (4.6, 1.5)  {HyDE\\{\tiny Gao et al.}};
-\node[above item] (selfrag) at (6.9, 1.5) {Self-RAG\\{\tiny Asai et al.}};
-\node[above item] (graphrag) at (9.2,1.5) {GraphRAG\\{\tiny Edge et al.}};
-\node[above item] (raptor) at (9.2, 2.55) {RAPTOR\\{\tiny Sarthi et al.}};
-\node[above item] (chain)  at (11.5,1.5)  {Chain-of-Retr.\\{\tiny Wang et al.}};
-\node[above item] (arag)   at (13.5,1.5)  {A-RAG\\{\tiny Du et al.}};
+% ---- ABOVE axis: architecture / generation papers ----
+% 2020: RAG (lower) + DPR (upper)
+\node[aitem] (rag)      at (0,    1.4)  {RAG\\{\tiny Lewis et al.}};
+\node[aitem] (dpr)      at (0,    2.45) {DPR\\{\tiny Karpukhin et al.}};
+% 2022: HyDE
+\node[aitem] (hyde)     at (4.28, 1.4)  {HyDE\\{\tiny Gao et al.}};
+% 2023: Self-RAG
+\node[aitem] (selfrag)  at (6.42, 1.4)  {Self-RAG\\{\tiny Asai et al.}};
+% 2024: GraphRAG (lower) + RAPTOR (upper)
+\node[aitem] (graphrag) at (8.56, 1.4)  {GraphRAG\\{\tiny Edge et al.}};
+\node[aitem] (raptor)   at (8.56, 2.45) {RAPTOR\\{\tiny Sarthi et al.}};
+% 2025: Chain-of-Retrieval
+\node[aitem] (chain)    at (10.70,1.4)  {Chain-of-Retr.\\{\tiny Wang et al.}};
+% 2026: A-RAG
+\node[aitem] (arag)     at (13.50,1.4)  {A-RAG\\{\tiny Du et al.}};
 
-% BELOW axis items
-\node[below item] (colbert)  at (0,  -1.5)  {ColBERT\\{\tiny Khattab \& Zaharia}};
-\node[below item] (beir)     at (2.3,-1.5)  {BEIR\\{\tiny Thakur et al.}};
-\node[below item] (colbertv2) at (4.6,-1.5) {ColBERTv2\\{\tiny Santhanam et al.}};
-\node[below item] (ragas)    at (6.9,-1.5)  {RAGAS\\{\tiny Es et al.}};
-\node[below item] (crag)     at (9.2,-1.5)  {Corr. RAG\\{\tiny Yan et al.}};
-\node[below item] (agentic)  at (11.5,-1.5) {Agentic RAG\\{\tiny Singh et al.}};
-\node[below item] (rarerag)  at (13.5,-1.5) {\textbf{RARE-RAG}\\{\tiny this work}};
+% ---- BELOW axis: retrieval models + eval frameworks ----
+\node[bitem] (colbert)   at (0,    -1.4) {ColBERT\\{\tiny Khattab \& Zaharia}};
+\node[bitem] (beir)      at (2.14, -1.4) {BEIR\\{\tiny Thakur et al.}};
+\node[bitem] (colbertv2) at (4.28, -1.4) {ColBERTv2\\{\tiny Santhanam et al.}};
+\node[bitem] (ragas)     at (6.42, -1.4) {RAGAS\\{\tiny Es et al.}};
+\node[bitem] (crag)      at (8.56, -1.4) {Corr.\ RAG\\{\tiny Yan et al.}};
+\node[bitem] (agentic)   at (10.70,-1.4) {Agentic RAG\\{\tiny Singh et al.}};
+\node[bitem] (rarerag)   at (13.50,-1.4) {\textbf{RARE-RAG}\\{\tiny this work}};
 
-% Connector lines (above)
-\foreach \n/\x in {rag/0, dpr/0, hyde/4.6, selfrag/6.9, graphrag/9.2, raptor/9.2, chain/11.5, arag/13.5}{
-  \draw[blue!40, line width=0.6pt] (\x, 0.25) -- (\n.south);
-}
-% Connector lines (below)
-\foreach \n/\x in {colbert/0, beir/2.3, colbertv2/4.6, ragas/6.9, crag/9.2, agentic/11.5, rarerag/13.5}{
-  \draw[teal!50, line width=0.6pt] (\x,-0.25) -- (\n.north);
-}
+% ---- connectors: tick → node ----
+\foreach \n/\x in {rag/0, dpr/0, hyde/4.28, selfrag/6.42, graphrag/8.56, raptor/8.56, chain/10.70, arag/13.50}
+  \draw[conn, blue!35]  (\x, 0.3) -- (\n.south);
+\foreach \n/\x in {colbert/0, beir/2.14, colbertv2/4.28, ragas/6.42, crag/8.56, agentic/10.70, rarerag/13.50}
+  \draw[conn, teal!45] (\x,-0.3) -- (\n.north);
 
-\end{tikzpicture}
+\end{tikzpicture}}% end resizebox
 \caption{Timeline of key RAG-related publications (2020--2026).
-  Items \emph{above} the axis are generation/architecture papers (blue);
+  Items \emph{above} the axis are generation and architecture papers (blue);
   items \emph{below} are retrieval models and evaluation frameworks (teal).}
 \label{fig:rag_timeline}
 \end{figure}
@@ -487,70 +492,122 @@ Figure~\ref{fig:selfrag} illustrates the decision flow introduced by these token
 \centering
 \begin{tikzpicture}[
   font=\small,
-  startstop/.style={
-    ellipse, draw, thick,
-    minimum width=2.2cm, minimum height=0.8cm,
-    fill=blue!10, draw=blue!50, align=center
-  },
-  process/.style={
-    rectangle, rounded corners=3pt, draw, thick,
-    minimum width=2.8cm, minimum height=0.8cm,
-    fill=blue!8, draw=blue!40, align=center
-  },
-  decision/.style={
-    diamond, draw, thick, aspect=2.2,
-    minimum width=3.4cm, minimum height=0.8cm,
-    fill=orange!10, draw=orange!50, align=center,
-    inner sep=2pt
-  },
-  output/.style={
-    rectangle, rounded corners=3pt, draw, thick,
-    minimum width=2.8cm, minimum height=0.8cm,
-    fill=green!10, draw=green!50, align=center
-  },
-  discard/.style={
-    rectangle, rounded corners=3pt, draw, thick,
-    minimum width=2.4cm, minimum height=0.7cm,
-    fill=red!8, draw=red!30, align=center, font=\footnotesize
-  },
-  arr/.style={-{Stealth[length=5pt]}, thick},
-  lbl/.style={font=\footnotesize, fill=white, inner sep=1pt}
+  % ---- node styles ----
+  start/.style ={ellipse, draw=blue!55, fill=blue!8,  thick,
+                 minimum width=2.6cm, minimum height=0.85cm, align=center},
+  proc/.style  ={rectangle, rounded corners=4pt,
+                 draw=blue!50, fill=blue!8, thick,
+                 minimum width=3.0cm, minimum height=0.9cm, align=center},
+  dec/.style   ={diamond, draw=orange!65, fill=orange!8, thick,
+                 aspect=3.0, minimum width=3.6cm, minimum height=0.9cm,
+                 align=center, inner sep=0pt},
+  outbox/.style={rectangle, rounded corners=4pt,
+                 draw=green!55, fill=green!10, thick,
+                 minimum width=3.0cm, minimum height=0.9cm, align=center},
+  side/.style  ={rectangle, rounded corners=3pt,
+                 draw=red!45, fill=red!6, thick,
+                 minimum width=2.8cm, minimum height=0.8cm,
+                 align=center, font=\footnotesize},
+  % ---- arrow / label styles ----
+  arr/.style={-{Stealth[length=5pt]}, thick, black!70},
+  lbl/.style={font=\footnotesize, fill=white, inner sep=1.5pt}
 ]
 
-% ---- nodes (column layout) ----
-\node[startstop]  (q)       at (0,   0)    {Query $q$};
-\node[decision]   (ret)     at (0,  -1.8)  {\texttt{[Retrieve?]}};
-\node[process]    (retr)    at (3.5,-1.8)  {Retrieve\\passages};
-\node[decision]   (isrel)   at (3.5,-3.5)  {\texttt{[IsRel?]}};
-\node[discard]    (disc)    at (6.5,-3.5)  {Discard\\passage};
-\node[process]    (gen)     at (0,  -5.2)  {Generate\\segment};
-\node[decision]   (issup)   at (0,  -7.0)  {\texttt{[IsSup?]}};
-\node[decision]   (isuse)   at (0,  -8.8)  {\texttt{[IsUse?]}};
-\node[output]     (ans)     at (0, -10.5)  {Final answer $a$};
-\node[discard]    (regen)   at (3.5,-7.0)  {Regenerate\\segment};
+% ================================================================
+%  NODE PLACEMENT
+%  Left column  x = 0  : main happy-path (top → bottom)
+%  Right column x = 6  : retrieval sub-flow
+%  Far right    x = 10 : discard exit
+%  Left loop    x = -3 : "no" bypass
+%  Far-left loop x= -4.5 : "not useful" feedback
+% ================================================================
 
-% ---- arrows ----
-\draw[arr] (q)     -- (ret);
-\draw[arr] (ret)   -- node[lbl, above]{yes} (retr);
-\draw[arr] (ret)   -- node[lbl, right]{no} (gen);   % straight down
-\draw[arr] (retr)  -- (isrel);
-\draw[arr] (isrel) -- node[lbl, above]{not rel.} (disc);
-\draw[arr] (isrel) -- node[lbl, right]{relevant} ++(0,-1.2)
-              -| node[lbl]{} (gen);
-\draw[arr] (gen)   -- (issup);
-\draw[arr] (issup) -- node[lbl, above]{not sup.} (regen);
-\draw[arr] (regen) -- ++(0, 0.8) -| (gen);   % loop back
-\draw[arr] (issup) -- node[lbl, right]{supported} (isuse);
-\draw[arr] (isuse) -- node[lbl, right]{useful} (ans);
-\draw[arr] (isuse) -| node[lbl, above=4pt]{not useful} ++(3.2,0)
-              |- (ret);   % loop back to top
+% -- Left column --
+\node[start] (q)     at ( 0,    0  ) {Query $q$};
+\node[dec]   (retd)  at ( 0,  -2.2 ) {\texttt{[Retrieve?]}};
+\node[proc]  (gen)   at ( 0,  -6.5 ) {Generate\\segment};
+\node[dec]   (issup) at ( 0,  -8.7 ) {\texttt{[IsSup?]}};
+\node[dec]   (isuse) at ( 0, -10.9 ) {\texttt{[IsUse?]}};
+\node[outbox] (ans)   at ( 0, -13.0 ) {Final answer $a$};
+
+% -- Right column --
+\node[proc]  (retr)  at ( 6,  -2.2 ) {Retrieve\\passages};
+\node[dec]   (isrel) at ( 6,  -4.5 ) {\texttt{[IsRel?]}};
+\node[side]  (disc)  at (10,  -4.5 ) {Discard\\passage};
+\node[side]  (regen) at ( 6,  -8.7 ) {Regenerate\\segment};
+
+% ================================================================
+%  ARROWS  — each path is routed to avoid any crossing
+% ================================================================
+
+% 1. q → retd  (straight down, x=0)
+\draw[arr] (q) -- (retd);
+
+% 2. retd --yes→ retr  (straight right at y=-2.2)
+\draw[arr] (retd.east) -- node[lbl, above=2pt]{yes} (retr.west);
+
+% 3. retd --no→ gen.west  (LEFT bypass: go left to x=-3, down, then right into gen.west)
+%    Path stays entirely left of x=0, never crosses the right-column paths.
+\draw[arr] (retd.west)
+    -- ++(-1.8, 0)          % horizontal left  → (-1.8, -2.2)
+    -- ++(0,   -4.3)        % vertical down    → (-1.8, -6.5)
+    -- (gen.west)           % horizontal right → gen.west
+    node[lbl, pos=0.08, above=2pt]{no};
+
+% 4. retr → isrel  (straight down at x=6)
+\draw[arr] (retr) -- (isrel);
+
+% 5. isrel --not rel.→ disc  (straight right at y=-4.5)
+\draw[arr] (isrel.east) -- node[lbl, above=2pt]{not rel.} (disc.west);
+
+% 6. isrel --relevant→ gen.north
+%    Exit isrel.west → go left to x=0 → descend to gen.north
+%    The vertical segment at x=0 (y: -4.5 → -6.05) is clear:
+%    q→retd occupies only y=0 to -1.8, and "no" left-bypass is at x=-1.8.
+\draw[arr] (isrel.west)
+    -- ++(-6, 0)            % horizontal left  → (0, -4.5)
+    -- (gen.north)          % vertical down    → gen.north (0, -6.05)
+    node[lbl, pos=0.35, above=2pt]{relevant};
+
+% 7. gen → issup  (straight down, x=0)
+\draw[arr] (gen) -- (issup);
+
+% 8. issup --not sup.→ regen  (straight right)
+\draw[arr] (issup.east) -- node[lbl, above=2pt]{not sup.} (regen.west);
+
+% 9. regen --retry→ gen.east
+%    Exit regen.east → far right (x=8.5) → up to y=-6.5 → left into gen.east.
+%    Horizontal at y=-6.5 runs x=8.5→1.5, well clear of "relevant" (x=0, y=-4.5→-6.05)
+%    and of "no" bypass (x=-1.8).
+\draw[arr] (regen.east)
+    -- ++(2.5, 0)           % right  → (8.5, -8.7)
+    -- ++(0,   2.2)         % up     → (8.5, -6.5)
+    -- (gen.east)           % left   → gen.east (1.5, -6.5)
+    node[lbl, pos=0.5, above=2pt]{retry};
+
+% 10. issup --supported→ isuse  (straight down, x=0)
+\draw[arr] (issup) -- node[lbl, right=3pt]{supported} (isuse);
+
+% 11. isuse --useful→ ans  (straight down, x=0)
+\draw[arr] (isuse) -- node[lbl, right=3pt]{useful} (ans);
+
+% 12. isuse --not useful→ retd
+%     Exit isuse.west → far left (x=-4.5) → up → right → retd.west.
+%     Stays to the LEFT of the "no" bypass (x=-1.8) at all times.
+\draw[arr] (isuse.west)
+    -- ++(-3.3, 0)          % left  → (-3.3, -10.9)
+    -- ++(0,    9.4)        % up    → (-3.3,  -1.5)
+    -- ++(2.1,  0)          % right → (-1.2,  -1.5)
+    -- (retd.west)          % down  → retd.west (-1.2, -2.2)
+    node[lbl, pos=0.07, below=2pt]{not useful};
 
 \end{tikzpicture}
-\caption{Self-RAG decision flow.
+\caption{Self-RAG decision flow~\cite{asai2023selfrag}.
   Reflection tokens (\texttt{[Retrieve?]}, \texttt{[IsRel?]}, \texttt{[IsSup?]},
   \texttt{[IsUse?]}) are generated by the model itself at each step, controlling
-  when to retrieve, which passages to keep, and whether to regenerate unsupported
-  segments.}
+  when to retrieve, which passages to use, and whether to regenerate unsupported
+  segments. The ``no'' bypass (left side) and ``not useful'' feedback loop (far left)
+  are routed to avoid crossing the retrieval sub-flow on the right.}
 \label{fig:selfrag}
 \end{figure}
 
@@ -901,34 +958,45 @@ than a plausible-sounding but unverified response.
   \draw[gray!15, dashed] (0, \y) -- (10.2, \y);
 }
 
+% ---- bubbles with carefully separated labels ----
+% Vanilla RAG  — left, label to the right to stay inside plot
 \node[dot, fill=blue!20,   draw=blue!60]   (van)   at (1.2, 1.2) {};
-\node[font=\footnotesize, above=3pt]  at (van)   {Vanilla RAG};
+\node[font=\footnotesize, right=4pt]  at (van)   {Vanilla RAG};
 
-\node[dot, fill=cyan!20,   draw=cyan!60]   (hyde)  at (3.0, 1.5) {};
-\node[font=\footnotesize, above=3pt]  at (hyde)  {HyDE};
+% HyDE — label above
+\node[dot, fill=cyan!20,   draw=cyan!60]   (hyde)  at (3.0, 1.6) {};
+\node[font=\footnotesize, above=4pt]  at (hyde)  {HyDE};
 
+% Corrective RAG — label above
 \node[dot, fill=cyan!25,   draw=cyan!60]   (crag)  at (5.5, 2.0) {};
-\node[font=\footnotesize, above=3pt]  at (crag)  {Corr. RAG};
+\node[font=\footnotesize, above=4pt]  at (crag)  {Corr. RAG};
 
-\node[dot, fill=orange!25, draw=orange!60] (self)  at (5.0, 3.8) {};
-\node[font=\footnotesize, right=3pt]  at (self)  {Self-RAG};
+% Self-RAG — moved to (4.8, 3.5) so Pareto label has room below it
+\node[dot, fill=orange!25, draw=orange!60] (self)  at (4.8, 3.5) {};
+\node[font=\footnotesize, left=4pt]   at (self)  {Self-RAG};
 
-\node[dot, fill=purple!20, draw=purple!50] (graph) at (3.5, 4.5) {};
-\node[font=\footnotesize, left=3pt]   at (graph) {Graph RAG};
+% Graph RAG — label to the left
+\node[dot, fill=purple!20, draw=purple!50] (graph) at (3.2, 4.5) {};
+\node[font=\footnotesize, left=4pt]   at (graph) {Graph RAG};
 
-\node[dot, fill=teal!20,   draw=teal!60]   (iter)  at (6.0, 5.0) {};
-\node[font=\footnotesize, right=3pt]  at (iter)  {Iter. Multi-hop};
+% Iter. Multi-hop — label to the right
+\node[dot, fill=teal!20,   draw=teal!60]   (iter)  at (6.2, 5.2) {};
+\node[font=\footnotesize, right=4pt]  at (iter)  {Iter. Multi-hop};
 
-\node[dot, fill=red!15,    draw=red!50]    (madam) at (7.5, 6.5) {};
-\node[font=\footnotesize, above=3pt]  at (madam) {MADAM-RAG};
+% MADAM-RAG — label above
+\node[dot, fill=red!15,    draw=red!50]    (madam) at (7.5, 6.8) {};
+\node[font=\footnotesize, above=4pt]  at (madam) {MADAM-RAG};
 
+% RARE-RAG — larger bubble, label above
 \node[dot, fill=green!25,  draw=green!60,
-      minimum size=0.78cm, line width=1.5pt] (rare) at (8.8, 5.8) {};
-\node[font=\footnotesize\bfseries, above=3pt] at (rare) {\rarerag{}};
+      minimum size=0.80cm, line width=1.5pt] (rare)  at (9.0, 5.6) {};
+\node[font=\footnotesize\bfseries, above=4pt] at (rare) {\rarerag{}};
 
+% Pareto frontier curve — positioned BELOW Self-RAG to avoid overlap
 \draw[green!50!black, thick, dashed, rounded corners=6pt]
-  (1.2,1.2) .. controls (3.8,2.2) and (6.2,4.0) .. (8.8,5.8);
-\node[font=\footnotesize, green!60!black, rotate=26] at (5.0, 3.2)
+  (1.2,1.2) .. controls (3.5,2.0) and (6.5,4.2) .. (9.0,5.6);
+% Label placed at a clear gap between CRAG and Self-RAG
+\node[font=\footnotesize, green!60!black, rotate=24] at (4.8, 2.5)
   {Pareto frontier};
 
 \end{tikzpicture}
