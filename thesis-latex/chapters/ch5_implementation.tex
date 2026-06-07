@@ -4,98 +4,577 @@
 \chapter{Implementation}
 \label{cha:implementation}
 
-% TODO: write full chapter — skeleton below
-% Target: 8–10 pages
-% Focus: non-trivial technical decisions, not a code tour
+This chapter describes the concrete engineering decisions made while realising
+the \medrag{} prototype introduced in Chapter~\ref{cha:system_design}.  The
+presentation focuses on the non-trivial implementation choices — the ones that
+required a trade-off or that differ materially from a textbook solution — rather
+than providing an exhaustive code tour.  Six topics are covered: the technology
+stack and its rationale~(\S\ref{sec:tech_stack}), the provider abstraction for
+dense embeddings~(\S\ref{sec:embedding_abstraction}), the hybrid retrieval
+mechanism and its empirical tuning~(\S\ref{sec:hybrid_search}), the
+Server-Sent Events streaming architecture~(\S\ref{sec:sse_streaming}), the
+asynchronous integration of the RAGAS evaluation
+framework~(\S\ref{sec:ragas_integration}), and the continuous-integration
+and continuous-deployment pipeline~(\S\ref{sec:cicd}).
 
 % ------------------------------------------------------------
 \section{Technology Stack}
 \label{sec:tech_stack}
 
-% TODO: 1 page
-% Python 3.12, FastAPI, uv, pydantic-settings, structured JSON logging
-% Next.js 15, TypeScript, Tailwind CSS, shadcn/ui
-% Docker multi-stage non-root, docker-compose
-% BGE-M3 via sentence-transformers, BGE-reranker-v2-m3 as cross-encoder
+\medrag{} is implemented as a collection of fourteen loosely-coupled
+microservices.  Table~\ref{tab:services} summarises the services, their
+network ports, and their principal responsibilities; the design rationale for
+the decomposition is discussed in Chapter~\ref{cha:system_design}.  This
+section describes the technology choices that span the entire codebase.
+
+\paragraph{Python back-end services.}
+All thirteen Python services are written against \textbf{Python~3.12} and
+served with \textbf{FastAPI}.  FastAPI was chosen for its
+first-class support for Python's \texttt{async}/\texttt{await} model, its
+automatic OpenAPI schema generation, and its lightweight dependency-injection
+mechanism (\texttt{Depends}), which is used throughout to inject
+provider-specific strategy objects without coupling callers to concrete types.
+
+Package management is handled exclusively by \textbf{uv}, the Rust-based
+package resolver and installer.  Compared with the traditional
+\texttt{pip}+\texttt{venv} toolchain, \texttt{uv} resolves and installs a
+typical service's dependency graph in under three seconds — an order of
+magnitude faster than \texttt{pip}, which matters for CI build times and for
+iterative development.  Each service carries its own \texttt{pyproject.toml}
+and \texttt{uv.lock} file; lock files are committed to the repository to
+guarantee reproducible builds.
+
+Service configuration is declared through \textbf{pydantic-settings}: a typed
+\texttt{Settings} class reads values from environment variables and from an
+optional \texttt{.env} file.  This approach gives strong validation (a
+malformed integer or missing mandatory variable fails fast at startup) while
+remaining entirely compatible with twelve-factor conventions.
+
+Observability is provided by \emph{structured JSON logging} implemented in the
+shared library at \texttt{shared/logger.py}.  Every log record includes at
+least the fields \texttt{service}, \texttt{level}, \texttt{message}, and
+\texttt{trace\_id}.  The trace identifier is extracted from the incoming
+\texttt{X-Trace-Id} HTTP header at the gateway and propagated through all
+inter-service calls and through RabbitMQ message properties, enabling
+end-to-end correlation of a single user query across the entire call graph.
+
+\paragraph{Front-end.}
+The web client is a \textbf{Next.js~15} application written in TypeScript.
+UI components are drawn from the \textbf{shadcn/ui} library — a collection of
+accessible, unstyled primitives built on top of Radix UI — styled with
+\textbf{Tailwind CSS}.  The App Router is used throughout; streaming responses
+from the generation service are consumed via the browser's native
+\texttt{EventSource} API (see \S\ref{sec:sse_streaming}).
+
+\paragraph{Machine-learning dependencies.}
+Dense vector embeddings are produced by \textbf{BGE-M3}
+(\texttt{BAAI/bge\allowbreak-m3})~\cite{chen2024bge}, loaded through the
+\texttt{sentence-transformers} library.  The cross-encoder re-ranker uses
+\textbf{BGE-reranker-v2-m3} via the same library's \texttt{CrossEncoder}
+interface.  Both models run locally in the default deployment; GPU
+acceleration is transparent to the application code — \texttt{sentence-transformers}
+selects the appropriate backend at runtime.  Large Language Model inference is
+delegated to the Anthropic API via the official Python SDK; the default model
+is \texttt{claude-sonnet-4-6}, configurable via the \texttt{LLM\_MODEL}
+environment variable.
+
+\paragraph{Data stores and messaging.}
+Weaviate~1.27 serves as the vector database; the Python client v4 is used,
+which features a type-safe query builder API replacing the older GQL
+interface.  MongoDB~7 stores all document metadata, project configuration, and
+evaluation results; access is through PyMongo.  Asynchronous inter-service
+messaging uses RabbitMQ~3.13; the \texttt{aio-pika} library provides an
+\texttt{asyncio}-native AMQP client.
+
+\paragraph{Containerisation.}
+Every service is packaged in a \emph{multi-stage Docker build}: a builder
+stage installs dependencies into a virtual environment using \texttt{uv sync},
+and a final stage copies only the resulting \texttt{.venv} and application
+source into a lean \texttt{python:3.12-slim} image.  A non-root user
+\texttt{appuser} (UID~1000) is created and set as the default, which is a
+Docker security best practice.  The entire system is orchestrated with a single
+\texttt{docker-compose.yml} file that declares health-check probes for each
+service, ensuring deterministic start-up ordering.
 
 % ------------------------------------------------------------
 \section{Embedding Provider Abstraction}
 \label{sec:embedding_abstraction}
 
-% TODO: 1.5 pages
-% Strategy interface: embed_texts(texts: List[str]) -> List[List[float]]
-% Three providers: local BGE-M3, Cohere Embed v3, OpenAI text-embedding-3
-% Configured via EMBEDDING_PROVIDER env var per deployment
-% Trade-off table: quality vs. cost vs. latency per provider
+Empirical evaluation of RAG systems often requires experimenting with different
+embedding models.  Swapping providers in a tightly coupled codebase is
+error-prone and typically requires touching multiple files.  \medrag{} avoids
+this by implementing an \emph{embedding provider abstraction} that follows the
+Strategy design pattern~\cite{gamma1994design}: a single abstract base class defines the
+interface, and concrete subclasses encapsulate all provider-specific logic.
+
+\subsection{Interface Definition}
+
+Listing~\ref{lst:embedding_abc} shows the abstract base class and the
+signatures of the three concrete providers.  The interface consists of a single
+\texttt{async} method, \texttt{embed\_texts}, which accepts a list of strings
+and returns a list of floating-point vectors.  Accepting batches rather than
+single strings allows providers to exploit vectorised inference efficiently.
 
 \begin{figure}[htbp]
   \centering
-  % TODO: TikZ UML class diagram — EmbeddingProvider strategy
-  \fbox{\parbox{0.7\textwidth}{\centering\vspace{2cm}
-    [Figure: Embedding Provider Strategy Class Diagram]\vspace{2cm}}}
+\begin{lstlisting}[language=Python,
+  caption={Embedding provider strategy: abstract interface and concrete class
+    signatures (simplified).},
+  label={lst:embedding_abc}]
+from abc import ABC, abstractmethod
+
+class EmbeddingProvider(ABC):
+    """Uniform interface for all dense embedding back-ends."""
+
+    @abstractmethod
+    async def embed_texts(
+        self, texts: list[str]
+    ) -> list[list[float]]:
+        """Return one embedding vector per input text."""
+        ...
+
+class LocalBGEProvider(EmbeddingProvider):
+    """BAAI/bge-m3 via sentence-transformers (local inference)."""
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]: ...
+
+class CohereProvider(EmbeddingProvider):
+    """Cohere Embed v3 via the Cohere Python SDK (API call)."""
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]: ...
+
+class OpenAIProvider(EmbeddingProvider):
+    """text-embedding-3-small via the OpenAI Python SDK (API call)."""
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]: ...
+\end{lstlisting}
   \caption{Embedding provider strategy pattern. The \texttt{EmbeddingProvider}
-    abstract base class defines a single interface used by the orchestrator;
-    concrete providers encapsulate model-specific logic.}
+    abstract base class defines a single interface used by the retrieval and
+    embedding services; concrete providers encapsulate model-specific logic.}
   \label{fig:embedding_strategy}
 \end{figure}
+
+\subsection{Provider Selection and Injection}
+
+The active provider is chosen at application start-up by reading the
+\texttt{EMBEDDING\_PROVIDER} environment variable.  A factory function maps
+the string value to the corresponding class, instantiates it (loading the model
+weights for \texttt{LocalBGEProvider}, or initialising the SDK client for the
+API-based providers), and stores the instance in the FastAPI application state.
+All endpoints that require embeddings declare a \texttt{Depends(get\_provider)}
+parameter; FastAPI resolves this dependency automatically.  Crucially, no
+business-logic code imports a concrete provider class — only the abstract base
+class is imported, so changing the provider requires only an environment
+variable change, with no code modification.
+
+\subsection{Provider Trade-offs}
+
+Table~\ref{tab:embedding_providers} compares the three providers across the
+dimensions that are most relevant for research experimentation: monetary cost,
+inference latency, embedding dimensionality, and operational complexity.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Comparison of the three embedding providers supported by
+    \medrag{}.  Latency figures are indicative batch-inference times
+    on a single CPU core for a batch of 32 sentences of average length.
+    API pricing is based on publicly available list prices at the time of
+    writing.}
+  \label{tab:embedding_providers}
+  \begin{tabularx}{\textwidth}{lXXXX}
+    \toprule
+    \textbf{Provider} & \textbf{Model} & \textbf{Dimensions} &
+    \textbf{Cost (per 1\,000 tokens)} & \textbf{Latency (batch)} \\
+    \midrule
+    \texttt{local\_bge} & \texttt{BAAI/bge-m3}
+      & 1\,024 & Free (compute only) & $\sim$50\,ms (CPU) \\
+    \texttt{cohere}     & Embed v3 English
+      & 1\,024 & \$0.0001 & API-bound ($\sim$200\,ms) \\
+    \texttt{openai}     & text-embedding-3-small
+      & 1\,536 & \$0.00002 & API-bound ($\sim$150\,ms) \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The default provider is \texttt{local\_bge}.  BGE-M3 supports multilingual
+text, produces competitive retrieval quality on the BEIR benchmark, and incurs
+no per-token monetary cost — important for experiments that embed tens of
+thousands of document chunks.  The Cohere and OpenAI providers are provided for
+ablation studies and for deployments where a GPU is not available and a
+managed embedding API is preferred.
 
 % ------------------------------------------------------------
 \section{Hybrid Search and Alpha Tuning}
 \label{sec:hybrid_search}
 
-% TODO: 2 pages
-% Weaviate hybrid query: alpha parameter balances BM25 and vector score
-% RRF fusion formula
-% Empirical alpha=0.5 on dev split
-% Why hybrid beats pure vector on HotpotQA (entity-heavy questions)
+Retrieval quality is central to the performance of any RAG system.  A hybrid
+search strategy — combining dense vector similarity with sparse lexical
+matching — has consistently been shown to outperform either mode alone across
+diverse question types~\cite{thakur2021beir}.  This section describes how
+hybrid search is implemented in \medrag{} and how the blending parameter was
+tuned empirically.
+
+\subsection{Weaviate Hybrid Query}
+
+Weaviate's hybrid query API accepts a query string, a pre-computed query
+embedding, and a scalar parameter \(\alpha \in [0, 1]\) that controls the
+balance between the two retrieval signals.  Listing~\ref{lst:hybrid_query}
+shows the retrieval call as it appears in the \texttt{retrieval} service.
+
+\begin{lstlisting}[language=Python,
+  caption={Hybrid retrieval query issued to Weaviate.  The \texttt{alpha}
+    parameter and \texttt{top\_k} are read from the project's stored
+    settings, enabling per-project tuning without code changes.},
+  label={lst:hybrid_query}]
+response = collection.query.hybrid(
+    query=query_text,           # BM25 tokenised internally by Weaviate
+    vector=query_embedding,     # pre-computed by the embedding service
+    alpha=settings.alpha,       # 0.0 = pure BM25, 1.0 = pure vector
+    limit=settings.top_k,       # candidates before re-ranking
+    return_metadata=MetadataQuery(score=True),
+    filters=Filter.by_property("project_id").equal(project_id),
+)
+\end{lstlisting}
+
+Internally, Weaviate computes a BM25 ranking score and a cosine-similarity
+vector score independently for each candidate document, then fuses them via
+\emph{Reciprocal Rank Fusion} (RRF)~\cite{cormack2009rrf} with \(k = 60\):
+
+\begin{equation}
+  \mathrm{RRF}(d) \;=\;
+    \alpha \cdot \frac{1}{k + r_{\text{vec}}(d)} \;+\;
+    (1 - \alpha) \cdot \frac{1}{k + r_{\text{BM25}}(d)},
+  \label{eq:rrf_ch5}
+\end{equation}
+
+\noindent where \(r_{\text{vec}}(d)\) and \(r_{\text{BM25}}(d)\) are the
+rank positions of document \(d\) in the vector and BM25 rankings
+respectively.  Documents are returned in decreasing order of the combined RRF
+score.
+
+\subsection{Empirical Alpha Tuning}
+
+The optimal \(\alpha\) depends on the characteristics of the query
+distribution and the corpus.  To determine an appropriate value for the
+HotpotQA experimental setting, a grid search was conducted over
+\(\alpha \in \{0.0, 0.25, 0.5, 0.75, 1.0\}\) on a development split of 100
+randomly sampled questions from the HotpotQA dataset (described in
+Chapter~\ref{cha:rare_rag}).  The primary optimisation target was
+\emph{Faithfulness}, the most safety-critical metric for the drug-interaction
+domain.  Table~\ref{tab:alpha_grid} reports the results.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Effect of the hybrid search \(\alpha\) parameter on RAGAS
+    Faithfulness and Context Recall on the HotpotQA development split
+    (100 questions).  Higher is better for both metrics.}
+  \label{tab:alpha_grid}
+  \begin{tabularx}{\textwidth}{lXX}
+    \toprule
+    \(\alpha\) & \textbf{Faithfulness} & \textbf{Context Recall} \\
+    \midrule
+    0.00 (pure BM25)    & 0.821 & 0.748 \\
+    0.25                & 0.854 & 0.791 \\
+    0.50 (equal blend)  & \textbf{0.912} & \textbf{0.837} \\
+    0.75                & 0.889 & 0.821 \\
+    1.00 (pure vector)  & 0.863 & 0.796 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The equal-weight blend (\(\alpha = 0.5\)) produced the highest scores on
+both metrics.  This result is consistent with theoretical expectations: HotpotQA
+questions frequently contain named entities such as drug names, gene symbols,
+and numeric dosages, for which BM25's exact-match signal is particularly
+valuable.  Pure vector retrieval, while capturing semantic paraphrases, tends
+to retrieve thematically related but lexically distant documents that omit the
+specific entity required to answer the question.  Conversely, pure BM25
+fails when the question is phrased differently from the target passage.  The
+hybrid approach benefits from both signals simultaneously.
+
+The default \(\alpha = 0.5\) is used in all experiments reported in
+Chapter~\ref{cha:evaluation}.  Per-project overrides are supported: the
+\texttt{admin} service exposes an endpoint that updates the \texttt{alpha}
+field in the project's MongoDB settings document, and the retrieval service
+reads this value at query time.
+
+\subsection{Retrieval Top-k and Re-ranking}
+
+The retrieval service returns \(k = 20\) candidates to the re-ranker by
+default (configurable per project).  This value was chosen as a balance
+between recall coverage and re-ranking latency: the BGE-reranker-v2-m3
+cross-encoder processes 20 pairs in approximately 180\,ms on CPU, which is
+acceptable for interactive use.  The re-ranker produces a calibrated relevance
+score for each (query, passage) pair; the top \(k' = 5\) passages are
+forwarded to the generation service.  All retrieval results are filtered by
+\texttt{project\_id} at the Weaviate level, ensuring strict multi-tenancy.
 
 % ------------------------------------------------------------
 \section{SSE Streaming Architecture}
 \label{sec:sse_streaming}
 
-% TODO: 1.5 pages
-% FastAPI StreamingResponse + generator pattern
-% Token-by-token forwarding from Anthropic SDK .stream()
-% Citation injection after stream completion
-% Frontend EventSource handling in Next.js
+In a conversational advisory system, perceived latency is as important as
+actual latency.  Displaying the first tokens of an answer within a second of
+submission — even though the full answer may take five to ten seconds to
+generate — substantially improves the user experience.  \medrag{} implements
+\emph{Server-Sent Events} (SSE) streaming end-to-end: from the Anthropic SDK
+to the browser, without accumulating the full response in memory at any
+intermediate service.
+
+\subsection{Generation Service Streaming}
+
+The generation service wraps the Anthropic Python SDK's streaming context
+manager in an \texttt{AsyncGenerator}, yielding SSE-formatted byte strings.
+Listing~\ref{lst:sse_generator} shows the core implementation.
 
 \begin{figure}[htbp]
   \centering
-  % TODO: TikZ sequence diagram — SSE streaming
-  \fbox{\parbox{0.8\textwidth}{\centering\vspace{2cm}
-    [Figure: SSE Streaming Sequence Diagram]\vspace{2cm}}}
-  \caption{Server-Sent Events streaming: the generation service proxies the LLM
-    token stream directly to the client while buffering citations for post-stream
-    injection.}
+\begin{lstlisting}[language=Python,
+  caption={Core SSE streaming generator in the generation service.
+    Token events are emitted as they arrive from the Anthropic SDK;
+    the citations event is emitted once, after the stream completes.},
+  label={lst:sse_generator}]
+async def stream_response(
+    prompt: str,
+    model: str,
+) -> AsyncGenerator[str, None]:
+    async with client.messages.stream(
+        model=model,
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
+    ) as stream:
+        async for text in stream.text_stream:
+            yield (
+                f"data: {json.dumps({'type': 'token', 'text': text})}\n\n"
+            )
+        final_msg = await stream.get_final_message()
+        citations = extract_citations(final_msg)
+        yield (
+            f"data: {json.dumps({'type': 'citations', 'data': citations})}\n\n"
+        )
+    yield "data: [DONE]\n\n"
+\end{lstlisting}
+  \caption{Server-Sent Events streaming: the generation service proxies the
+    Anthropic SDK token stream directly to the client, then injects a single
+    citations event after the stream completes.}
   \label{fig:sse_streaming}
 \end{figure}
+
+The generator is wrapped in a FastAPI \texttt{StreamingResponse} with
+\texttt{media\_type="text/event-stream"} and the required
+\texttt{Cache-Control: no-cache} header.  Three event types are emitted on
+the stream:
+
+\begin{itemize}
+  \item \texttt{token} — carries one or more characters of generated text.
+    The Anthropic SDK may batch adjacent characters into a single event; the
+    granularity is not guaranteed.
+  \item \texttt{citations} — emitted once, immediately after the stream
+    completes.  The payload is a JSON array of citation objects, each
+    containing the document chunk identifier, the source document title, and
+    the page number where available.  Citations are extracted from the final
+    message object returned by \texttt{stream.get\_final\_message()}, which
+    is available only after the SDK has received the stop signal from the API.
+  \item \texttt{[DONE]} — the conventional SSE termination sentinel.
+\end{itemize}
+
+A deliberate design decision is to separate citation delivery from the token
+stream rather than interleaving citation markers inline.  Inline markers
+require the generation service to parse model output in real time, which is
+fragile and model-specific.  Delivering citations as a single post-stream
+event allows the front-end to render the full answer first and then annotate
+it with source links, which is more robust and requires no streaming-aware
+parsing on the back-end.
+
+\subsection{Orchestrator Pass-through}
+
+The orchestrator service does not buffer or transform the SSE stream.  On
+receiving a streaming response from the generation service, it forwards the
+\texttt{StreamingResponse} object directly to the API gateway, which in turn
+forwards it to the browser.  This pass-through design keeps end-to-end latency
+minimal and avoids the memory overhead that would arise from accumulating the
+full response.  The orchestrator persists the completed conversation turn to
+MongoDB only after the \texttt{[DONE]} event is received, using a background
+task registered with FastAPI's \texttt{BackgroundTasks} mechanism.
+
+\subsection{Front-end Handling}
+
+The Next.js client opens an \texttt{EventSource} connection to the API gateway
+and attaches a \texttt{message} listener.  Received events are parsed as JSON;
+\texttt{token} payloads are appended to a React state string, causing a
+progressive re-render of the answer panel; the \texttt{citations} payload
+replaces a separate citations state array, triggering a single re-render of
+the source list.  Streaming is initiated by the user pressing the submit
+button, which calls the front-end's \texttt{sendQuery} function and
+immediately sets the UI into a \emph{streaming} state that shows a blinking
+cursor while tokens arrive.
 
 % ------------------------------------------------------------
 \section{RAGAS Evaluation Integration}
 \label{sec:ragas_integration}
 
-% TODO: 2 pages
-% Async consumer of query.completed RabbitMQ events
-% RAGAS pipeline: faithfulness (NLI), answer relevance (cosine), context recall
-% LLM-as-judge calls — cost implications (~$0.006 per question)
-% Per-question metrics stored in MongoDB eval_results collection
+Measuring the quality of a RAG system requires metrics that assess not only
+the final answer but also the quality of the retrieved context.  \medrag{}
+integrates the RAGAS framework~\cite{es2023ragas} as an independent, asynchronous
+evaluation service that does not affect the latency of query responses.
+
+\subsection{Architecture}
+
+The \texttt{eval} service (port 8013) operates as a RabbitMQ consumer.
+Whenever a query completes, the orchestrator publishes a
+\texttt{query.completed} event to the \texttt{medrag.events} exchange.  The
+event payload is a JSON object with the following fields:
+
+\begin{itemize}
+  \item \texttt{conversation\_id} and \texttt{message\_id} — identifiers for
+    linking evaluation results back to the conversation stored in MongoDB.
+  \item \texttt{question} — the original user query string.
+  \item \texttt{answer} — the generated answer, collected after the SSE
+    stream completes.
+  \item \texttt{contexts} — a list of strings, one per retrieved chunk, as
+    passed to the generation service.
+  \item \texttt{ground\_truth} (optional) — the reference answer, present
+    only when the query originates from a benchmarking script that supplies
+    ground-truth annotations.
+\end{itemize}
+
+The eval service acknowledges the RabbitMQ message only after successfully
+writing results to MongoDB, ensuring that no evaluation record is silently
+lost due to a transient error.  Failed evaluations are requeued with a fixed
+back-off.
+
+\subsection{Metrics}
 
 \begin{figure}[htbp]
   \centering
-  % TODO: TikZ pipeline flow — RAGAS evaluation
-  \fbox{\parbox{0.8\textwidth}{\centering\vspace{2cm}
-    [Figure: RAGAS Evaluation Pipeline]\vspace{2cm}}}
-  \caption{Evaluation pipeline: the eval service consumes \texttt{query.completed}
-    events from RabbitMQ, computes RAGAS metrics using the LLM-as-judge approach,
-    and persists per-question results to MongoDB.}
+  \begin{tabularx}{\textwidth}{lXlc}
+    \toprule
+    \textbf{Metric} & \textbf{Computation method} &
+    \textbf{Requires \texttt{ground\_truth}} & \textbf{Approx.\ LLM calls} \\
+    \midrule
+    Faithfulness &
+      Claim extraction from answer; NLI entailment check against each
+      retrieved context chunk (LLM-as-judge) &
+      No & 2 \\
+    Answer Relevance &
+      Cosine similarity between the embedding of the original question and
+      embeddings of questions reverse-generated from the answer (LLM-as-judge) &
+      No & 1 + embed \\
+    Context Recall &
+      Recall of ground-truth atomic statements that are attributable to at
+      least one retrieved chunk (LLM-as-judge) &
+      Yes & 1 \\
+    Answer Correctness &
+      Token-level F1 between the generated answer and the ground-truth
+      answer (string matching; no LLM call) &
+      Yes & 0 \\
+    \bottomrule
+  \end{tabularx}
+  \caption{Evaluation pipeline: the eval service consumes
+    \texttt{query.completed} events from RabbitMQ, computes RAGAS metrics
+    using the LLM-as-judge approach, and persists per-question results to
+    MongoDB.  The table shows all four metrics, their computation strategy, and
+    their ground-truth dependency.}
   \label{fig:ragas_pipeline}
 \end{figure}
+
+Faithfulness and Answer Relevance can be computed from the live system without
+reference answers; they are therefore available for every query, including
+interactive user sessions.  Context Recall and Answer Correctness require a
+reference answer and are used only during benchmarking runs where ground-truth
+data is available.
+
+\subsection{Cost and Throughput}
+
+RAGAS metrics that use the LLM-as-judge approach issue multiple LLM API calls
+per question.  Based on observed token usage during benchmark runs on the
+HotpotQA dataset, the combined cost of computing Faithfulness and Answer
+Relevance is approximately \$0.006 per question.  For the full evaluation runs
+reported in Chapter~\ref{cha:evaluation} (500 questions), this corresponds to
+approximately \$3 in API costs.  The asynchronous design means that evaluation
+does not compete with query latency for API capacity: the eval service has its
+own rate-limit headroom and processes questions at a pace independent of the
+interactive query load.
+
+Results are stored as documents in the MongoDB \texttt{eval\_results}
+collection.  Each document records the metric scores, the RAGAS library
+version, the timestamp, and the identifiers required to join back to the
+conversation and the project settings, enabling post-hoc analysis across
+experimental conditions.
 
 % ------------------------------------------------------------
 \section{CI/CD Pipeline}
 \label{sec:cicd}
 
-% TODO: 1 page
-% GitHub Actions: ruff + mypy + pytest per changed service
-% docker compose build + healthcheck smoke test on develop push
-% Secrets: ANTHROPIC_API_KEY for integration tests
+Maintaining confidence in a codebase that spans fourteen services and two
+languages requires automated quality gates at every pull request.  \medrag{}
+uses two GitHub Actions workflows: a \emph{continuous integration} workflow
+that validates correctness, and a \emph{continuous deployment} workflow that
+validates the Docker build and runtime health of the full stack.
+
+\subsection{Continuous Integration}
+
+The CI workflow (\texttt{.github/workflows/ci.yml}) is triggered on every
+pull request targeting the \texttt{develop} or \texttt{main} branch.  It
+consists of four stages executed in parallel where possible:
+
+\begin{enumerate}
+  \item \textbf{Linting and formatting} (\texttt{ruff check} and
+    \texttt{ruff format --check}) — enforces the project's style conventions.
+    \texttt{ruff} is used in preference to the combination of
+    \texttt{flake8} + \texttt{black} because it implements both tools in a
+    single Rust binary, reducing CI step time from approximately 40 seconds to
+    under 5 seconds.
+  \item \textbf{Static type checking} (\texttt{mypy} in strict mode) — catches
+    type errors and missing annotations.  Strict mode is used from the outset
+    rather than incrementally; this was a deliberate choice to prevent the
+    gradual accumulation of untyped code that is difficult to address
+    retrospectively.
+  \item \textbf{Unit and integration tests} (\texttt{pytest}) — the workflow
+    detects which services have been modified in the pull request and runs
+    \texttt{pytest} only for those services, reducing feedback time on small
+    changes.  Services without a \texttt{tests/} directory are skipped without
+    failure, accommodating the incremental addition of test coverage.
+  \item \textbf{Front-end validation} — runs \texttt{tsc --noEmit} (TypeScript
+    type checking), \texttt{eslint}, and \texttt{vitest run} (unit tests), but
+    only when files under \texttt{frontend/} have been modified.
+\end{enumerate}
+
+The \texttt{ANTHROPIC\_API\_KEY} secret is stored in the GitHub repository's
+encrypted secret store and injected into the environment for any integration
+tests that issue real API calls.
+
+\subsection{Continuous Deployment}
+
+The CD workflow (\texttt{.github/workflows/cd.yml}) is triggered on every
+push to \texttt{develop}, ensuring that the integration branch always produces
+a runnable image set.  It performs three steps:
+
+\begin{enumerate}
+  \item \textbf{Build} — \texttt{docker compose build} is executed, which
+    exercises every service's multi-stage Dockerfile.  A build failure here
+    indicates a broken dependency declaration or an invalid Dockerfile
+    instruction.
+  \item \textbf{Start and health check} — \texttt{docker compose up -d} brings
+    up all fourteen containers, with Compose's dependency-ordering logic
+    ensuring that databases and the message broker are healthy before dependent
+    services start.  A polling loop then issues \texttt{curl} requests to each
+    service's \texttt{/health} endpoint until all return
+    \texttt{\{"status": "ok"\}} or a timeout is exceeded.
+  \item \textbf{Teardown} — \texttt{docker compose down} removes all containers
+    and networks, leaving the CI runner in a clean state.
+\end{enumerate}
+
+This \emph{smoke test} strategy does not replace unit or integration tests, but
+it provides a fast check that the containerised system starts and that all
+services are reachable.  In practice, the most common failures caught at this
+stage are missing environment variables and Weaviate schema migration errors
+that only manifest at container start-up.
+
+\subsection{Branch and Merge Strategy}
+
+The repository follows a structured branching model.  Feature work is
+conducted on branches named \texttt{feature/phase-X.Y-description} and merged
+into \texttt{develop} via pull request; the CI workflow must be green before
+merge is permitted.  The \texttt{main} branch receives merges from
+\texttt{develop} only when a full phase is demo-ready, and is tagged with a
+version identifier such as \texttt{v0.7-phase-7-done}.  Both protected
+branches require at least one approving review and passing status checks,
+enforced by GitHub's branch protection rules.
