@@ -8,7 +8,7 @@ from app.schemas.retrieval_schemas import RetrievalRequest, RetrievalResponse, R
 
 
 async def _embed_query(query: str) -> list[float]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         resp = await client.post(
             f"{settings.embedding_service_url}/embed",
             json={"texts": [query]},

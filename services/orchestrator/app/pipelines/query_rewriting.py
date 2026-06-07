@@ -7,12 +7,11 @@ from app.schemas.orchestrator_schemas import QueryResponse
 class QueryRewritingPipeline(RagPipeline):
     async def _rewrite_query(self, query: str, history: list[dict]) -> str:
         context = " ".join(m["content"] for m in history[-4:]) if history else ""
-        resp = await self.http.post(
+        data = await self._tracked_post(
             f"{self.settings.query_processor_url}/rewrite",
-            json={"query": query, "context": context},
+            {"query": query, "context": context},
         )
-        resp.raise_for_status()
-        return resp.json()["rewritten_query"]
+        return data["rewritten_query"]
 
     async def run(
         self,

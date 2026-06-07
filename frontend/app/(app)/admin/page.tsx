@@ -9,7 +9,7 @@ import {
   Layers, Brain, MessageSquare, Trash2, User, Settings, Check, X as XIcon, Users,
   ChevronDown, ChevronUp, RotateCcw,
 } from "lucide-react";
-import { projects, documents, auth, Project, Document, CreateProjectInput, User as UserType, PromptSlot } from "@/lib/api";
+import { projects, documents, auth, Project, Document, DocumentsPage, CreateProjectInput, User as UserType, PromptSlot } from "@/lib/api";
 import { useUIStore } from "@/store";
 import { useSettingsOptions, useUpdateSettings, useUpdateProject } from "@/hooks/useProjects";
 
@@ -509,7 +509,9 @@ export default function AdminPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragHover, setDragHover] = useState(false);
   const [docSearch, setDocSearch] = useState("");
+  const [docPage, setDocPage] = useState(1);
   const [showNewForm, setShowNewForm] = useState(false);
+  const DOC_PAGE_SIZE = 50;
   const [showSettings, setShowSettings] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -522,18 +524,29 @@ export default function AdminPage() {
   });
 
   const active = activeId ? projectList.find((p) => p.project_id === activeId) : projectList[0];
+  const handleSetActive = (id: string) => { setActiveId(id); setDocPage(1); setDocSearch(""); };
 
-  const { data: docList = [], isLoading: docLoading } = useQuery({
-    queryKey: ["documents", active?.project_id],
-    queryFn: () => documents.list(active!.project_id),
+  const { data: projectStats } = useQuery({
+    queryKey: ["projectStats", active?.project_id],
+    queryFn: () => documents.projectStats(active!.project_id),
+    enabled: !!active,
+    refetchInterval: 5000,
+  });
+
+  const { data: docPageData, isLoading: docLoading } = useQuery<DocumentsPage>({
+    queryKey: ["documents", active?.project_id, docPage, DOC_PAGE_SIZE],
+    queryFn: () => documents.listPage(active!.project_id, docPage, DOC_PAGE_SIZE),
     enabled: !!active,
     refetchInterval: (query) => {
-      const docs = query.state.data as Document[] | undefined;
-      if (!docs) return false;
-      const processing = docs.some((d) => d.status !== "indexed" && d.status !== "failed");
+      const data = query.state.data as DocumentsPage | undefined;
+      if (!data) return false;
+      const processing = data.items.some((d) => d.status !== "indexed" && d.status !== "failed");
       return processing ? 3000 : false;
     },
   });
+  const docList = docPageData?.items ?? [];
+  const docTotal = docPageData?.total ?? 0;
+  const docTotalPages = Math.ceil(docTotal / DOC_PAGE_SIZE);
 
 
   const createProject = useMutation({
@@ -581,9 +594,10 @@ export default function AdminPage() {
     !docSearch || d.filename.toLowerCase().includes(docSearch.toLowerCase())
   );
 
-  const indexedCount = docList.filter((d) => d.status === "indexed").length;
-  const failedCount = docList.filter((d) => d.status === "failed").length;
-  const totalChunks = docList.reduce((s, d) => s + (d.chunk_count ?? 0), 0);
+  const indexedCount = projectStats?.indexed_count ?? docList.filter((d) => d.status === "indexed").length;
+  const failedCount = projectStats?.failed_count ?? docList.filter((d) => d.status === "failed").length;
+  const totalChunks = projectStats?.total_chunks ?? docList.reduce((s, d) => s + (d.chunk_count ?? 0), 0);
+  const displayTotal = projectStats?.total_documents ?? docTotal ?? docList.length;
 
   return (
     <div className="adm-root fade-in">
@@ -657,7 +671,7 @@ export default function AdminPage() {
             <button
               key={p.project_id}
               className={`adm-rail-item${(active?.project_id === p.project_id) ? " adm-rail-item-active" : ""}`}
-              onClick={() => { setActiveId(p.project_id); setActiveProjectId(p.project_id); }}
+              onClick={() => { handleSetActive(p.project_id); setActiveProjectId(p.project_id); }}
             >
               <span className="adm-rail-bar" style={{ background: p.color ?? "#7DD3FC" }} />
               <span
@@ -668,7 +682,7 @@ export default function AdminPage() {
               </span>
               <div className="adm-rail-meta">
                 <div className="adm-rail-name">{p.name}</div>
-                <div className="adm-rail-sub">{docList.length} {t("docCount")}</div>
+                <div className="adm-rail-sub">{active?.project_id === p.project_id ? displayTotal : "—"} {t("docCount")}</div>
               </div>
             </button>
           ))}
@@ -740,7 +754,7 @@ export default function AdminPage() {
             <div className="adm-stats stagger">
               <div className="adm-stat">
                 <div className="adm-stat-l"><FileText size={16} /><span>{t("stats_docs")}</span></div>
-                <div className="adm-stat-v">{docList.length}</div>
+                <div className="adm-stat-v">{displayTotal}</div>
                 <div className="adm-stat-s">{indexedCount} indexed{failedCount > 0 ? ` · ${failedCount} failed` : ""}</div>
               </div>
               <div className="adm-stat">
@@ -860,6 +874,39 @@ export default function AdminPage() {
                   </div>
                 ))}
               </div>
+              {docTotalPages > 1 && (
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "12px 16px",
+                  borderTop: "1px solid var(--border)",
+                  fontSize: 13,
+                }}>
+                  <span style={{ color: "var(--text-muted)" }}>
+                    {((docPage - 1) * DOC_PAGE_SIZE) + 1}–{Math.min(docPage * DOC_PAGE_SIZE, docTotal)} of {docTotal}
+                  </span>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      className="btn"
+                      style={{ padding: "4px 12px", fontSize: 12 }}
+                      disabled={docPage <= 1}
+                      onClick={() => setDocPage((p) => p - 1)}
+                    >
+                      ← Prev
+                    </button>
+                    <span style={{ padding: "4px 8px", color: "var(--text-muted)", fontSize: 12 }}>
+                      {docPage} / {docTotalPages}
+                    </span>
+                    <button
+                      className="btn"
+                      style={{ padding: "4px 12px", fontSize: 12 }}
+                      disabled={docPage >= docTotalPages}
+                      onClick={() => setDocPage((p) => p + 1)}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}

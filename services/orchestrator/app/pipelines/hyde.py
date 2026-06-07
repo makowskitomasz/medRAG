@@ -6,12 +6,11 @@ from app.schemas.orchestrator_schemas import QueryResponse
 
 class HydePipeline(RagPipeline):
     async def _hyde_query(self, query: str) -> str:
-        resp = await self.http.post(
+        data = await self._tracked_post(
             f"{self.settings.query_processor_url}/hyde",
-            json={"query": query},
+            {"query": query},
         )
-        resp.raise_for_status()
-        return resp.json()["hypothetical_document"]
+        return data["hypothetical_document"]
 
     async def run(
         self,

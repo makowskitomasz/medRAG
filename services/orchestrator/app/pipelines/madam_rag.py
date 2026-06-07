@@ -21,12 +21,10 @@ class MadamRagPipeline(RagPipeline):
     async def _detect_conflict(self, chunks: list[dict]) -> tuple[bool, float]:
         """Returns (has_conflict, confidence)."""
         try:
-            resp = await self.http.post(
+            data = await self._tracked_post(
                 f"{self.settings.generation_url}/detect_conflict",
-                json={"chunks": chunks, "prompt_overrides": self.prompt_overrides},
+                {"chunks": chunks, "prompt_overrides": self.prompt_overrides},
             )
-            resp.raise_for_status()
-            data = resp.json()
             return bool(data.get("has_conflict", False)), float(data.get("confidence", 0.5))
         except Exception as exc:
             logger.warning("conflict detection failed", error=str(exc))

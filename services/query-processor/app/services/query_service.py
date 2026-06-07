@@ -36,16 +36,33 @@ class _TriageResult(BaseModel):
     route: str = Field(description="RAG pipeline mode to use.")
 
 
-async def rewrite_query(query: str, context: str, client: AsyncOpenAI, model: str) -> str:
-    system = render("rewrite_system.j2", domain="drug interactions")
+async def rewrite_query(
+    query: str,
+    context: str,
+    client: AsyncOpenAI,
+    model: str,
+    prompt_overrides: dict[str, str] | None = None,
+) -> tuple[str, int, int]:
+    """Returns (rewritten_query, input_tokens, output_tokens)."""
+    system = (prompt_overrides or {}).get("rewrite_system") or render(
+        "rewrite_system.j2", domain="drug interactions"
+    )
     user_msg = f"Query: {query}"
     if context:
         user_msg += f"\n\nConversation context:\n{context}"
     return await chat_complete(client, model, system, user_msg)
 
 
-async def generate_hypothetical_document(query: str, client: AsyncOpenAI, model: str) -> str:
-    system = render("hyde_system.j2", domain="drug interactions and pharmacology")
+async def generate_hypothetical_document(
+    query: str,
+    client: AsyncOpenAI,
+    model: str,
+    prompt_overrides: dict[str, str] | None = None,
+) -> tuple[str, int, int]:
+    """Returns (hypothetical_document, input_tokens, output_tokens)."""
+    system = (prompt_overrides or {}).get("hyde_system") or render(
+        "hyde_system.j2", domain="drug interactions and pharmacology"
+    )
     return await chat_complete(client, model, system, query)
 
 
@@ -54,13 +71,15 @@ async def decompose_query(
     client: instructor.AsyncInstructor,
     model: str,
     max_sub_questions: int = 4,
-) -> list[str]:
-    system = render(
+    prompt_overrides: dict[str, str] | None = None,
+) -> tuple[list[str], int, int]:
+    """Returns (sub_questions, input_tokens, output_tokens)."""
+    system = (prompt_overrides or {}).get("decompose_system") or render(
         "decompose_system.j2",
         max_sub_questions=max_sub_questions,
         domain="drug interactions and pharmacology",
     )
-    result = await client.chat.completions.create(
+    result, completion = await client.chat.completions.create_with_completion(
         model=model,
         messages=[
             {"role": "system", "content": system},
@@ -69,16 +88,25 @@ async def decompose_query(
         response_model=_DecomposeResult,
         max_retries=_MAX_RETRIES,
     )
-    return result.sub_questions
+    usage = completion.usage
+    return (
+        result.sub_questions,
+        usage.prompt_tokens if usage else 0,
+        usage.completion_tokens if usage else 0,
+    )
 
 
 async def triage_query(
     query: str,
     client: instructor.AsyncInstructor,
     model: str,
+    prompt_overrides: dict[str, str] | None = None,
 ) -> dict:
-    system = render("triage_system.j2", available_modes=_AVAILABLE_MODES)
-    result = await client.chat.completions.create(
+    """Returns triage dict with input_tokens and output_tokens."""
+    system = (prompt_overrides or {}).get("triage_system") or render(
+        "triage_system.j2", available_modes=_AVAILABLE_MODES
+    )
+    result, completion = await client.chat.completions.create_with_completion(
         model=model,
         messages=[
             {"role": "system", "content": system},
@@ -87,8 +115,11 @@ async def triage_query(
         response_model=_TriageResult,
         max_retries=_MAX_RETRIES,
     )
+    usage = completion.usage
     return {
         "complexity": result.complexity,
         "conflict_risk": result.conflict_risk,
         "route": result.route,
+        "input_tokens": usage.prompt_tokens if usage else 0,
+        "output_tokens": usage.completion_tokens if usage else 0,
     }

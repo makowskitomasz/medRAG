@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class ContextChunk(BaseModel):
@@ -15,6 +15,7 @@ class GenerationRequest(BaseModel):
     chunks: list[ContextChunk]
     conversation_history: list[dict] = []
     prompt_overrides: dict[str, str] = {}
+    llm_model: str | None = None
 
 
 class Citation(BaseModel):
@@ -28,6 +29,8 @@ class Citation(BaseModel):
 class GenerationResult(BaseModel):
     answer: str
     citations: list[Citation]
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 class EvaluationRequest(BaseModel):
@@ -35,11 +38,14 @@ class EvaluationRequest(BaseModel):
     answer: str
     chunks: list[ContextChunk]
     prompt_overrides: dict[str, str] = {}
+    llm_model: str | None = None
 
 
 class EvaluationResult(BaseModel):
     score: float
     reasoning: str
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 class ConflictDetectionRequest(BaseModel):
@@ -51,3 +57,24 @@ class ConflictDetectionResult(BaseModel):
     has_conflict: bool
     confidence: float
     reasoning: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
+class CorrectnessRequest(BaseModel):
+    query: str
+    answer: str
+    gold_answer: str
+    llm_model: str | None = None
+
+
+class CorrectnessResult(BaseModel):
+    score: float = Field(description="Correctness score between 0.0 and 1.0")
+    reasoning: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    @field_validator("score")
+    @classmethod
+    def clamp_score(cls, v: float) -> float:
+        return max(0.0, min(1.0, v))

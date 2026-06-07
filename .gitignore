@@ -43,5 +43,17 @@ Thumbs.db
 *.pt
 *.safetensors
 data/
+!data/raw/.gitkeep
 tmp/uploads/
+
+# Benchmark results (large, generated)
+results/*.json
+results/*.csv
+results/*.txt
+results/*.log
+results/plots/
+results/final/
+results/hotpotqa_final/
+results/test_fix/
+!results/.gitkeep
 

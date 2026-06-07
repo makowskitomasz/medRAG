@@ -13,13 +13,11 @@ _MAX_SUB_QUESTIONS = 4
 
 class IterativeMultiHopPipeline(RagPipeline):
     async def _decompose(self, query: str) -> list[str]:
-        resp = await self.http.post(
+        data = await self._tracked_post(
             f"{self.settings.query_processor_url}/decompose",
-            json={"query": query},
+            {"query": query},
         )
-        resp.raise_for_status()
-        sub_questions = resp.json().get("sub_questions", [query])
-        return sub_questions[:_MAX_SUB_QUESTIONS]
+        return data.get("sub_questions", [query])[:_MAX_SUB_QUESTIONS]
 
     async def _retrieve_for_subquestion(
         self, sub_q: str, project_id: str, top_k: int, alpha: float

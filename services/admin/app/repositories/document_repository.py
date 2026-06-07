@@ -22,6 +22,13 @@ async def list_by_project(
     return docs, total
 
 
+async def count_by_project(project_id: str, status: str | None = None) -> int:
+    query: dict = {"project_id": project_id}
+    if status:
+        query["status"] = status
+    return await get_db().documents.count_documents(query)
+
+
 async def find_indexed_by_project(project_id: str) -> list[dict]:
     return (
         await get_db()
