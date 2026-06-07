@@ -9,8 +9,82 @@ from the broader trajectory of language models.
 This chapter traces that trajectory, from the limitations of purely parametric models
 through the retrieval techniques that underpin modern RAG systems, to the diverse
 architectural families that have emerged between 2020 and 2026.
+Figure~\ref{fig:rag_timeline} summarises the key milestones.
 The chapter closes with an account of RAG evaluation methodology and a review of
 related work in clinical decision support.
+
+% ------------------------------------------------------------------
+% Figure 2.1 — RAG Evolution Timeline
+% ------------------------------------------------------------------
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  year/.style={
+    rectangle, rounded corners=3pt,
+    fill=gray!20, draw=gray!60,
+    minimum width=1.0cm, minimum height=0.55cm,
+    align=center, font=\bfseries\small
+  },
+  above item/.style={
+    rectangle, rounded corners=2pt,
+    fill=blue!12, draw=blue!35,
+    text width=2.7cm, align=center,
+    minimum height=0.5cm, font=\footnotesize
+  },
+  below item/.style={
+    rectangle, rounded corners=2pt,
+    fill=teal!12, draw=teal!35,
+    text width=2.7cm, align=center,
+    minimum height=0.5cm, font=\footnotesize
+  },
+  tick/.style={gray!60, line width=0.4pt}
+]
+
+% Main axis
+\draw[-{Stealth[length=5pt]}, line width=1.2pt, gray!70]
+  (0,0) -- (13.8,0) node[right, font=\small\bfseries, gray!70] {};
+
+% Year positions: 2020=0, 2021=2.3, 2022=4.6, 2023=6.9, 2024=9.2, 2025=11.5, 2026=13.5
+\foreach \x/\yr in {0/2020, 2.3/2021, 4.6/2022, 6.9/2023, 9.2/2024, 11.5/2025, 13.5/2026}{
+  \draw[tick] (\x, -0.25) -- (\x, 0.25);
+  \node[year] at (\x, 0) {\yr};
+}
+
+% ABOVE axis items (odd ones, to avoid overlap)
+\node[above item] (rag)    at (0,   1.5)  {RAG\\{\tiny Lewis et al.}};
+\node[above item] (dpr)    at (0,   2.55) {DPR\\{\tiny Karpukhin et al.}};
+\node[above item] (hyde)   at (4.6, 1.5)  {HyDE\\{\tiny Gao et al.}};
+\node[above item] (selfrag) at (6.9, 1.5) {Self-RAG\\{\tiny Asai et al.}};
+\node[above item] (graphrag) at (9.2,1.5) {GraphRAG\\{\tiny Edge et al.}};
+\node[above item] (raptor) at (9.2, 2.55) {RAPTOR\\{\tiny Sarthi et al.}};
+\node[above item] (chain)  at (11.5,1.5)  {Chain-of-Retr.\\{\tiny Wang et al.}};
+\node[above item] (arag)   at (13.5,1.5)  {A-RAG\\{\tiny Du et al.}};
+
+% BELOW axis items
+\node[below item] (colbert)  at (0,  -1.5)  {ColBERT\\{\tiny Khattab \& Zaharia}};
+\node[below item] (beir)     at (2.3,-1.5)  {BEIR\\{\tiny Thakur et al.}};
+\node[below item] (colbertv2) at (4.6,-1.5) {ColBERTv2\\{\tiny Santhanam et al.}};
+\node[below item] (ragas)    at (6.9,-1.5)  {RAGAS\\{\tiny Es et al.}};
+\node[below item] (crag)     at (9.2,-1.5)  {Corr. RAG\\{\tiny Yan et al.}};
+\node[below item] (agentic)  at (11.5,-1.5) {Agentic RAG\\{\tiny Singh et al.}};
+\node[below item] (rarerag)  at (13.5,-1.5) {\textbf{RARE-RAG}\\{\tiny this work}};
+
+% Connector lines (above)
+\foreach \n/\x in {rag/0, dpr/0, hyde/4.6, selfrag/6.9, graphrag/9.2, raptor/9.2, chain/11.5, arag/13.5}{
+  \draw[blue!40, line width=0.6pt] (\x, 0.25) -- (\n.south);
+}
+% Connector lines (below)
+\foreach \n/\x in {colbert/0, beir/2.3, colbertv2/4.6, ragas/6.9, crag/9.2, agentic/11.5, rarerag/13.5}{
+  \draw[teal!50, line width=0.6pt] (\x,-0.25) -- (\n.north);
+}
+
+\end{tikzpicture}
+\caption{Timeline of key RAG-related publications (2020--2026).
+  Items \emph{above} the axis are generation/architecture papers (blue);
+  items \emph{below} are retrieval models and evaluation frameworks (teal).}
+\label{fig:rag_timeline}
+\end{figure}
 
 % ------------------------------------------------------------
 \section{From Language Models to Retrieval-Augmented Generation}
@@ -100,12 +174,25 @@ The oldest and most robust retrieval paradigm is sparse term matching.
 BM25~\cite{robertson2009bm25}, a probabilistic extension of TF-IDF, scores document--query
 relevance as a weighted sum of inverse document frequency terms,
 with a saturation function that diminishes the impact of very high term frequencies.
+Given a query $Q = \{q_1, \ldots, q_n\}$ and a document $D$, the BM25 score is:
+
+\begin{equation}
+  \text{BM25}(D, Q) = \sum_{i=1}^{n} \text{IDF}(q_i)
+    \cdot \frac{f(q_i, D)\,(k_1 + 1)}{f(q_i, D) + k_1\!\left(1 - b + b\,\frac{|D|}{\text{avgdl}}\right)}
+  \label{eq:bm25}
+\end{equation}
+
+\noindent where $f(q_i, D)$ is the frequency of term $q_i$ in document $D$,
+$|D|$ is the document length, $\text{avgdl}$ is the average document length in the
+corpus, and $k_1 \approx 1.5$, $b \approx 0.75$ are tunable parameters.
+The $\text{IDF}$ term down-weights terms that appear in many documents.
+
 Despite its simplicity, BM25 remains a strong baseline on many benchmarks: on the
 BEIR heterogeneous retrieval benchmark~\cite{thakur2021beir}, BM25 outperforms
 many neural retrievers on out-of-domain corpora.
 
 SPLADE~v2 extended the sparse paradigm to learned sparse representations,
-where a BERT-encoder produces a sparse vector over the vocabulary rather than
+where a BERT encoder produces a sparse vector over the vocabulary rather than
 a dense embedding.
 This approach combines the efficiency of inverted-index retrieval with the
 contextual understanding of transformers, and it achieves strong results on
@@ -122,6 +209,15 @@ This brittleness motivated the dense retrieval line of work.
 Dense Passage Retrieval (DPR)~\cite{karpukhin2020dpr} encodes queries and passages
 into fixed-dimensional vectors using separate BERT encoders, and retrieves by
 approximate nearest-neighbour search in the embedding space.
+Given a query encoder $E_Q$ and a passage encoder $E_P$, relevance is scored as
+
+\begin{equation}
+  \text{sim}(q, p) = E_Q(q)^\top E_P(p)
+  \label{eq:dpr}
+\end{equation}
+
+\noindent and the top-$k$ passages are retrieved from a pre-built FAISS index using
+maximum inner product search.
 The encoders are fine-tuned on question--passage pairs so that relevant passages
 cluster near their questions in the embedding space.
 
@@ -142,9 +238,18 @@ a problematic average that may not accurately represent any individual fact.
 ColBERT~\cite{khattab2020colbert} proposed a compromise between the efficiency of
 single-vector retrieval and the expressiveness of cross-encoder reranking.
 Rather than encoding a passage into a single vector, ColBERT produces a sequence
-of token-level embeddings.
-Relevance is computed as the \emph{MaxSim} score: for each query token, find the
-maximum cosine similarity across all passage token embeddings, then sum these maxima.
+of token-level embeddings for both query ($\mathbf{q}_1,\ldots,\mathbf{q}_m$) and passage
+($\mathbf{p}_1,\ldots,\mathbf{p}_n$).
+Relevance is computed as the \emph{MaxSim} score:
+
+\begin{equation}
+  S(q, p) = \sum_{i=1}^{m}
+    \max_{j=1}^{n}\; \mathbf{q}_i^\top \mathbf{p}_j
+  \label{eq:maxsim}
+\end{equation}
+
+\noindent For each query token, find the maximum cosine similarity across all passage
+token embeddings, then sum these maxima.
 This late interaction mechanism is expressive enough to capture term-level alignment
 while remaining amenable to pre-computation of passage embeddings.
 
@@ -253,6 +358,56 @@ Third, a language model generates the answer conditioned on that prompt.
 
 The appeal of this pipeline is its simplicity: each component can be independently
 swapped, and the only trainable interaction between them is through the prompt.
+Figure~\ref{fig:vanilla_rag} illustrates the three-stage flow.
+
+% ------------------------------------------------------------------
+% Figure 2.2 — Vanilla RAG Pipeline
+% ------------------------------------------------------------------
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  box/.style={
+    rectangle, rounded corners=4pt,
+    minimum width=2.5cm, minimum height=0.9cm,
+    align=center, draw, thick
+  },
+  store/.style={
+    cylinder, shape border rotate=90,
+    aspect=0.25,
+    minimum width=2.0cm, minimum height=0.9cm,
+    align=center, draw, thick
+  },
+  arr/.style={-{Stealth[length=5pt]}, thick},
+  lbl/.style={font=\footnotesize\itshape, midway, above=2pt}
+]
+
+% ---- nodes ----
+\node[box, fill=blue!10,  draw=blue!50]   (query)   at (0,   0)    {Query $q$};
+\node[box, fill=blue!15,  draw=blue!50]   (enc)     at (3.2, 0)    {Retriever\\$E_Q(q)$};
+\node[store,fill=gray!10, draw=gray!50]   (index)   at (6.4, 0)    {Vector\\Index};
+\node[box, fill=green!10, draw=green!50]  (topk)    at (6.4,-2.2)  {Top-$k$\\Passages};
+\node[box, fill=orange!10,draw=orange!50] (prompt)  at (3.2,-2.2)  {Prompt\\$[q; d_1;\ldots;d_k]$};
+\node[box, fill=red!8,    draw=red!40]    (llm)     at (0,  -2.2)  {LLM\\Generator};
+\node[box, fill=blue!10,  draw=blue!50]   (answer)  at (0,  -4.0)  {Answer $a$};
+
+% ---- arrows ----
+\draw[arr] (query)  -- node[lbl]{embed} (enc);
+\draw[arr] (enc)    -- node[lbl]{ANN search} (index);
+\draw[arr] (index)  -- node[lbl,right=2pt]{retrieve} (topk);
+\draw[arr] (topk)   -- node[lbl]{concatenate} (prompt);
+\draw[arr] (prompt) -- node[lbl]{condition} (llm);
+\draw[arr] (llm)    -- node[lbl,right=2pt]{generate} (answer);
+
+\end{tikzpicture}
+\caption{Vanilla RAG pipeline.
+  The query is embedded by a retriever and used to retrieve the top-$k$ passages
+  from a pre-built vector index.
+  The passages are concatenated with the query into a prompt, which conditions
+  the language model to generate the final answer.}
+\label{fig:vanilla_rag}
+\end{figure}
+
 In practice, vanilla RAG with a capable retriever and a large generator achieves
 competitive results on many benchmarks while remaining fast and predictable.
 In our experiments (Chapter~\ref{cha:evaluation}), vanilla RAG achieves a Token~F1
@@ -322,6 +477,82 @@ to retrieve, how to assess retrieved evidence, and whether its own output is
 grounded.
 At inference time, the model interleaves retrieval calls with generation, inserting
 passages where needed and backtracking when evidence is deemed insufficient.
+
+Figure~\ref{fig:selfrag} illustrates the decision flow introduced by these tokens.
+
+% ------------------------------------------------------------------
+% Figure 2.3 — Self-RAG Decision Flow
+% ------------------------------------------------------------------
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  startstop/.style={
+    ellipse, draw, thick,
+    minimum width=2.2cm, minimum height=0.8cm,
+    fill=blue!10, draw=blue!50, align=center
+  },
+  process/.style={
+    rectangle, rounded corners=3pt, draw, thick,
+    minimum width=2.8cm, minimum height=0.8cm,
+    fill=blue!8, draw=blue!40, align=center
+  },
+  decision/.style={
+    diamond, draw, thick, aspect=2.2,
+    minimum width=3.4cm, minimum height=0.8cm,
+    fill=orange!10, draw=orange!50, align=center,
+    inner sep=2pt
+  },
+  output/.style={
+    rectangle, rounded corners=3pt, draw, thick,
+    minimum width=2.8cm, minimum height=0.8cm,
+    fill=green!10, draw=green!50, align=center
+  },
+  discard/.style={
+    rectangle, rounded corners=3pt, draw, thick,
+    minimum width=2.4cm, minimum height=0.7cm,
+    fill=red!8, draw=red!30, align=center, font=\footnotesize
+  },
+  arr/.style={-{Stealth[length=5pt]}, thick},
+  lbl/.style={font=\footnotesize, fill=white, inner sep=1pt}
+]
+
+% ---- nodes (column layout) ----
+\node[startstop]  (q)       at (0,   0)    {Query $q$};
+\node[decision]   (ret)     at (0,  -1.8)  {\texttt{[Retrieve?]}};
+\node[process]    (retr)    at (3.5,-1.8)  {Retrieve\\passages};
+\node[decision]   (isrel)   at (3.5,-3.5)  {\texttt{[IsRel?]}};
+\node[discard]    (disc)    at (6.5,-3.5)  {Discard\\passage};
+\node[process]    (gen)     at (0,  -5.2)  {Generate\\segment};
+\node[decision]   (issup)   at (0,  -7.0)  {\texttt{[IsSup?]}};
+\node[decision]   (isuse)   at (0,  -8.8)  {\texttt{[IsUse?]}};
+\node[output]     (ans)     at (0, -10.5)  {Final answer $a$};
+\node[discard]    (regen)   at (3.5,-7.0)  {Regenerate\\segment};
+
+% ---- arrows ----
+\draw[arr] (q)     -- (ret);
+\draw[arr] (ret)   -- node[lbl, above]{yes} (retr);
+\draw[arr] (ret)   -- node[lbl, right]{no} (gen);   % straight down
+\draw[arr] (retr)  -- (isrel);
+\draw[arr] (isrel) -- node[lbl, above]{not rel.} (disc);
+\draw[arr] (isrel) -- node[lbl, right]{relevant} ++(0,-1.2)
+              -| node[lbl]{} (gen);
+\draw[arr] (gen)   -- (issup);
+\draw[arr] (issup) -- node[lbl, above]{not sup.} (regen);
+\draw[arr] (regen) -- ++(0, 0.8) -| (gen);   % loop back
+\draw[arr] (issup) -- node[lbl, right]{supported} (isuse);
+\draw[arr] (isuse) -- node[lbl, right]{useful} (ans);
+\draw[arr] (isuse) -| node[lbl, above=4pt]{not useful} ++(3.2,0)
+              |- (ret);   % loop back to top
+
+\end{tikzpicture}
+\caption{Self-RAG decision flow.
+  Reflection tokens (\texttt{[Retrieve?]}, \texttt{[IsRel?]}, \texttt{[IsSup?]},
+  \texttt{[IsUse?]}) are generated by the model itself at each step, controlling
+  when to retrieve, which passages to keep, and whether to regenerate unsupported
+  segments.}
+\label{fig:selfrag}
+\end{figure}
 
 The results reported by Asai \etal show substantial gains over vanilla RAG on
 fact verification and long-form generation tasks, particularly on questions that
@@ -514,8 +745,16 @@ by introducing four metrics that capture different dimensions of RAG quality:
 
 \textbf{Faithfulness} measures the fraction of claims in the generated answer that
 are supported by the retrieved context.
-Claims are extracted from the answer by an LLM, and each claim is checked against
-the context by the same LLM acting as a natural language inference judge.
+Claims $C = \{c_1, \ldots, c_m\}$ are extracted from the answer by an LLM,
+and each claim is checked against the context by the same LLM acting as a natural
+language inference judge.
+Formally:
+\begin{equation}
+  \text{Faithfulness}(a, \mathcal{C}) =
+    \frac{\bigl|\{c_i \in C : c_i \text{ is supported by } \mathcal{C}\}\bigr|}{|C|}
+  \label{eq:faithfulness}
+\end{equation}
+where $\mathcal{C} = \{d_1,\ldots,d_k\}$ is the set of retrieved passages.
 A score of 1.0 means every claim in the answer can be traced to a specific passage;
 a score below 0.8 suggests significant hallucination.
 Faithfulness is the metric most directly relevant to trustable medical advisory:
@@ -524,14 +763,21 @@ whether it happens to be correct.
 
 \textbf{Answer Relevance} measures how closely the generated answer addresses the
 original question.
-It is computed by generating several questions from the answer using an LLM and
-measuring the average cosine similarity between the generated questions and the
-original query.
+It is computed by generating $n$ reverse questions $\hat{q}_1,\ldots,\hat{q}_n$
+from the answer using an LLM and measuring their average cosine similarity to the
+original query:
+\begin{equation}
+  \text{AnswerRelevance}(a, q) =
+    \frac{1}{n} \sum_{i=1}^{n}
+    \frac{E(\hat{q}_i) \cdot E(q)}{\|E(\hat{q}_i)\|\,\|E(q)\|}
+  \label{eq:answerrel}
+\end{equation}
+where $E(\cdot)$ denotes the sentence embedding.
 A high-relevance answer stays on-topic; a low-relevance one drifts into tangential
 information.
 
-\textbf{Context Recall} measures how much of the information in the gold answer is
-covered by the retrieved context.
+\textbf{Context Recall} measures how much of the information in the gold answer
+is covered by the retrieved context.
 It is the only RAGAS metric that requires a ground-truth answer, and it captures
 retrieval completeness rather than answer quality.
 
@@ -624,6 +870,76 @@ the retrieved context, and abstains from answering when it cannot verify the cla
 This abstention mechanism is particularly important in the DDI domain, where a
 ``I cannot reliably answer this question based on available evidence'' is safer
 than a plausible-sounding but unverified response.
+
+% ------------------------------------------------------------------
+% Figure 2.4 — Architecture Comparison: Retrieval Adaptivity vs. Generation Complexity
+% ------------------------------------------------------------------
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  dot/.style={circle, draw, thick, minimum size=0.55cm, inner sep=1pt, align=center},
+  arr/.style={-{Stealth[length=4pt]}, thick, gray!60}
+]
+
+\draw[arr] (-0.3, 0) -- (10.5, 0)
+  node[right, font=\small\bfseries, black] {Retrieval adaptivity};
+\draw[arr] (0, -0.3) -- (0, 8.2)
+  node[above, font=\small\bfseries, black] {Generation complexity};
+
+\node[font=\footnotesize, gray] at (1.5, -0.45) {fixed};
+\node[font=\footnotesize, gray] at (5.0, -0.45) {moderate};
+\node[font=\footnotesize, gray] at (9.0, -0.45) {fully adaptive};
+\node[font=\footnotesize, gray, rotate=90] at (-0.65, 1.5) {single-pass};
+\node[font=\footnotesize, gray, rotate=90] at (-0.65, 4.5) {iterative};
+\node[font=\footnotesize, gray, rotate=90] at (-0.65, 7.2) {multi-agent};
+
+\foreach \x in {2.5, 5.0, 7.5}{
+  \draw[gray!15, dashed] (\x, 0) -- (\x, 8.0);
+}
+\foreach \y in {2.5, 5.0, 7.5}{
+  \draw[gray!15, dashed] (0, \y) -- (10.2, \y);
+}
+
+\node[dot, fill=blue!20,   draw=blue!60]   (van)   at (1.2, 1.2) {};
+\node[font=\footnotesize, above=3pt]  at (van)   {Vanilla RAG};
+
+\node[dot, fill=cyan!20,   draw=cyan!60]   (hyde)  at (3.0, 1.5) {};
+\node[font=\footnotesize, above=3pt]  at (hyde)  {HyDE};
+
+\node[dot, fill=cyan!25,   draw=cyan!60]   (crag)  at (5.5, 2.0) {};
+\node[font=\footnotesize, above=3pt]  at (crag)  {Corr. RAG};
+
+\node[dot, fill=orange!25, draw=orange!60] (self)  at (5.0, 3.8) {};
+\node[font=\footnotesize, right=3pt]  at (self)  {Self-RAG};
+
+\node[dot, fill=purple!20, draw=purple!50] (graph) at (3.5, 4.5) {};
+\node[font=\footnotesize, left=3pt]   at (graph) {Graph RAG};
+
+\node[dot, fill=teal!20,   draw=teal!60]   (iter)  at (6.0, 5.0) {};
+\node[font=\footnotesize, right=3pt]  at (iter)  {Iter. Multi-hop};
+
+\node[dot, fill=red!15,    draw=red!50]    (madam) at (7.5, 6.5) {};
+\node[font=\footnotesize, above=3pt]  at (madam) {MADAM-RAG};
+
+\node[dot, fill=green!25,  draw=green!60,
+      minimum size=0.78cm, line width=1.5pt] (rare) at (8.8, 5.8) {};
+\node[font=\footnotesize\bfseries, above=3pt] at (rare) {\rarerag{}};
+
+\draw[green!50!black, thick, dashed, rounded corners=6pt]
+  (1.2,1.2) .. controls (3.8,2.2) and (6.2,4.0) .. (8.8,5.8);
+\node[font=\footnotesize, green!60!black, rotate=26] at (5.0, 3.2)
+  {Pareto frontier};
+
+\end{tikzpicture}
+\caption{Positioning of the eight surveyed RAG families along two design dimensions.
+  \emph{Retrieval adaptivity} captures how dynamically the system selects its
+  retrieval strategy; \emph{generation complexity} captures the number of
+  reasoning or generation steps.
+  The dashed curve approximates the quality--complexity Pareto frontier;
+  \rarerag{} is positioned at its high-adaptivity end.}
+\label{fig:arch_comparison}
+\end{figure}
 
 % ------------------------------------------------------------
 \section{Summary}
