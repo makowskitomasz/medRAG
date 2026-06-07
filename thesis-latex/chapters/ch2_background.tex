@@ -18,73 +18,7 @@ related work in clinical decision support.
 % ------------------------------------------------------------------
 \begin{figure}[htbp]
 \centering
-% resizebox ensures it never overflows the text width
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[
-  font=\small,
-  year/.style={
-    rectangle, rounded corners=3pt,
-    fill=gray!20, draw=gray!50,
-    minimum width=1.1cm, minimum height=0.6cm,
-    align=center, font=\bfseries\small
-  },
-  aitem/.style={   % architecture / generation papers — blue
-    rectangle, rounded corners=3pt,
-    fill=blue!10, draw=blue!40,
-    text width=2.4cm, minimum height=0.65cm,
-    align=center, font=\footnotesize
-  },
-  bitem/.style={   % retrieval / evaluation papers — teal
-    rectangle, rounded corners=3pt,
-    fill=teal!10, draw=teal!40,
-    text width=2.4cm, minimum height=0.65cm,
-    align=center, font=\footnotesize
-  },
-  tick/.style={gray!50, line width=0.5pt},
-  conn/.style={line width=0.5pt}
-]
-
-% ---- axis (15 cm total, years evenly spaced at 2.14 cm) ----
-\draw[-{Stealth[length=6pt]}, line width=1.2pt, gray!60]
-  (-0.3, 0) -- (15.2, 0);
-
-\foreach \x/\yr in {0/2020, 2.14/2021, 4.28/2022, 6.42/2023, 8.56/2024, 10.70/2025, 13.50/2026}{
-  \draw[tick] (\x,-0.3) -- (\x,0.3);
-  \node[year] at (\x, 0) {\yr};
-}
-
-% ---- ABOVE axis: architecture / generation papers ----
-% 2020: RAG (lower) + DPR (upper)
-\node[aitem] (rag)      at (0,    1.4)  {RAG\\{\tiny Lewis et al.}};
-\node[aitem] (dpr)      at (0,    2.45) {DPR\\{\tiny Karpukhin et al.}};
-% 2022: HyDE
-\node[aitem] (hyde)     at (4.28, 1.4)  {HyDE\\{\tiny Gao et al.}};
-% 2023: Self-RAG
-\node[aitem] (selfrag)  at (6.42, 1.4)  {Self-RAG\\{\tiny Asai et al.}};
-% 2024: GraphRAG (lower) + RAPTOR (upper)
-\node[aitem] (graphrag) at (8.56, 1.4)  {GraphRAG\\{\tiny Edge et al.}};
-\node[aitem] (raptor)   at (8.56, 2.45) {RAPTOR\\{\tiny Sarthi et al.}};
-% 2025: Chain-of-Retrieval
-\node[aitem] (chain)    at (10.70,1.4)  {Chain-of-Retr.\\{\tiny Wang et al.}};
-% 2026: A-RAG
-\node[aitem] (arag)     at (13.50,1.4)  {A-RAG\\{\tiny Du et al.}};
-
-% ---- BELOW axis: retrieval models + eval frameworks ----
-\node[bitem] (colbert)   at (0,    -1.4) {ColBERT\\{\tiny Khattab \& Zaharia}};
-\node[bitem] (beir)      at (2.14, -1.4) {BEIR\\{\tiny Thakur et al.}};
-\node[bitem] (colbertv2) at (4.28, -1.4) {ColBERTv2\\{\tiny Santhanam et al.}};
-\node[bitem] (ragas)     at (6.42, -1.4) {RAGAS\\{\tiny Es et al.}};
-\node[bitem] (crag)      at (8.56, -1.4) {Corr.\ RAG\\{\tiny Yan et al.}};
-\node[bitem] (agentic)   at (10.70,-1.4) {Agentic RAG\\{\tiny Singh et al.}};
-\node[bitem] (rarerag)   at (13.50,-1.4) {\textbf{RARE-RAG}\\{\tiny this work}};
-
-% ---- connectors: tick → node ----
-\foreach \n/\x in {rag/0, dpr/0, hyde/4.28, selfrag/6.42, graphrag/8.56, raptor/8.56, chain/10.70, arag/13.50}
-  \draw[conn, blue!35]  (\x, 0.3) -- (\n.south);
-\foreach \n/\x in {colbert/0, beir/2.14, colbertv2/4.28, ragas/6.42, crag/8.56, agentic/10.70, rarerag/13.50}
-  \draw[conn, teal!45] (\x,-0.3) -- (\n.north);
-
-\end{tikzpicture}}% end resizebox
+\includegraphics[width=\linewidth]{figures/tikz_rag_timeline.png}
 \caption{Timeline of key RAG-related publications (2020--2026).
   Items \emph{above} the axis are generation and architecture papers (blue);
   items \emph{below} are retrieval models and evaluation frameworks (teal).}
@@ -370,41 +304,7 @@ Figure~\ref{fig:vanilla_rag} illustrates the three-stage flow.
 % ------------------------------------------------------------------
 \begin{figure}[htbp]
 \centering
-\begin{tikzpicture}[
-  font=\small,
-  box/.style={
-    rectangle, rounded corners=4pt,
-    minimum width=2.5cm, minimum height=0.9cm,
-    align=center, draw, thick
-  },
-  store/.style={
-    cylinder, shape border rotate=90,
-    aspect=0.25,
-    minimum width=2.0cm, minimum height=0.9cm,
-    align=center, draw, thick
-  },
-  arr/.style={-{Stealth[length=5pt]}, thick},
-  lbl/.style={font=\footnotesize\itshape, midway, above=2pt}
-]
-
-% ---- nodes ----
-\node[box, fill=blue!10,  draw=blue!50]   (query)   at (0,   0)    {Query $q$};
-\node[box, fill=blue!15,  draw=blue!50]   (enc)     at (3.2, 0)    {Retriever\\$E_Q(q)$};
-\node[store,fill=gray!10, draw=gray!50]   (index)   at (6.4, 0)    {Vector\\Index};
-\node[box, fill=green!10, draw=green!50]  (topk)    at (6.4,-2.2)  {Top-$k$\\Passages};
-\node[box, fill=orange!10,draw=orange!50] (prompt)  at (3.2,-2.2)  {Prompt\\$[q; d_1;\ldots;d_k]$};
-\node[box, fill=red!8,    draw=red!40]    (llm)     at (0,  -2.2)  {LLM\\Generator};
-\node[box, fill=blue!10,  draw=blue!50]   (answer)  at (0,  -4.0)  {Answer $a$};
-
-% ---- arrows ----
-\draw[arr] (query)  -- node[lbl]{embed} (enc);
-\draw[arr] (enc)    -- node[lbl]{ANN search} (index);
-\draw[arr] (index)  -- node[lbl,right=2pt]{retrieve} (topk);
-\draw[arr] (topk)   -- node[lbl]{concatenate} (prompt);
-\draw[arr] (prompt) -- node[lbl]{condition} (llm);
-\draw[arr] (llm)    -- node[lbl,right=2pt]{generate} (answer);
-
-\end{tikzpicture}
+\includegraphics[width=\linewidth]{figures/tikz_vanilla_rag.png}
 \caption{Vanilla RAG pipeline.
   The query is embedded by a retriever and used to retrieve the top-$k$ passages
   from a pre-built vector index.
@@ -490,118 +390,7 @@ Figure~\ref{fig:selfrag} illustrates the decision flow introduced by these token
 % ------------------------------------------------------------------
 \begin{figure}[htbp]
 \centering
-\begin{tikzpicture}[
-  font=\small,
-  % ---- node styles ----
-  start/.style ={ellipse, draw=blue!55, fill=blue!8,  thick,
-                 minimum width=2.6cm, minimum height=0.85cm, align=center},
-  proc/.style  ={rectangle, rounded corners=4pt,
-                 draw=blue!50, fill=blue!8, thick,
-                 minimum width=3.0cm, minimum height=0.9cm, align=center},
-  dec/.style   ={diamond, draw=orange!65, fill=orange!8, thick,
-                 aspect=3.0, minimum width=3.6cm, minimum height=0.9cm,
-                 align=center, inner sep=0pt},
-  outbox/.style={rectangle, rounded corners=4pt,
-                 draw=green!55, fill=green!10, thick,
-                 minimum width=3.0cm, minimum height=0.9cm, align=center},
-  side/.style  ={rectangle, rounded corners=3pt,
-                 draw=red!45, fill=red!6, thick,
-                 minimum width=2.8cm, minimum height=0.8cm,
-                 align=center, font=\footnotesize},
-  % ---- arrow / label styles ----
-  arr/.style={-{Stealth[length=5pt]}, thick, black!70},
-  lbl/.style={font=\footnotesize, fill=white, inner sep=1.5pt}
-]
-
-% ================================================================
-%  NODE PLACEMENT
-%  Left column  x = 0  : main happy-path (top → bottom)
-%  Right column x = 6  : retrieval sub-flow
-%  Far right    x = 10 : discard exit
-%  Left loop    x = -3 : "no" bypass
-%  Far-left loop x= -4.5 : "not useful" feedback
-% ================================================================
-
-% -- Left column --
-\node[start] (q)     at ( 0,    0  ) {Query $q$};
-\node[dec]   (retd)  at ( 0,  -2.2 ) {\texttt{[Retrieve?]}};
-\node[proc]  (gen)   at ( 0,  -6.5 ) {Generate\\segment};
-\node[dec]   (issup) at ( 0,  -8.7 ) {\texttt{[IsSup?]}};
-\node[dec]   (isuse) at ( 0, -10.9 ) {\texttt{[IsUse?]}};
-\node[outbox] (ans)   at ( 0, -13.0 ) {Final answer $a$};
-
-% -- Right column --
-\node[proc]  (retr)  at ( 6,  -2.2 ) {Retrieve\\passages};
-\node[dec]   (isrel) at ( 6,  -4.5 ) {\texttt{[IsRel?]}};
-\node[side]  (disc)  at (10,  -4.5 ) {Discard\\passage};
-\node[side]  (regen) at ( 6,  -8.7 ) {Regenerate\\segment};
-
-% ================================================================
-%  ARROWS  — each path is routed to avoid any crossing
-% ================================================================
-
-% 1. q → retd  (straight down, x=0)
-\draw[arr] (q) -- (retd);
-
-% 2. retd --yes→ retr  (straight right at y=-2.2)
-\draw[arr] (retd.east) -- node[lbl, above=2pt]{yes} (retr.west);
-
-% 3. retd --no→ gen.west  (LEFT bypass: go left to x=-3, down, then right into gen.west)
-%    Path stays entirely left of x=0, never crosses the right-column paths.
-\draw[arr] (retd.west)
-    -- ++(-1.8, 0)          % horizontal left  → (-1.8, -2.2)
-    -- ++(0,   -4.3)        % vertical down    → (-1.8, -6.5)
-    -- (gen.west)           % horizontal right → gen.west
-    node[lbl, pos=0.08, above=2pt]{no};
-
-% 4. retr → isrel  (straight down at x=6)
-\draw[arr] (retr) -- (isrel);
-
-% 5. isrel --not rel.→ disc  (straight right at y=-4.5)
-\draw[arr] (isrel.east) -- node[lbl, above=2pt]{not rel.} (disc.west);
-
-% 6. isrel --relevant→ gen.north
-%    Exit isrel.west → go left to x=0 → descend to gen.north
-%    The vertical segment at x=0 (y: -4.5 → -6.05) is clear:
-%    q→retd occupies only y=0 to -1.8, and "no" left-bypass is at x=-1.8.
-\draw[arr] (isrel.west)
-    -- ++(-6, 0)            % horizontal left  → (0, -4.5)
-    -- (gen.north)          % vertical down    → gen.north (0, -6.05)
-    node[lbl, pos=0.35, above=2pt]{relevant};
-
-% 7. gen → issup  (straight down, x=0)
-\draw[arr] (gen) -- (issup);
-
-% 8. issup --not sup.→ regen  (straight right)
-\draw[arr] (issup.east) -- node[lbl, above=2pt]{not sup.} (regen.west);
-
-% 9. regen --retry→ gen.east
-%    Exit regen.east → far right (x=8.5) → up to y=-6.5 → left into gen.east.
-%    Horizontal at y=-6.5 runs x=8.5→1.5, well clear of "relevant" (x=0, y=-4.5→-6.05)
-%    and of "no" bypass (x=-1.8).
-\draw[arr] (regen.east)
-    -- ++(2.5, 0)           % right  → (8.5, -8.7)
-    -- ++(0,   2.2)         % up     → (8.5, -6.5)
-    -- (gen.east)           % left   → gen.east (1.5, -6.5)
-    node[lbl, pos=0.5, above=2pt]{retry};
-
-% 10. issup --supported→ isuse  (straight down, x=0)
-\draw[arr] (issup) -- node[lbl, right=3pt]{supported} (isuse);
-
-% 11. isuse --useful→ ans  (straight down, x=0)
-\draw[arr] (isuse) -- node[lbl, right=3pt]{useful} (ans);
-
-% 12. isuse --not useful→ retd
-%     Exit isuse.west → far left (x=-4.5) → up → right → retd.west.
-%     Stays to the LEFT of the "no" bypass (x=-1.8) at all times.
-\draw[arr] (isuse.west)
-    -- ++(-3.3, 0)          % left  → (-3.3, -10.9)
-    -- ++(0,    9.4)        % up    → (-3.3,  -1.5)
-    -- ++(2.1,  0)          % right → (-1.2,  -1.5)
-    -- (retd.west)          % down  → retd.west (-1.2, -2.2)
-    node[lbl, pos=0.07, below=2pt]{not useful};
-
-\end{tikzpicture}
+\includegraphics[width=\linewidth]{figures/tikz_selfrag.png}
 \caption{Self-RAG decision flow~\cite{asai2023selfrag}.
   Reflection tokens (\texttt{[Retrieve?]}, \texttt{[IsRel?]}, \texttt{[IsSup?]},
   \texttt{[IsUse?]}) are generated by the model itself at each step, controlling
@@ -933,73 +722,7 @@ than a plausible-sounding but unverified response.
 % ------------------------------------------------------------------
 \begin{figure}[htbp]
 \centering
-\begin{tikzpicture}[
-  font=\small,
-  dot/.style={circle, draw, thick, minimum size=0.55cm, inner sep=1pt, align=center},
-  arr/.style={-{Stealth[length=4pt]}, thick, gray!60}
-]
-
-\draw[arr] (-0.3, 0) -- (10.5, 0)
-  node[right, font=\small\bfseries, black] {Retrieval adaptivity};
-\draw[arr] (0, -0.3) -- (0, 8.2)
-  node[above, font=\small\bfseries, black] {Generation complexity};
-
-\node[font=\footnotesize, gray] at (1.5, -0.45) {fixed};
-\node[font=\footnotesize, gray] at (5.0, -0.45) {moderate};
-\node[font=\footnotesize, gray] at (9.0, -0.45) {fully adaptive};
-\node[font=\footnotesize, gray, rotate=90] at (-0.65, 1.5) {single-pass};
-\node[font=\footnotesize, gray, rotate=90] at (-0.65, 4.5) {iterative};
-\node[font=\footnotesize, gray, rotate=90] at (-0.65, 7.2) {multi-agent};
-
-\foreach \x in {2.5, 5.0, 7.5}{
-  \draw[gray!15, dashed] (\x, 0) -- (\x, 8.0);
-}
-\foreach \y in {2.5, 5.0, 7.5}{
-  \draw[gray!15, dashed] (0, \y) -- (10.2, \y);
-}
-
-% ---- bubbles with carefully separated labels ----
-% Vanilla RAG  — left, label to the right to stay inside plot
-\node[dot, fill=blue!20,   draw=blue!60]   (van)   at (1.2, 1.2) {};
-\node[font=\footnotesize, right=4pt]  at (van)   {Vanilla RAG};
-
-% HyDE — label above
-\node[dot, fill=cyan!20,   draw=cyan!60]   (hyde)  at (3.0, 1.6) {};
-\node[font=\footnotesize, above=4pt]  at (hyde)  {HyDE};
-
-% Corrective RAG — label above
-\node[dot, fill=cyan!25,   draw=cyan!60]   (crag)  at (5.5, 2.0) {};
-\node[font=\footnotesize, above=4pt]  at (crag)  {Corr. RAG};
-
-% Self-RAG — moved to (4.8, 3.5) so Pareto label has room below it
-\node[dot, fill=orange!25, draw=orange!60] (self)  at (4.8, 3.5) {};
-\node[font=\footnotesize, left=4pt]   at (self)  {Self-RAG};
-
-% Graph RAG — label to the left
-\node[dot, fill=purple!20, draw=purple!50] (graph) at (3.2, 4.5) {};
-\node[font=\footnotesize, left=4pt]   at (graph) {Graph RAG};
-
-% Iter. Multi-hop — label to the right
-\node[dot, fill=teal!20,   draw=teal!60]   (iter)  at (6.2, 5.2) {};
-\node[font=\footnotesize, right=4pt]  at (iter)  {Iter. Multi-hop};
-
-% MADAM-RAG — label above
-\node[dot, fill=red!15,    draw=red!50]    (madam) at (7.5, 6.8) {};
-\node[font=\footnotesize, above=4pt]  at (madam) {MADAM-RAG};
-
-% RARE-RAG — larger bubble, label above
-\node[dot, fill=green!25,  draw=green!60,
-      minimum size=0.80cm, line width=1.5pt] (rare)  at (9.0, 5.6) {};
-\node[font=\footnotesize\bfseries, above=4pt] at (rare) {\rarerag{}};
-
-% Pareto frontier curve — positioned BELOW Self-RAG to avoid overlap
-\draw[green!50!black, thick, dashed, rounded corners=6pt]
-  (1.2,1.2) .. controls (3.5,2.0) and (6.5,4.2) .. (9.0,5.6);
-% Label placed at a clear gap between CRAG and Self-RAG
-\node[font=\footnotesize, green!60!black, rotate=24] at (4.8, 2.5)
-  {Pareto frontier};
-
-\end{tikzpicture}
+\includegraphics[width=\linewidth]{figures/tikz_arch_comparison.png}
 \caption{Positioning of the eight surveyed RAG families along two design dimensions.
   \emph{Retrieval adaptivity} captures how dynamically the system selects its
   retrieval strategy; \emph{generation complexity} captures the number of

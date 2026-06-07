@@ -31,61 +31,7 @@
 % Figure placeholder:
 \begin{figure}[htbp]
 \centering
-\begin{tikzpicture}[
-  proc/.style   = {rectangle, rounded corners=5pt,
-                   draw=blue!50, fill=blue!6, thick,
-                   minimum width=6.2cm, minimum height=1.05cm, align=center},
-  dec/.style    = {diamond, draw=orange!65, fill=orange!7, thick,
-                   aspect=3.6, minimum width=5.2cm, align=center, inner sep=1pt},
-  start/.style  = {ellipse, draw=blue!50, fill=blue!8, thick,
-                   minimum width=2.8cm, minimum height=0.9cm, align=center},
-  outbox/.style = {rectangle, rounded corners=5pt,
-                   draw=green!55, fill=green!8, thick,
-                   minimum width=6.2cm, minimum height=1.0cm, align=center},
-  abstbox/.style= {rectangle, rounded corners=4pt,
-                   draw=red!50, fill=red!6, thick,
-                   minimum width=2.6cm, minimum height=0.85cm,
-                   align=center, font=\small},
-  arr/.style    = {-{Stealth[length=5pt]}, thick, black!65},
-  lbl/.style    = {font=\footnotesize, fill=white, inner sep=1.5pt},
-]
-
-% ── main column (x=0) ──────────────────────────────────────────────
-\node[start]  (query)   at (0,    0  ) {Query $q$};
-\node[dec]    (router)  at (0,  -2.1 ) {\texttt{Complexity Router}};
-\node[proc]   (hybrid)  at (0,  -4.6 ) {\textbf{Hybrid Retrieval}\\[2pt]
-  {\footnotesize BM25\,+\,dense vector\,+\,cross-encoder reranker}};
-\node[proc]   (setwise) at (0,  -7.1 ) {\textbf{Set-wise Evidence Selection}\\[2pt]
-  {\footnotesize greedy complementarity-aware subset scoring}};
-\node[proc]   (ground)  at (0,  -9.6 ) {\textbf{Grounding Verifier}\\[2pt]
-  {\footnotesize per-claim support check against retrieved context}};
-\node[proc]   (gen)     at (0, -12.1 ) {\textbf{LLM Generation}\\[2pt]
-  {\footnotesize grounded response with inline citations}};
-\node[outbox] (resp)    at (0, -13.9 ) {Grounded Response};
-
-% ── abstention exit (right) ────────────────────────────────────────
-\node[abstbox] (abstain) at (6.2, -9.6) {Abstention\\Response};
-
-% ── main vertical arrows ───────────────────────────────────────────
-\draw[arr] (query)   -- (router);
-\draw[arr] (router)  -- node[lbl, right=3pt]{complex} (hybrid);
-\draw[arr] (hybrid)  -- (setwise);
-\draw[arr] (setwise) -- (ground);
-\draw[arr] (ground)  -- node[lbl, right=3pt]{score $\geq\tau$} (gen);
-\draw[arr] (gen)     -- (resp);
-
-% ── abstention arrow ───────────────────────────────────────────────
-\draw[arr] (ground.east) -- node[lbl, above=2pt]{score $<\tau$} (abstain.west);
-
-% ── simple/fast bypass (left side, avoids all complex stages) ──────
-% router.west → left detour → gen.west
-\draw[arr] (router.west)
-    -- ++(-2.0, 0)       % diamond west (-2.6) → (-4.6, -2.1)
-    -- ++(0,  -10.0)     % down → (-4.6, -12.1)
-    -- (gen.west)        % → gen.west (-3.1, -12.1)
-    node[lbl, pos=0.07, above=2pt]{simple / fast};
-
-\end{tikzpicture}
+\includegraphics[width=\linewidth]{figures/tikz_rarerag_overview.png}
 \caption{\rarerag{} architecture. The Complexity Router classifies each query and
   dispatches simple queries directly to LLM generation via the fast bypass (left),
   while complex or high-risk queries traverse the full four-stage pipeline.
