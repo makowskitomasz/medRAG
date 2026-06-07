@@ -38,8 +38,6 @@ LABEL_FIELDS = [
     "mechanism_of_action",
 ]
 
-_FIELDS_PARAM = ",".join(["openfda.brand_name", "openfda.generic_name"] + LABEL_FIELDS)
-
 
 def _slug(text: str, max_len: int = 80) -> str:
     s = re.sub(r"[^a-zA-Z0-9]+", "_", text).strip("_").lower()
@@ -50,13 +48,13 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Download OpenFDA drug profiles for medRAG")
     p.add_argument(
         "--interactions",
-        default="data/ddi_interactions.json",
-        help="Path to ddi_interactions.json (default: data/ddi_interactions.json)",
+        default="../data/ddi_interactions.json",
+        help="Path to ddi_interactions.json (default: ../data/ddi_interactions.json)",
     )
     p.add_argument(
         "--output-dir",
-        default="data",
-        help="Root output directory (default: data/)",
+        default="../data",
+        help="Root output directory (default: ../data/)",
     )
     p.add_argument(
         "--delay",
@@ -90,9 +88,8 @@ def _collect_drug_names(interactions: list[dict]) -> list[str]:
 def _query_openfda(client: httpx.Client, drug_name: str) -> dict | None:
     """Query OpenFDA for a drug by generic name. Returns first result or None."""
     params = {
-        "search": f'openfda.generic_name:"{drug_name}"',
+        "search": f'openfda.generic_name:"{drug_name.upper()}"',
         "limit": "1",
-        "_fields": _FIELDS_PARAM,
     }
     try:
         r = client.get(OPENFDA_BASE, params=params, timeout=10.0)

@@ -30,7 +30,9 @@ def _slug(text: str, max_len: int = 80) -> str:
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Prepare DDI corpus for medRAG benchmark")
-    p.add_argument("--output-dir", default="data", help="Root output directory (default: data/)")
+    p.add_argument(
+        "--output-dir", default="../data", help="Root output directory (default: ../data/)"
+    )
     p.add_argument(
         "--split",
         default="train+test",
@@ -51,7 +53,10 @@ def _load_splits(split_str: str) -> list:
     rows: list = []
     for split in splits:
         ds = load_dataset(
-            "bigbio/ddi_corpus", name="ddi_corpus_bigbio_kb", split=split, trust_remote_code=True
+            "bigbio/ddi_corpus",
+            name="ddi_corpus_bigbio_kb",
+            split=split,
+            trust_remote_code=True,
         )
         rows.extend(ds)
         print(f"  Loaded split '{split}': {len(ds)} documents")
