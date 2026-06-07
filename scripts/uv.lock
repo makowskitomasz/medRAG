@@ -1024,6 +1024,11 @@ dev = [
     { name = "ruff" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "datasets", specifier = ">=2.20.0" },
@@ -1042,6 +1047,9 @@ requires-dist = [
     { name = "tqdm", specifier = ">=4.66.0" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ruff", specifier = ">=0.15.15" }]
 
 [[package]]
 name = "multidict"
