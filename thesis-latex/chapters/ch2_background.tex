@@ -9,7 +9,7 @@ from the broader trajectory of language models.
 This chapter traces that trajectory, from the limitations of purely parametric models
 through the retrieval techniques that underpin modern RAG systems, to the diverse
 architectural families that have emerged between 2020 and 2026.
-Figure~\ref{fig:rag_timeline} summarises the key milestones.
+\cref{fig:rag_timeline} summarises the key milestones.
 The chapter closes with an account of RAG evaluation methodology and a review of
 related work in clinical decision support.
 
@@ -18,10 +18,8 @@ related work in clinical decision support.
 % ------------------------------------------------------------------
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\linewidth]{figures/tikz_rag_timeline.png}
-\caption{Timeline of key RAG-related publications (2020--2026).
-  Items \emph{above} the axis are generation and architecture papers (blue);
-  items \emph{below} are retrieval models and evaluation frameworks (teal).}
+\includegraphics[width=\linewidth]{figures/rag_timeline.png}
+\caption[Timeline of key RAG-related publications (2020--2026).]{Timeline of key RAG-related publications (2020--2026). Blue: generation and architecture papers (above axis); green: retrieval models and evaluation frameworks (below axis).}
 \label{fig:rag_timeline}
 \end{figure}
 
@@ -216,7 +214,7 @@ Alternatively, Weaviate and similar vector databases expose an $\alpha$ paramete
 that linearly interpolates the BM25 and vector scores before ranking.
 The \medrag{} system uses $\alpha = 0.5$ as the default, which was found empirically
 to balance the strengths of both modalities on the HotpotQA development split
-(Section~\ref{sec:hybrid_search}).
+(\cref{sec:hybrid_search}).
 
 Cross-encoder rerankers take a different approach: rather than encoding query and
 passage independently, they process the query--passage pair jointly with a
@@ -233,13 +231,13 @@ from the BAAI general embedding family that performs competitively on the BEIR b
 
 The six years since Lewis \etal~\cite{lewis2020rag} have seen an explosion of
 architectural variants.
-Table~\ref{tab:rag_families} organises them into eight families, ordered by approximate
+\cref{tab:rag_families} organises them into eight families, ordered by approximate
 date of introduction.
 The remainder of this section examines each family in turn.
 
 \begin{table}[htbp]
   \centering
-  \caption{Overview of surveyed RAG architecture families.
+  \caption[Overview of surveyed RAG architecture families.]{Overview of surveyed RAG architecture families.
     Architectures are ordered chronologically.
     Benchmarks cited are those used in the original papers; direct comparison
     across rows is not valid without controlling for dataset and model size.}
@@ -297,28 +295,22 @@ Third, a language model generates the answer conditioned on that prompt.
 
 The appeal of this pipeline is its simplicity: each component can be independently
 swapped, and the only trainable interaction between them is through the prompt.
-Figure~\ref{fig:vanilla_rag} illustrates the three-stage flow.
+\cref{fig:vanilla_rag} illustrates the three-stage flow.
 
 % ------------------------------------------------------------------
 % Figure 2.2 — Vanilla RAG Pipeline
 % ------------------------------------------------------------------
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\linewidth]{figures/tikz_vanilla_rag.png}
-\caption{Vanilla RAG pipeline.
-  The query is embedded by a retriever and used to retrieve the top-$k$ passages
-  from a pre-built vector index.
-  The passages are concatenated with the query into a prompt, which conditions
-  the language model to generate the final answer.}
+\includegraphics[width=\linewidth]{figures/vanilla_rag.png}
+\caption[Vanilla RAG pipeline.]{Vanilla RAG: query embedding → top-$k$ retrieval → prompt concatenation → LLM generation.}
 \label{fig:vanilla_rag}
 \end{figure}
 
 In practice, vanilla RAG with a capable retriever and a large generator achieves
 competitive results on many benchmarks while remaining fast and predictable.
-In our experiments (Chapter~\ref{cha:evaluation}), vanilla RAG achieves a Token~F1
-of 0.537 and Exact Match of 0.316 on HotpotQA --- competitive with much more complex
-architectures, at a fraction of their latency (9.1 seconds per query versus 20--31
-seconds for enhanced modes).
+Its principal advantage is simplicity: a single retrieval pass followed by a single
+generation call keeps latency low and the system easy to reason about.
 
 The principal limitations of vanilla RAG are the lack of self-correction and the
 fixed retrieval strategy.
@@ -345,11 +337,9 @@ Retrieval then finds real passages that are semantically similar to the hypothet
 one.
 
 HyDE is conceptually elegant and requires no additional training.
-In our experiments, it achieves the second-highest faithfulness score (0.971) among all
-evaluated modes, suggesting that the better-aligned retrieval does produce more
-grounded context.
-The cost is latency: HyDE requires an additional LLM call to generate the hypothetical
-document before retrieval, pushing mean latency to 22.7 seconds per query.
+The improved embedding alignment tends to produce more grounded retrieval context,
+at the cost of an additional LLM call before retrieval, which increases end-to-end
+latency compared to vanilla RAG.
 
 Query rewriting pursues a related idea without the hypothetical document: a smaller
 or cheaper model rewrites the user's query into one that is better suited for
@@ -364,51 +354,36 @@ any retrieval backbone.
 Self-RAG~\cite{asai2023selfrag} represents a qualitative shift from the retrieve-then-
 generate paradigm to a \emph{generate-with-retrieval-on-demand} paradigm.
 The core contribution is a set of special reflection tokens injected into the
-generation vocabulary:
-
-\begin{itemize}
-  \item \texttt{[Retrieve]} --- signals that additional retrieval is needed before
-    continuing generation;
-  \item \texttt{[IsRel]} / \texttt{[IsNotRel]} --- judges whether a retrieved passage
-    is relevant to the query;
-  \item \texttt{[IsSup]} / \texttt{[IsNotSup]} --- judges whether the generated
-    statement is supported by the retrieved passage;
-  \item \texttt{[IsUse]} --- rates the overall utility of a generated segment.
-\end{itemize}
-
-\noindent
+generation vocabulary: \texttt{[Retrieve]} signals that additional retrieval is needed
+before continuing generation; \texttt{[IsRel]}/\texttt{[IsNotRel]} judges whether a
+retrieved passage is relevant to the query; \texttt{[IsSup]}/\texttt{[IsNotSup]} judges
+whether the generated statement is supported by the retrieved passage; and
+\texttt{[IsUse]} rates the overall utility of a generated segment.
 A Self-RAG model is fine-tuned on data labelled with these tokens, learning when
 to retrieve, how to assess retrieved evidence, and whether its own output is
 grounded.
 At inference time, the model interleaves retrieval calls with generation, inserting
 passages where needed and backtracking when evidence is deemed insufficient.
 
-Figure~\ref{fig:selfrag} illustrates the decision flow introduced by these tokens.
+\cref{fig:selfrag} illustrates the decision flow introduced by these tokens.
 
 % ------------------------------------------------------------------
 % Figure 2.3 — Self-RAG Decision Flow
 % ------------------------------------------------------------------
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\linewidth]{figures/tikz_selfrag.png}
-\caption{Self-RAG decision flow~\cite{asai2023selfrag}.
-  Reflection tokens (\texttt{[Retrieve?]}, \texttt{[IsRel?]}, \texttt{[IsSup?]},
-  \texttt{[IsUse?]}) are generated by the model itself at each step, controlling
-  when to retrieve, which passages to use, and whether to regenerate unsupported
-  segments. The ``no'' bypass (left side) and ``not useful'' feedback loop (far left)
-  are routed to avoid crossing the retrieval sub-flow on the right.}
+\includegraphics[width=\linewidth]{figures/selfrag.png}
+\caption[Self-RAG decision flow~\cite{asai2023selfrag}.]{Self-RAG decision flow~\cite{asai2023selfrag}. The model generates reflection tokens (\texttt{[Retrieve?]}, \texttt{[IsRel?]}, \texttt{[IsSup?]}, \texttt{[IsUse?]}) to control retrieval, passage selection, and regeneration.}
 \label{fig:selfrag}
 \end{figure}
 
 The results reported by Asai \etal show substantial gains over vanilla RAG on
 fact verification and long-form generation tasks, particularly on questions that
 require synthesising information from multiple sources.
-In our evaluation, self-reflection achieves the highest Exact Match (0.329) of all
-evaluated modes and the highest Token~F1 (0.545), confirming that explicit reasoning
-about evidence quality does improve factual accuracy.
-The cost is a 19.9-second mean latency and the requirement for a fine-tuned model ---
-vanilla decoder models do not produce the reflection tokens needed for the mechanism
-to operate.
+The explicit reasoning about evidence quality improves factual accuracy, but at the
+cost of higher latency from interleaved retrieval calls and the requirement for a
+fine-tuned model --- vanilla decoder models do not produce the reflection tokens
+needed for the mechanism to operate.
 
 \subsection{Corrective RAG}
 \label{subsec:corrective_rag}
@@ -427,12 +402,10 @@ gaps that would silently mislead other architectures.
 This makes it particularly suitable for questions about recent events or narrow
 sub-domains not well represented in the static corpus.
 
-In our HotpotQA experiments, corrective\_rag achieves a Token~F1 of 0.539 and
-Exact Match of 0.323 at a mean latency of 11.8 seconds --- making it the best
-cost-quality ratio among the enhanced architectures, roughly 2.5 times slower than
-vanilla but significantly more accurate on the hardest questions.
-However, the web-search fallback was effectively disabled in our benchmark
-(no live web access), so these results represent the re-retrieval branch only.
+The re-retrieval mechanism adds a moderate latency overhead compared to vanilla RAG,
+but the quality gain on questions where the initial retrieval fails can be substantial.
+In practice, the web-search fallback provides the greatest benefit on queries about
+recent events or narrow sub-domains not well represented in a static corpus.
 
 \subsection{Adaptive RAG}
 \label{subsec:adaptive_rag}
@@ -447,7 +420,7 @@ benchmark datasets.
 The key insight is that not all queries benefit equally from retrieval, and applying
 a heavyweight multi-step pipeline to simple questions wastes compute without improving
 quality.
-RARE-RAG (Chapter~\ref{cha:rare_rag}) builds on this routing idea but extends it with
+RARE-RAG (\cref{cha:rare_rag}) builds on this routing idea but extends it with
 domain-specific risk classification and integrates it with set-wise evidence selection
 and a grounding verifier.
 
@@ -498,13 +471,11 @@ and retrieval queries, executing each retrieval call before continuing.
 This is similar in spirit to Self-RAG but focuses specifically on the multi-hop
 evidence chain rather than general retrieval quality assessment.
 
-In our experiments, iterative\_multihop achieves a Token~F1 of 0.533 and Exact
-Match of 0.314 at a mean latency of 26.0 seconds.
-The latency cost is substantial because each hop requires a full retrieval call,
-and HotpotQA questions often require two to three hops.
-The context recall (0.953) is also the second-lowest among all modes, suggesting that
-the iterative process does not always recover evidence that a single broad retrieval
-would have found.
+The latency cost is substantial because each hop requires a full retrieval and
+generation call, and complex questions may require several hops before a complete
+evidence chain is assembled.
+Empirically, the iterative process does not always recover evidence that a single
+broad retrieval pass would have found, as each sub-query narrows the search scope.
 
 \subsection{Agentic and Multi-Agent RAG}
 \label{subsec:agentic_rag}
@@ -535,19 +506,12 @@ MADAM-RAG~\cite{wang2025madamrag} explores a different angle: multi-agent debate
 for questions with ambiguous or conflicting evidence.
 Multiple agents retrieve evidence independently and argue for different candidate
 answers, with a judge agent synthesising the debate into a final response.
-While compelling for disambiguation tasks, this design proved poorly suited to
-factoid multi-hop QA in our experiments: MADAM-RAG achieves the lowest Token~F1
-(0.487) and Exact Match (0.282) of all evaluated modes, at the highest latency (29.0
-seconds) after \rarerag{}.
-The debate mechanism adds overhead without benefit when the question has a unique,
-retrievable answer.
-
-In our evaluation, the multi\_agent mode (a single-orchestrator multi-tool agent)
-achieves a surprising result: Token~F1 of 0.525 and mean latency of only 10.2 seconds
---- the second-fastest mode after vanilla, due to parallel tool calls reducing
-wall-clock time despite higher total token count.
-This suggests that well-designed agentic architectures can be both capable and
-efficient when parallelism is exploited.
+While compelling for disambiguation tasks, the debate mechanism adds substantial
+overhead without benefit when the question has a unique, retrievable answer ---
+making it better suited to open-ended tasks than factoid retrieval.
+Well-designed agentic architectures that exploit parallel tool calls can achieve
+competitive latency despite higher total token counts, as the wall-clock cost is
+determined by the critical path rather than total compute.
 
 % ------------------------------------------------------------
 \section{Evaluation of RAG Systems}
@@ -635,7 +599,7 @@ the relevant ones will score low on context precision.
 RAGAS uses an LLM as a judge for faithfulness and answer relevance, which introduces
 a dependency: systems evaluated with the same model family used for generation may
 benefit from a systematic bias.
-This limitation is acknowledged in Section~\ref{sec:limitations}.
+This limitation is acknowledged in \cref{sec:limitations}.
 
 \subsection{Benchmarks and Datasets}
 \label{subsec:benchmarks}
@@ -710,7 +674,7 @@ clinical deployment~\cite{ji2023hallucination}.
 
 RAG contributes to trustability through citation: every answer can be linked to the
 specific passages that support it, allowing a clinician to verify the claim directly.
-The \rarerag{} architecture (Chapter~\ref{cha:rare_rag}) takes this further with an
+The \rarerag{} architecture (\cref{cha:rare_rag}) takes this further with an
 explicit grounding verifier that checks whether the generated answer is supported by
 the retrieved context, and abstains from answering when it cannot verify the claims.
 This abstention mechanism is particularly important in the DDI domain, where a
@@ -722,13 +686,8 @@ than a plausible-sounding but unverified response.
 % ------------------------------------------------------------------
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\linewidth]{figures/tikz_arch_comparison.png}
-\caption{Positioning of the eight surveyed RAG families along two design dimensions.
-  \emph{Retrieval adaptivity} captures how dynamically the system selects its
-  retrieval strategy; \emph{generation complexity} captures the number of
-  reasoning or generation steps.
-  The dashed curve approximates the quality--complexity Pareto frontier;
-  \rarerag{} is positioned at its high-adaptivity end.}
+\includegraphics[width=\linewidth]{figures/arch_comparison.png}
+\caption[RAG families positioned by retrieval adaptivity and generation complexity.]{Eight surveyed RAG families along two axes: retrieval adaptivity (x) and generation complexity (y). The dashed curve approximates the Pareto frontier; RARE-RAG occupies the high-adaptivity end.}
 \label{fig:arch_comparison}
 \end{figure}
 
@@ -741,7 +700,7 @@ retrieval and the original Lewis \etal framework, through six families of increa
 sophisticated architectures, to the evaluation methodology used in this thesis.
 
 Several observations motivate the \rarerag{} design presented in
-Chapter~\ref{cha:rare_rag}.
+\cref{cha:rare_rag}.
 First, no existing architecture in the literature routes queries by risk or clinical
 significance before selecting a retrieval strategy: Adaptive-RAG routes by linguistic
 complexity but not domain-specific risk.

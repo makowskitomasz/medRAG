@@ -54,25 +54,19 @@ Three research questions guide this work:
 \section{Scope and Limitations}
 \label{sec:scope}
 
-This thesis covers:
-\begin{itemize}
-  \item a survey of eight RAG architecture families (Chapter~\ref{cha:background});
-  \item the design of \rarerag{}, a novel four-component architecture
-        (Chapter~\ref{cha:rare_rag});
-  \item implementation of a 14-service microservice platform with configurable RAG
-        strategies (Chapters~\ref{cha:system_design}--\ref{cha:implementation});
-  \item an empirical benchmark on HotpotQA: nine RAG modes, 1{,}000 questions each
-        (Chapter~\ref{cha:evaluation}).
-\end{itemize}
+This thesis covers a survey of eight RAG architecture families
+(\cref{cha:background}), the design of \rarerag{} as a novel four-component
+architecture (\cref{cha:rare_rag}), implementation of a 14-service microservice
+platform with configurable RAG strategies
+(\crefrange{cha:system_design}{cha:implementation}), and an empirical benchmark
+on HotpotQA across nine RAG modes with 1{,}000 questions each
+(\cref{cha:evaluation}).
 
-The following are explicitly out of scope:
-\begin{itemize}
-  \item clinical validation or patient-facing deployment;
-  \item regulatory compliance (MDR, FDA SaMD guidance);
-  \item fine-tuning or pre-training of language models;
-  \item evaluation on the drug interaction corpus (planned as future work ---
-        infrastructure and data preparation scripts are available in the repository).
-\end{itemize}
+The following are explicitly out of scope: clinical validation or patient-facing
+deployment, regulatory compliance (MDR, FDA SaMD guidance), fine-tuning or pre-training
+of language models, and evaluation on the drug interaction corpus --- the latter is
+planned as future work, with infrastructure and data preparation scripts already available
+in the repository.
 
 % ------------------------------------------------------------
 \section{Contributions}
@@ -80,36 +74,33 @@ The following are explicitly out of scope:
 
 The main contributions of this thesis are:
 
-\begin{enumerate}
-  \item \textbf{Comparative empirical study} of nine RAG pipeline variants on
-    HotpotQA (9{,}000 evaluated questions), using both lexical (Token~F1, EM, ROUGE-L)
-    and RAGAS-based (faithfulness, answer relevance, context recall) metrics, with
-    latency and cost analysis.
-
-  \item \textbf{\rarerag{} architecture} --- a novel RAG pipeline combining query
-    complexity routing, hybrid BM25+vector retrieval, set-wise evidence selection,
-    and a grounding verifier with abstention.
-    \rarerag{} achieves the highest faithfulness score (0.976) across all evaluated modes.
-
-  \item \textbf{Open-source \medrag{} platform} --- a production-grade microservice
-    system comprising 14 services, configurable chunking strategies, embedding providers,
-    and RAG modes, with full CI/CD pipeline and Docker deployment.
-\end{enumerate}
+The first contribution is a \textbf{comparative empirical study} of nine RAG pipeline
+variants on HotpotQA (9{,}000 evaluated questions), using both lexical metrics
+(Token~F1, EM, ROUGE-L) and RAGAS-based indicators (faithfulness, answer relevance,
+context recall), together with latency and cost analysis.
+The second is the \textbf{\rarerag{} architecture} --- a novel RAG pipeline combining
+query complexity routing, hybrid BM25+vector retrieval, set-wise evidence selection,
+and a grounding verifier with abstention; \rarerag{} achieves the highest faithfulness
+score (0.976) across all evaluated modes.
+The third is the \textbf{open-source \medrag{} platform} --- a production-grade
+microservice system comprising 14 services with configurable chunking strategies,
+embedding providers, and RAG modes, backed by a full CI/CD pipeline and Docker
+deployment.
 
 % ------------------------------------------------------------
 \section{Thesis Organisation}
 \label{sec:organisation}
 
 The remainder of this thesis is organised as follows.
-Chapter~\ref{cha:background} surveys the evolution of RAG from the original
+\cref{cha:background} surveys the evolution of RAG from the original
 retrieve-then-generate paradigm through agentic multi-agent systems and positions this
 work within the literature.
-Chapter~\ref{cha:rare_rag} presents the \rarerag{} architecture in detail, covering its
+\cref{cha:rare_rag} presents the \rarerag{} architecture in detail, covering its
 four components and the hypotheses it addresses.
-Chapter~\ref{cha:system_design} documents the full microservice architecture of the
+\cref{cha:system_design} documents the full microservice architecture of the
 \medrag{} platform using C4 diagrams and sequence models.
-Chapter~\ref{cha:implementation} describes selected non-trivial implementation decisions:
+\cref{cha:implementation} describes selected non-trivial implementation decisions:
 embedding abstraction, hybrid search tuning, SSE streaming, and evaluation integration.
-Chapter~\ref{cha:evaluation} presents the experimental setup, results, and discussion.
-Chapter~\ref{cha:conclusions} summarises the findings, revisits the research questions,
+\cref{cha:evaluation} presents the experimental setup, results, and discussion.
+\cref{cha:conclusions} summarises the findings, revisits the research questions,
 and outlines directions for future work.

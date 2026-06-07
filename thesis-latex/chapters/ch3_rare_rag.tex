@@ -15,7 +15,7 @@ and describes each of the four components in detail.
 \section{Motivation}
 \label{sec:rarerag_motivation}
 
-The architectures surveyed in Chapter~\ref{cha:background} can be grouped by
+The architectures surveyed in \cref{cha:background} can be grouped by
 their approach to retrieval control.
 Vanilla RAG applies a fixed retrieval strategy regardless of query content.
 Self-RAG~\cite{asai2023selfrag} introduces per-token reflection tokens that
@@ -69,43 +69,32 @@ with abstention as an explicit outcome.
 \label{sec:rarerag_overview}
 
 \rarerag{} consists of four components arranged in a conditional pipeline,
-illustrated in Figure~\ref{fig:rarerag_overview}.
+illustrated in \cref{fig:rarerag_overview}.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.82\linewidth]{figures/tikz_rarerag_overview.png}
-\caption{\rarerag{} architecture. The Complexity Router classifies each query and
-  dispatches simple queries directly to LLM generation via the fast bypass (left),
-  while complex or high-risk queries traverse the full four-stage pipeline.
-  The Grounding Verifier emits an \emph{Abstention Response} (right) when
-  per-claim evidence support falls below threshold~$\tau$.}
+\includegraphics[width=0.82\linewidth]{figures/rarerag_overview.png}
+\caption[RARE-RAG architecture overview.]{RARE-RAG pipeline: the Complexity Router sends simple queries to a fast bypass; complex queries traverse hybrid retrieval, set-wise selection, and the Grounding Verifier, which abstains when the support score falls below threshold~$\tau$.}
 \label{fig:rarerag_overview}
 \end{figure}
 
-\begin{enumerate}
-  \item \textbf{Complexity Router.} A lightweight LLM call classifies the incoming
-    query as \emph{simple} or \emph{complex}.
-    Simple queries bypass the three evidence-processing stages and go directly to
-    LLM generation with a standard vanilla retrieval pass.
-    Complex queries enter the full pipeline.
-
-  \item \textbf{Hybrid Evidence Retrieval.} For complex queries, both BM25 sparse
-    retrieval and dense vector retrieval are executed in parallel and fused via
-    Reciprocal Rank Fusion~(RRF).
-    A cross-encoder reranker then re-scores the top-$K$ candidates to produce a
-    smaller high-precision shortlist.
-
-  \item \textbf{Set-wise Evidence Selection.} The reranked shortlist is pruned by a
-    greedy complementarity-aware selection step that maximises the informational
-    diversity of the final evidence set rather than simply taking the highest-scoring
-    individual passages.
-
-  \item \textbf{Grounding Verifier.} After the LLM generates a response conditioned
-    on the selected evidence, the verifier extracts atomic claims from the response
-    and checks each claim against the retrieved passages.
-    If the aggregate support score falls below a threshold~$\tau$, the system
-    abstains rather than returning an ungrounded response.
-\end{enumerate}
+The first component, the \textbf{Complexity Router}, performs a lightweight LLM
+call that classifies the incoming query as \emph{simple} or \emph{complex}: simple
+queries bypass the three evidence-processing stages and proceed directly to LLM
+generation with a standard vanilla retrieval pass, while complex queries enter the
+full pipeline.
+The second component, \textbf{Hybrid Evidence Retrieval}, executes BM25 sparse
+retrieval and dense vector retrieval in parallel for complex queries, fuses the two
+ranked lists via Reciprocal Rank Fusion~(RRF), and applies a cross-encoder reranker
+to produce a smaller high-precision shortlist.
+The third component, \textbf{Set-wise Evidence Selection}, prunes the reranked
+shortlist using a greedy complementarity-aware selection step that maximises the
+informational diversity of the final evidence set rather than simply taking the
+individually highest-scoring passages.
+The fourth component, the \textbf{Grounding Verifier}, extracts atomic claims from
+the LLM's response and checks each claim against the retrieved passages; if the
+aggregate support score falls below a threshold~$\tau$, the system abstains rather
+than returning an ungrounded response.
 
 The name reflects the design intent.
 \emph{Risk-Aware} refers to the abstention mechanism and the grounding check:
@@ -150,18 +139,12 @@ so the router itself does not depend on retrieval.
 
 \subsection{Routing Criteria}
 
-In practice, a query is classified as complex if it satisfies at least one
-of the following criteria as judged by the LLM:
-
-\begin{itemize}
-  \item It involves three or more distinct pharmaceutical agents.
-  \item It requires reasoning over patient-specific factors such as
-    renal function, hepatic impairment, age, or pregnancy status.
-  \item It asks about a mechanism that spans multiple pharmacological pathways.
-  \item It is phrased as a risk-assessment or recommendation request
-    (``Is it safe to \ldots{}'' rather than ``What is \ldots{}'').
-\end{itemize}
-
+In practice, a query is classified as complex if it satisfies at least one of the
+following criteria as judged by the LLM: it involves three or more distinct
+pharmaceutical agents; it requires reasoning over patient-specific factors such as
+renal function, hepatic impairment, age, or pregnancy status; it asks about a mechanism
+that spans multiple pharmacological pathways; or it is phrased as a risk-assessment
+or recommendation request (``Is it safe to \ldots{}'' rather than ``What is \ldots{}'').
 All other queries are classified as simple.
 The router defaults to \textit{complex} when uncertain, trading a small
 latency overhead for the safety of the more thorough pipeline.
@@ -170,7 +153,7 @@ latency overhead for the safety of the more thorough pipeline.
 
 The router introduces a fixed overhead of approximately 0.8\,s per query
 regardless of classification outcome.
-On the HotpotQA benchmark (Section~\ref{sec:exp_setup}), where questions are
+On the HotpotQA benchmark (\cref{sec:exp_setup}), where questions are
 Wikipedia-style multi-hop rather than medical, the majority of queries were
 classified as complex, which explains why \rarerag{}'s mean latency on that
 benchmark exceeds the latency of simpler architectures.
@@ -179,7 +162,7 @@ simple lookup requests, the router should reduce average latency by routing
 those directly to the fast path.
 A controlled ablation comparing \rarerag{} with and without routing on a
 DDI-specific query set is identified as future work
-(Chapter~\ref{cha:conclusions}).
+(\cref{cha:conclusions}).
 
 \begin{hypothesis}[Routing benefit]
   \label{hyp:routing}
@@ -425,9 +408,9 @@ expected to be substantially higher and more clinically meaningful.
 \label{sec:rarerag_hypotheses}
 
 Three properties are claimed for \rarerag{} relative to the architectures
-described in Chapter~\ref{cha:background}.
+described in \cref{cha:background}.
 Each is expressed as a falsifiable hypothesis tested in
-Chapter~\ref{cha:evaluation}.
+\cref{cha:evaluation}.
 
 \paragraph{H1 --- Faithfulness.}
 The grounding verifier suppresses claims not supported by retrieved context,
@@ -436,8 +419,8 @@ metric.
 Compared to Self-RAG (which reflects on passages during generation but
 performs no post-generation audit) and vanilla RAG (no grounding control),
 \rarerag{} should achieve the lowest hallucination rate.
-This is Hypothesis~\ref{hyp:faithfulness}, confirmed in
-Section~\ref{sec:results_faithfulness}.
+This is \cref{hyp:faithfulness}, confirmed in
+\cref{sec:results_faithfulness}.
 
 \paragraph{H2 --- Competitive accuracy.}
 The abstention mechanism could reduce Token~F1 if the system suppresses
@@ -461,10 +444,10 @@ the three downstream evidence-processing stages for those queries.
 The HotpotQA benchmark, dominated by complex multi-hop questions, is not
 ideal for testing this property; it is accordingly not confirmed by the
 HotpotQA results but is targeted for a dedicated DDI query set in future work
-(Chapter~\ref{cha:conclusions}).
+(\cref{cha:conclusions}).
 
-This is Hypothesis~\ref{hyp:routing}, partially supported in
-Section~\ref{sec:hypothesis_eval}.
+This is \cref{hyp:routing}, partially supported in
+\cref{sec:hypothesis_eval}.
 
 \subsection{Relationship to Prior Work}
 
@@ -485,12 +468,12 @@ and no-retrieval paths.
 \rarerag{} extends this idea to the medical domain and adds the three
 downstream evidence-quality components that Adaptive-RAG does not address.
 
-Table~\ref{tab:arch_comparison} summarises the five design dimensions and
+\cref{tab:arch_comparison} summarises the five design dimensions and
 positions \rarerag{} against the five nearest architectures.
 
 \begin{table}[htbp]
   \centering
-  \caption{Qualitative comparison of selected RAG architectures.
+  \caption[Qualitative comparison of selected RAG architectures.]{Qualitative comparison of selected RAG architectures.
     \checkmark~=~feature present; ---~=~absent; $\sim$~=~partial or implicit.}
   \label{tab:arch_comparison}
   \begin{tabularx}{\textwidth}{@{}lXXXXX@{}}
@@ -512,6 +495,6 @@ positions \rarerag{} against the five nearest architectures.
   \end{tabularx}
 \end{table}
 
-No architecture in the survey (Chapter~\ref{cha:background}) combines all five
+No architecture in the survey (\cref{cha:background}) combines all five
 dimensions simultaneously; their combination is the primary novelty
 of \rarerag{}.

@@ -7,14 +7,14 @@
 This chapter presents the architectural design of \medrag{}, a microservice-based
 platform built to support the experimental evaluation of Retrieval-Augmented Generation
 strategies for the drug-interaction advisory use case introduced in
-Chapter~\ref{cha:rare_rag}.
+\cref{cha:rare_rag}.
 The chapter is structured around the four levels of concern that guided the design:
-the high-level system context (Section~\ref{sec:c4_context}), the decomposition into
-individual containers (Section~\ref{sec:c4_container}), the two runtime pipelines
-(Sections~\ref{sec:query_pipeline} and~\ref{sec:ingestion_pipeline}), the data model
-(Section~\ref{sec:data_model}), and the security mechanism (Section~\ref{sec:security}).
-Implementation details are deferred to Chapter~\ref{cha:implementation};
-the evaluation methodology is described in Chapter~\ref{cha:evaluation}.
+the high-level system context (\cref{sec:c4_context}), the decomposition into
+individual containers (\cref{sec:c4_container}), the two runtime pipelines
+(\cref{sec:query_pipeline,sec:ingestion_pipeline}), the data model
+(\cref{sec:data_model}), and the security mechanism (\cref{sec:security}).
+Implementation details are deferred to \cref{cha:implementation};
+the evaluation methodology is described in \cref{cha:evaluation}.
 
 % ------------------------------------------------------------
 \section{Design Principles}
@@ -90,7 +90,7 @@ mechanisms together make it possible to trace a single user request through
 fourteen services and to verify the health of the entire cluster with a
 simple scripted loop — a capability that is heavily used by the
 GitHub Actions continuous-integration smoke test described in
-Chapter~\ref{cha:implementation}.
+\cref{cha:implementation}.
 
 \paragraph{Minimal operational footprint.}
 All containers are built from \texttt{python:3.12-slim} using a two-stage
@@ -105,18 +105,15 @@ problems that would complicate experimental comparisons.
 \section{System Context (C4 Level 1)}
 \label{sec:c4_context}
 
-Figure~\ref{fig:c4_context} shows the outermost boundary of \medrag{} using the
+\cref{fig:c4_context} shows the outermost boundary of \medrag{} using the
 \emph{C4 model} notation of Brown~\cite{brown2018c4}.  At this level of abstraction,
 the system is treated as a single opaque block; the diagram's purpose is to
 identify the actors and external systems that interact with it.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\linewidth]{figures/tikz_c4_context.png}
-\caption{System context diagram. Two actors (Patient/User and Administrator)
-  interact with the \medrag{} system boundary via REST and SSE. External
-  dependencies are the LLM provider (Anthropic Claude) and the configurable
-  embedding provider (BGE-M3 by default).}
+\includegraphics[width=\linewidth]{figures/c4_context.png}
+\caption[System context diagram (C4 level 1).]{C4 system context: user and administrator interact with \medrag{} via REST/SSE; external dependencies are the LLM provider (Anthropic Claude) and the embedding provider (BGE-M3 by default).}
 \label{fig:c4_context}
 \end{figure}
 
@@ -158,15 +155,15 @@ gateway, which enforces authentication on every request.
 
 Zooming one level deeper, the \medrag{} system decomposes into fourteen
 independently deployable containers, each implemented as a FastAPI service.
-Table~\ref{tab:services} lists all services with their assigned ports and
-primary responsibilities, while Figure~\ref{fig:c4_container} shows their
+\cref{tab:services} lists all services with their assigned ports and
+primary responsibilities, while \cref{fig:c4_container} shows their
 communication topology.
 
-The \medrag{} platform consists of 14 services, listed in Table~\ref{tab:services}.
+The \medrag{} platform consists of 14 services, listed in \cref{tab:services}.
 
 \begin{table}[htbp]
   \centering
-  \caption{Service inventory: all containers, ports, and primary responsibilities.}
+  \caption[Service inventory.]{Service inventory: all containers, ports, and primary responsibilities.}
   \label{tab:services}
   \begin{tabularx}{\textwidth}{@{}llX@{}}
     \toprule
@@ -192,11 +189,8 @@ The \medrag{} platform consists of 14 services, listed in Table~\ref{tab:service
 
 \begin{figure}[p]
 \centering
-\includegraphics[width=\linewidth]{figures/tikz_c4_container.png}
-\caption{Container diagram showing all 14 \medrag{} services grouped into the
-  synchronous Query Pipeline (blue) and the asynchronous Ingestion Pipeline (orange).
-  Dashed arrows indicate event-driven or optional communication.
-  The eval service consumes \texttt{query.completed} events from RabbitMQ.}
+\includegraphics[width=\linewidth]{figures/c4_container.png}
+\caption[Container diagram of all 14 \medrag{} services.]{Container diagram: 14 \medrag{} services in the synchronous Query Pipeline (blue) and asynchronous Ingestion Pipeline (orange). Dashed arrows: event-driven communication.}
 \label{fig:c4_container}
 \end{figure}
 
@@ -249,7 +243,7 @@ every completed user query, computes RAGAS metrics (faithfulness, answer
 relevance, context recall, and answer correctness) by comparing the generated
 answer against the retrieved context.  Results are persisted in MongoDB's
 \texttt{eval\_results} collection and exposed through a REST endpoint so
-that the evaluation scripts described in Chapter~\ref{cha:evaluation} can
+that the evaluation scripts described in \cref{cha:evaluation} can
 retrieve them in bulk.
 
 The two persistent stores — MongoDB and Weaviate — are shared across clusters
@@ -265,17 +259,13 @@ layer from becoming a source of coupling between services.
 
 The query pipeline is the synchronous path that transforms a natural-language
 question into a streamed, citation-annotated answer.
-Figure~\ref{fig:seq_query} presents the end-to-end sequence; the following
+\cref{fig:seq_query} presents the end-to-end sequence; the following
 paragraphs describe each stage in detail.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\linewidth]{figures/tikz_seq_query.png}
-\caption{Query pipeline sequence. The API Gateway validates the JWT and forwards
-  the request to the Orchestrator. Optional query rewriting or HyDE expansion
-  (activation box) precedes retrieval. Generation streams tokens back to the client
-  via Server-Sent Events. A \texttt{query.completed} event is published
-  asynchronously for the eval service.}
+\includegraphics[width=\linewidth]{figures/seq_query.png}
+\caption[Query pipeline sequence diagram.]{Query pipeline: JWT validation → orchestrator dispatch (optional HyDE/rewriting) → retrieval → reranking → SSE streaming to client.}
 \label{fig:seq_query}
 \end{figure}
 
@@ -384,17 +374,13 @@ or paused independently.
 
 Document ingestion in \medrag{} follows an asynchronous, event-driven
 pipeline that transforms raw uploaded files into searchable vector embeddings
-stored in Weaviate.  Figure~\ref{fig:seq_ingestion} shows the message flow
+stored in Weaviate.  \cref{fig:seq_ingestion} shows the message flow
 between services.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\linewidth]{figures/tikz_seq_ingestion.png}
-\caption{Ingestion pipeline: asynchronous event-driven document processing.
-  Each stage publishes a completion event to RabbitMQ, consumed by the next
-  stage. The Ingestion service performs content-hash deduplication against
-  MongoDB before publishing. Final vectors are written to Weaviate by the
-  Indexing service.}
+\includegraphics[width=\linewidth]{figures/seq_ingestion.png}
+\caption[Ingestion pipeline sequence diagram.]{Ingestion pipeline: asynchronous event-driven stages from upload (SHA-256 deduplication) through parsing, chunking, embedding, to Weaviate indexing.}
 \label{fig:seq_ingestion}
 \end{figure}
 
@@ -504,12 +490,12 @@ reducing serialisation overhead.  Third, the horizontal scaling and replica
 set capabilities of MongoDB 7 provide a credible path to production
 deployment, even though the current prototype runs a single node.
 
-Table~\ref{tab:mongo_collections} summarises the six collections and their
+\cref{tab:mongo_collections} summarises the six collections and their
 key fields.
 
 \begin{table}[htbp]
   \centering
-  \caption{MongoDB collection schema summary. Field names are shown in
+  \caption[MongoDB collection schema summary.]{MongoDB collection schema summary. Field names are shown in
     \texttt{monospace}; asterisked fields carry a unique index.}
   \label{tab:mongo_collections}
   \begin{tabularx}{\textwidth}{@{}lp{4.2cm}X@{}}
@@ -595,7 +581,7 @@ of \texttt{efConstruction=64}.  These values produce a compact index whose
 approximate-nearest-neighbour search offers high recall (typically above 95\%
 at \texttt{ef=128} query time) with sub-millisecond latency for corpora of
 up to several hundred thousand vectors~\cite{malkov2018hnsw}.  For the
-experimental datasets used in Chapter~\ref{cha:evaluation} — a few tens
+experimental datasets used in \cref{cha:evaluation} — a few tens
 of thousands of drug-interaction chunks — the index operates well within
 these limits.
 
@@ -604,7 +590,7 @@ every query.  Weaviate's \texttt{where} filter is evaluated at the index
 level before distance computation, which means that documents from other
 projects do not incur any scoring overhead and cannot leak into the result
 set.  This property is essential for the security model described in
-Section~\ref{sec:security}.
+\cref{sec:security}.
 
 \subsection{Rationale for the Hybrid Store Architecture}
 
@@ -738,11 +724,11 @@ to chunking, embedding, and RAG mode selection: because all variant behaviour
 is expressed as a named string in a MongoDB document, the same running system
 can participate in ablation experiments across all four RAG architectures
 without any code deployment.  This property is essential for the controlled
-evaluation described in Chapter~\ref{cha:evaluation}, where each RAG mode
+evaluation described in \cref{cha:evaluation}, where each RAG mode
 is benchmarked on the same document corpus and the same set of drug-interaction
 queries.
 
-Chapter~\ref{cha:implementation} describes how the design presented here was
+\cref{cha:implementation} describes how the design presented here was
 realised in code, including service bootstrapping, the shared library used
 for logging and messaging, and the continuous-integration pipeline that
 validates every commit.

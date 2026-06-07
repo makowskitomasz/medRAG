@@ -5,7 +5,7 @@
 \label{cha:implementation}
 
 This chapter describes the concrete engineering decisions made while realising
-the \medrag{} prototype introduced in Chapter~\ref{cha:system_design}.  The
+the \medrag{} prototype introduced in \cref{cha:system_design}.  The
 presentation focuses on the non-trivial implementation choices — the ones that
 required a trade-off or that differ materially from a textbook solution — rather
 than providing an exhaustive code tour.  Six topics are covered: the technology
@@ -22,9 +22,9 @@ and continuous-deployment pipeline~(\S\ref{sec:cicd}).
 \label{sec:tech_stack}
 
 \medrag{} is implemented as a collection of fourteen loosely-coupled
-microservices.  Table~\ref{tab:services} summarises the services, their
+microservices.  \cref{tab:services} summarises the services, their
 network ports, and their principal responsibilities; the design rationale for
-the decomposition is discussed in Chapter~\ref{cha:system_design}.  This
+the decomposition is discussed in \cref{cha:system_design}.  This
 section describes the technology choices that span the entire codebase.
 
 \paragraph{Python back-end services.}
@@ -109,7 +109,7 @@ interface, and concrete subclasses encapsulate all provider-specific logic.
 
 \subsection{Interface Definition}
 
-Listing~\ref{lst:embedding_abc} shows the abstract base class and the
+\cref{lst:embedding_abc} shows the abstract base class and the
 signatures of the three concrete providers.  The interface consists of a single
 \texttt{async} method, \texttt{embed\_texts}, which accepts a list of strings
 and returns a list of floating-point vectors.  Accepting batches rather than
@@ -145,9 +145,7 @@ class OpenAIProvider(EmbeddingProvider):
     """text-embedding-3-small via the OpenAI Python SDK (API call)."""
     async def embed_texts(self, texts: list[str]) -> list[list[float]]: ...
 \end{lstlisting}
-  \caption{Embedding provider strategy pattern. The \texttt{EmbeddingProvider}
-    abstract base class defines a single interface used by the retrieval and
-    embedding services; concrete providers encapsulate model-specific logic.}
+  \caption[Embedding provider strategy pattern.]{Embedding provider strategy: abstract interface with three concrete implementations (local BGE-M3, Cohere, OpenAI).}
   \label{fig:embedding_strategy}
 \end{figure}
 
@@ -166,17 +164,13 @@ variable change, with no code modification.
 
 \subsection{Provider Trade-offs}
 
-Table~\ref{tab:embedding_providers} compares the three providers across the
+\cref{tab:embedding_providers} compares the three providers across the
 dimensions that are most relevant for research experimentation: monetary cost,
 inference latency, embedding dimensionality, and operational complexity.
 
 \begin{table}[htbp]
   \centering
-  \caption{Comparison of the three embedding providers supported by
-    \medrag{}.  Latency figures are indicative batch-inference times
-    on a single CPU core for a batch of 32 sentences of average length.
-    API pricing is based on publicly available list prices at the time of
-    writing.}
+  \caption[Comparison of embedding providers supported by \medrag{}.]{Embedding provider comparison: model, dimensions, cost per 1,000 tokens, and indicative batch latency on CPU.}
   \label{tab:embedding_providers}
   \begin{tabularx}{\textwidth}{lXXXX}
     \toprule
@@ -215,7 +209,7 @@ tuned empirically.
 
 Weaviate's hybrid query API accepts a query string, a pre-computed query
 embedding, and a scalar parameter \(\alpha \in [0, 1]\) that controls the
-balance between the two retrieval signals.  Listing~\ref{lst:hybrid_query}
+balance between the two retrieval signals.  \cref{lst:hybrid_query}
 shows the retrieval call as it appears in the \texttt{retrieval} service.
 
 \begin{lstlisting}[language=Python,
@@ -256,15 +250,13 @@ distribution and the corpus.  To determine an appropriate value for the
 HotpotQA experimental setting, a grid search was conducted over
 \(\alpha \in \{0.0, 0.25, 0.5, 0.75, 1.0\}\) on a development split of 100
 randomly sampled questions from the HotpotQA dataset (described in
-Chapter~\ref{cha:rare_rag}).  The primary optimisation target was
+\cref{cha:rare_rag}).  The primary optimisation target was
 \emph{Faithfulness}, the most safety-critical metric for the drug-interaction
-domain.  Table~\ref{tab:alpha_grid} reports the results.
+domain.  \cref{tab:alpha_grid} reports the results.
 
 \begin{table}[htbp]
   \centering
-  \caption{Effect of the hybrid search \(\alpha\) parameter on RAGAS
-    Faithfulness and Context Recall on the HotpotQA development split
-    (100 questions).  Higher is better for both metrics.}
+  \caption[Effect of hybrid search \(\alpha\) on RAGAS metrics.]{Effect of hybrid search \(\alpha\) on Faithfulness and Context Recall (100 HotpotQA dev questions; higher is better).}
   \label{tab:alpha_grid}
   \begin{tabularx}{\textwidth}{lXX}
     \toprule
@@ -290,7 +282,7 @@ fails when the question is phrased differently from the target passage.  The
 hybrid approach benefits from both signals simultaneously.
 
 The default \(\alpha = 0.5\) is used in all experiments reported in
-Chapter~\ref{cha:evaluation}.  Per-project overrides are supported: the
+\cref{cha:evaluation}.  Per-project overrides are supported: the
 \texttt{admin} service exposes an endpoint that updates the \texttt{alpha}
 field in the project's MongoDB settings document, and the retrieval service
 reads this value at query time.
@@ -322,7 +314,7 @@ intermediate service.
 
 The generation service wraps the Anthropic Python SDK's streaming context
 manager in an \texttt{AsyncGenerator}, yielding SSE-formatted byte strings.
-Listing~\ref{lst:sse_generator} shows the core implementation.
+\cref{lst:sse_generator} shows the core implementation.
 
 \begin{figure}[htbp]
   \centering
@@ -351,29 +343,21 @@ async def stream_response(
         )
     yield "data: [DONE]\n\n"
 \end{lstlisting}
-  \caption{Server-Sent Events streaming: the generation service proxies the
-    Anthropic SDK token stream directly to the client, then injects a single
-    citations event after the stream completes.}
+  \caption[Server-Sent Events streaming in the generation service.]{SSE streaming: token events are forwarded directly to the client; a \texttt{citations} event is emitted once after stream completion.}
   \label{fig:sse_streaming}
 \end{figure}
 
 The generator is wrapped in a FastAPI \texttt{StreamingResponse} with
 \texttt{media\_type="text/event-stream"} and the required
-\texttt{Cache-Control: no-cache} header.  Three event types are emitted on
-the stream:
-
-\begin{itemize}
-  \item \texttt{token} — carries one or more characters of generated text.
-    The Anthropic SDK may batch adjacent characters into a single event; the
-    granularity is not guaranteed.
-  \item \texttt{citations} — emitted once, immediately after the stream
-    completes.  The payload is a JSON array of citation objects, each
-    containing the document chunk identifier, the source document title, and
-    the page number where available.  Citations are extracted from the final
-    message object returned by \texttt{stream.get\_final\_message()}, which
-    is available only after the SDK has received the stop signal from the API.
-  \item \texttt{[DONE]} — the conventional SSE termination sentinel.
-\end{itemize}
+\texttt{Cache-Control: no-cache} header.  Three event types are emitted on the stream.
+\texttt{token} events carry one or more characters of generated text; the Anthropic SDK
+may batch adjacent characters into a single event and the granularity is not guaranteed.
+The \texttt{citations} event is emitted once, immediately after the stream completes,
+carrying a JSON array of citation objects each containing the document chunk identifier,
+the source document title, and the page number where available; it is extracted from the
+final message object returned by \texttt{stream.get\_final\_message()}, which is
+available only after the SDK has received the stop signal from the API.
+Finally, \texttt{[DONE]} is the conventional SSE termination sentinel.
 
 A deliberate design decision is to separate citation delivery from the token
 stream rather than interleaving citation markers inline.  Inline markers
@@ -420,20 +404,12 @@ evaluation service that does not affect the latency of query responses.
 The \texttt{eval} service (port 8013) operates as a RabbitMQ consumer.
 Whenever a query completes, the orchestrator publishes a
 \texttt{query.completed} event to the \texttt{medrag.events} exchange.  The
-event payload is a JSON object with the following fields:
-
-\begin{itemize}
-  \item \texttt{conversation\_id} and \texttt{message\_id} — identifiers for
-    linking evaluation results back to the conversation stored in MongoDB.
-  \item \texttt{question} — the original user query string.
-  \item \texttt{answer} — the generated answer, collected after the SSE
-    stream completes.
-  \item \texttt{contexts} — a list of strings, one per retrieved chunk, as
-    passed to the generation service.
-  \item \texttt{ground\_truth} (optional) — the reference answer, present
-    only when the query originates from a benchmarking script that supplies
-    ground-truth annotations.
-\end{itemize}
+event payload is a JSON object carrying \texttt{conversation\_id} and
+\texttt{message\_id} for linking results back to MongoDB, \texttt{question} as the
+original user query string, \texttt{answer} as the generated response collected after
+the SSE stream completes, \texttt{contexts} as a list of retrieved chunk strings passed
+to the generation service, and an optional \texttt{ground\_truth} field present only
+when the query originates from a benchmarking script that supplies reference annotations.
 
 The eval service acknowledges the RabbitMQ message only after successfully
 writing results to MongoDB, ensuring that no evaluation record is silently
@@ -467,11 +443,7 @@ back-off.
       Yes & 0 \\
     \bottomrule
   \end{tabularx}
-  \caption{Evaluation pipeline: the eval service consumes
-    \texttt{query.completed} events from RabbitMQ, computes RAGAS metrics
-    using the LLM-as-judge approach, and persists per-question results to
-    MongoDB.  The table shows all four metrics, their computation strategy, and
-    their ground-truth dependency.}
+  \caption[Evaluation pipeline and RAGAS metrics.]{RAGAS metrics computed by the eval service: computation method, ground-truth dependency, and approximate LLM call count per query.}
   \label{fig:ragas_pipeline}
 \end{figure}
 
@@ -487,7 +459,7 @@ RAGAS metrics that use the LLM-as-judge approach issue multiple LLM API calls
 per question.  Based on observed token usage during benchmark runs on the
 HotpotQA dataset, the combined cost of computing Faithfulness and Answer
 Relevance is approximately \$0.006 per question.  For the full evaluation runs
-reported in Chapter~\ref{cha:evaluation} (500 questions), this corresponds to
+reported in \cref{cha:evaluation} (500 questions), this corresponds to
 approximately \$3 in API costs.  The asynchronous design means that evaluation
 does not compete with query latency for API capacity: the eval service has its
 own rate-limit headroom and processes questions at a pace independent of the
@@ -512,55 +484,39 @@ validates the Docker build and runtime health of the full stack.
 \subsection{Continuous Integration}
 
 The CI workflow (\texttt{.github/workflows/ci.yml}) is triggered on every
-pull request targeting the \texttt{develop} or \texttt{main} branch.  It
-consists of four stages executed in parallel where possible:
-
-\begin{enumerate}
-  \item \textbf{Linting and formatting} (\texttt{ruff check} and
-    \texttt{ruff format --check}) — enforces the project's style conventions.
-    \texttt{ruff} is used in preference to the combination of
-    \texttt{flake8} + \texttt{black} because it implements both tools in a
-    single Rust binary, reducing CI step time from approximately 40 seconds to
-    under 5 seconds.
-  \item \textbf{Static type checking} (\texttt{mypy} in strict mode) — catches
-    type errors and missing annotations.  Strict mode is used from the outset
-    rather than incrementally; this was a deliberate choice to prevent the
-    gradual accumulation of untyped code that is difficult to address
-    retrospectively.
-  \item \textbf{Unit and integration tests} (\texttt{pytest}) — the workflow
-    detects which services have been modified in the pull request and runs
-    \texttt{pytest} only for those services, reducing feedback time on small
-    changes.  Services without a \texttt{tests/} directory are skipped without
-    failure, accommodating the incremental addition of test coverage.
-  \item \textbf{Front-end validation} — runs \texttt{tsc --noEmit} (TypeScript
-    type checking), \texttt{eslint}, and \texttt{vitest run} (unit tests), but
-    only when files under \texttt{frontend/} have been modified.
-\end{enumerate}
-
-The \texttt{ANTHROPIC\_API\_KEY} secret is stored in the GitHub repository's
-encrypted secret store and injected into the environment for any integration
-tests that issue real API calls.
+pull request targeting the \texttt{develop} or \texttt{main} branch and consists of
+four stages executed in parallel where possible.
+\textbf{Linting and formatting} (\texttt{ruff check} and \texttt{ruff format --check})
+enforces the project's style conventions; \texttt{ruff} is preferred over the
+\texttt{flake8}+\texttt{black} combination because it implements both tools in a single
+Rust binary, reducing CI step time from approximately 40 seconds to under 5 seconds.
+\textbf{Static type checking} (\texttt{mypy} in strict mode) catches type errors and
+missing annotations; strict mode is applied from the outset rather than incrementally
+to prevent the gradual accumulation of untyped code.
+\textbf{Unit and integration tests} (\texttt{pytest}) are run only for services modified
+in the pull request, reducing feedback time on small changes; services without a
+\texttt{tests/} directory are skipped without failure.
+\textbf{Front-end validation} runs \texttt{tsc --noEmit}, \texttt{eslint}, and
+\texttt{vitest run}, but only when files under \texttt{frontend/} have been modified.
+The \texttt{ANTHROPIC\_API\_KEY} secret is stored in the GitHub repository's encrypted
+secret store and injected into the environment for any integration tests that issue real
+API calls.
 
 \subsection{Continuous Deployment}
 
-The CD workflow (\texttt{.github/workflows/cd.yml}) is triggered on every
-push to \texttt{develop}, ensuring that the integration branch always produces
-a runnable image set.  It performs three steps:
-
-\begin{enumerate}
-  \item \textbf{Build} — \texttt{docker compose build} is executed, which
-    exercises every service's multi-stage Dockerfile.  A build failure here
-    indicates a broken dependency declaration or an invalid Dockerfile
-    instruction.
-  \item \textbf{Start and health check} — \texttt{docker compose up -d} brings
-    up all fourteen containers, with Compose's dependency-ordering logic
-    ensuring that databases and the message broker are healthy before dependent
-    services start.  A polling loop then issues \texttt{curl} requests to each
-    service's \texttt{/health} endpoint until all return
-    \texttt{\{"status": "ok"\}} or a timeout is exceeded.
-  \item \textbf{Teardown} — \texttt{docker compose down} removes all containers
-    and networks, leaving the CI runner in a clean state.
-\end{enumerate}
+The CD workflow (\texttt{.github/workflows/cd.yml}) is triggered on every push to
+\texttt{develop}, ensuring that the integration branch always produces a runnable image
+set, and performs three steps.
+First, \texttt{docker compose build} exercises every service's multi-stage Dockerfile;
+a failure here indicates a broken dependency declaration or an invalid Dockerfile
+instruction.
+Second, \texttt{docker compose up -d} brings up all fourteen containers, with Compose's
+dependency-ordering logic ensuring that databases and the message broker are healthy
+before dependent services start; a polling loop then issues \texttt{curl} requests to
+each service's \texttt{/health} endpoint until all return \texttt{\{"status": "ok"\}}
+or a timeout is exceeded.
+Third, \texttt{docker compose down} removes all containers and networks, leaving the CI
+runner in a clean state.
 
 This \emph{smoke test} strategy does not replace unit or integration tests, but
 it provides a fast check that the containerised system starts and that all

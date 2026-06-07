@@ -13,6 +13,7 @@
 % ---- Typography & spacing ----------------------------------
 \usepackage{microtype}
 \usepackage{setspace}
+\setlength{\parindent}{0pt}
 
 % ---- Mathematics -------------------------------------------
 \usepackage{amsmath,amssymb,amsthm}
@@ -27,6 +28,7 @@
 % ---- Figures & graphics ------------------------------------
 \usepackage{graphicx}
 \usepackage{float}
+\usepackage[format=plain,justification=centering,singlelinecheck=false,font=small]{caption}
 \usepackage{subcaption}
 
 % ---- TikZ (architecture & flow diagrams) -------------------
@@ -85,6 +87,13 @@
   bookmarks=true
 ]{hyperref}
 
+% ---- Clever cross-references (must load after hyperref) ----
+\usepackage[capitalise,noabbrev]{cleveref}
+\crefname{hypothesis}{Hypothesis}{Hypotheses}
+\Crefname{hypothesis}{Hypothesis}{Hypotheses}
+\crefname{lstlisting}{Listing}{Listings}
+\Crefname{lstlisting}{Listing}{Listings}
+
 % ---- Algorithms --------------------------------------------
 \usepackage[ruled,vlined,linesnumbered]{algorithm2e}
 
@@ -93,7 +102,7 @@
 \DeclareMathOperator*{\argmin}{arg\,min}
 
 % ---- Custom commands ---------------------------------------
-\newcommand{\rarerag}{\textsc{rare-rag}}
+\newcommand{\rarerag}{RARE-RAG}
 \newcommand{\medrag}{\textit{medRAG}}
 \newcommand{\eg}{\textit{e.g.},\ }
 \newcommand{\ie}{\textit{i.e.},\ }
@@ -130,16 +139,63 @@
 \facultyEN{Faculty of Electrical Engineering, Automatics, Computer Science and Biomedical Engineering}
 
 \acknowledgements{%
-  I would like to thank prof. dr hab. inż. Antoni Ligęza for his guidance and
-  insightful discussions throughout the development of this thesis.
-  I also thank the open-source community behind Weaviate, FastAPI, RAGAS, and
-  the HotpotQA dataset for making reproducible research possible.
+  I would like to thank ...
 }
 
 \setlength{\cftsecnumwidth}{10mm}
 
 % ===========================================================
 \begin{document}
+
+% Skip Polish title page and declaration — English pages only
+\makeatletter
+\renewcommand{\titlepages}{%
+\newpage \titlepage
+
+\begin{center}
+
+{\sffamily{\Large{\bfseries{\textsc AGH\\[2mm]
+University of Science and Technology in Krakow}}}
+
+\vspace*{1mm}\rule{\textwidth}{1mm}\vspace*{1mm}
+
+{\large \@facultyEN}}\\\vspace*{2mm}
+{\large\textsc{\@departmentEN}}\vspace*{1cm}
+
+\ifpdflatex\includegraphics[scale=0.3]{agh}
+\else\includegraphics[scale=0.7]{agh}
+\fi
+\vspace*{1cm}
+
+{\huge\scshape \@thesistypeEN}\\\vspace*{2cm}
+
+{\LARGE\scshape \@author}\\\vspace*{2cm}
+
+{\LARGE{\bfseries\scshape \@titleEN}}\\\vspace*{3cm}
+
+\begin{flushright}
+\begin{minipage}[!h]{6cm}
+\large{\scshape Supervisor:}\\ \@supervisorEN
+\end{minipage}
+\end{flushright}
+
+\vfill{\Large Krakow \@date}
+
+\end{center}
+
+\clearpage \titlepage
+
+\vspace*{15cm} \vfill
+\begin{flushright}
+\begin{minipage}[!h]{8cm}
+{\Large \@acknowledgements}
+\end{minipage}
+\end{flushright}
+
+\clearpage
+\setcounter{page}{3}
+}
+\makeatother
 
 \titlepages
 
@@ -173,22 +229,6 @@ drug interaction detection, decision support systems, multi-agent RAG, faithfuln
 RAGAS evaluation, microservices, HotpotQA
 \end{abstract}
 
-% ---- Abstract in Polish ------------------------------------
-\begin{abstract}
-\begin{otherlanguage}{polish}
-% TODO: Polish abstract — translate after English draft is final
-Jedną z najbardziej wartościowych aplikacji dużych modeli językowych (LLM) są
-zaawansowane systemy pytań i odpowiedzi, systemy doradcze oraz wspomagające
-podejmowanie decyzji. Jakość takich aplikacji można znacznie poprawić dzięki
-technice Retrieval-Augmented Generation (RAG), która opiera odpowiedzi modelu
-na zewnętrznej, dziedzinowej wiedzy pobranej w czasie wnioskowania.
-
-W niniejszej pracy przedstawiono analizę technologiczną nowoczesnych architektur
-RAG oraz projekt eksperymentalnego systemu doradczego w dziedzinie medycznej,
-ukierunkowanego na wykrywanie potencjalnych interakcji leków.
-% TODO: complete Polish abstract
-\end{otherlanguage}
-\end{abstract}
 
 % ---- Table of contents -------------------------------------
 \tableofcontents
@@ -214,7 +254,7 @@ ukierunkowanego na wykrywanie potencjalnych interakcji leków.
 % ===========================================================
 %  Bibliography
 % ===========================================================
-\bibliographystyle{alpha}
+\bibliographystyle{unsrt}
 \bibliography{bibliography}
 
 \end{document}
