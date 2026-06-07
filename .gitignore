@@ -53,6 +53,7 @@ results/*.txt
 results/*.log
 results/plots/
 results/final/
+results/hotpotqa_final/
 results/test_fix/
 !results/.gitkeep
 
