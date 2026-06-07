@@ -1,0 +1,99 @@
+% ============================================================
+%  Chapter 3 — RARE-RAG: Proposed Architecture
+% ============================================================
+\chapter{RARE-RAG: A Risk-Aware Routed Evidence-Graph Architecture}
+\label{cha:rare_rag}
+
+% TODO: write full chapter — skeleton below
+% Target: 10–12 pages
+
+% ------------------------------------------------------------
+\section{Motivation}
+\label{sec:rarerag_motivation}
+
+% TODO: 1 page
+% Gap: existing architectures apply the same retrieval strategy regardless of
+% query complexity or risk — inefficient and not suited for high-stakes advisory.
+% Hypothesis: routing by complexity + set-wise evidence selection + grounding check
+% → better faithfulness with acceptable accuracy.
+
+% ------------------------------------------------------------
+\section{Architecture Overview}
+\label{sec:rarerag_overview}
+
+% TODO: 2 pages
+% Four pillars:
+%   1. Risk & Complexity Router
+%   2. Hybrid Evidence Retrieval (BM25 + vector, cross-encoder reranking)
+%   3. Set-wise Evidence Selection (SETR-inspired)
+%   4. Grounding Verifier with Abstention
+
+% Figure placeholder:
+\begin{figure}[htbp]
+  \centering
+  % TODO: insert TikZ component diagram
+  \fbox{\parbox{0.8\textwidth}{\centering\vspace{2cm}
+    [Figure: RARE-RAG Component Architecture — TikZ]\vspace{2cm}}}
+  \caption{\rarerag{} architecture: the four-component pipeline for risk-aware,
+    grounded response generation.}
+  \label{fig:rarerag_overview}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Query Complexity Router}
+\label{sec:router}
+
+% TODO: 2 pages
+% Input: query text
+% Classifier: lightweight LLM call with few-shot examples
+% Routes: fast / standard / deep
+% Design trade-off: classifier latency vs. downstream quality gain
+
+\begin{hypothesis}[Routing benefit]
+  \label{hyp:routing}
+  Routing queries by complexity reduces average end-to-end latency compared to
+  always applying the deepest (multi-hop + grounding) pipeline, while maintaining
+  answer quality on simple queries.
+\end{hypothesis}
+
+% ------------------------------------------------------------
+\section{Hybrid Evidence Retrieval}
+\label{sec:hybrid_retrieval}
+
+% TODO: 1.5 pages
+% BM25 + dense vector search (alpha = 0.5 default)
+% RRF fusion
+% Cross-encoder reranking (BGE-reranker-v2-m3)
+
+% ------------------------------------------------------------
+\section{Set-Wise Evidence Selection}
+\label{sec:setwise}
+
+% TODO: 2 pages
+% Why list-wise reranking misses inter-document complementarity
+% SETR approach: score evidence subsets, not individuals
+% Greedy approximate selection over top-20 candidates
+
+% ------------------------------------------------------------
+\section{Grounding Verifier with Abstention}
+\label{sec:grounding_verifier}
+
+% TODO: 2 pages
+% Claim extraction from generated answer
+% Per-claim grounding check against retrieved context
+% Abstention: if score < threshold → "I cannot reliably answer"
+
+\begin{hypothesis}[Faithfulness]
+  \label{hyp:faithfulness}
+  \rarerag{} achieves higher faithfulness than all single-path RAG architectures
+  as measured by the RAGAS faithfulness metric.
+\end{hypothesis}
+
+% ------------------------------------------------------------
+\section{Expected Properties}
+\label{sec:rarerag_hypotheses}
+
+% Restate all 3 hypotheses clearly
+% H1: highest faithfulness — verified in Chapter 6
+% H2: competitive F1 despite higher latency — verified in Chapter 6
+% H3: routing reduces latency vs. always-deep — partially verified in Chapter 6

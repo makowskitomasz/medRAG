@@ -1,0 +1,147 @@
+% ============================================================
+%  Chapter 4 — System Design
+% ============================================================
+\chapter{System Design}
+\label{cha:system_design}
+
+% TODO: write full chapter — skeleton below
+% Target: 14–16 pages
+
+% ------------------------------------------------------------
+\section{Design Principles}
+\label{sec:design_principles}
+
+% TODO: 1 page
+% - Strategy pattern: chunking / embedding / RAG mode configurable per project at runtime
+% - Event-driven ingestion (async) vs. synchronous query pipeline
+% - Non-root Docker, structured JSON logging, distributed trace IDs (X-Trace-Id)
+% - No module-level side effects; dependency injection via FastAPI Depends
+
+% ------------------------------------------------------------
+\section{System Context (C4 Level 1)}
+\label{sec:c4_context}
+
+% TODO: 1 page + figure
+
+\begin{figure}[htbp]
+  \centering
+  % TODO: TikZ C4 Level 1 diagram
+  \fbox{\parbox{0.8\textwidth}{\centering\vspace{2cm}
+    [Figure: C4 Level 1 — System Context]\vspace{2cm}}}
+  \caption{System context diagram. Two actors (Patient/User and Administrator)
+    interact with the \medrag{} system boundary. External dependencies are
+    the LLM provider (Anthropic) and the embedding provider (BGE-M3 or Cohere).}
+  \label{fig:c4_context}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Container Architecture (C4 Level 2)}
+\label{sec:c4_container}
+
+% TODO: 3 pages + large figure
+
+The \medrag{} platform consists of 14 services, listed in Table~\ref{tab:services}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Service inventory: all containers, ports, and primary responsibilities.}
+  \label{tab:services}
+  \begin{tabularx}{\textwidth}{@{}llX@{}}
+    \toprule
+    \textbf{Service} & \textbf{Port} & \textbf{Responsibility} \\
+    \midrule
+    api-gateway     & 8000 & JWT validation, request routing to downstream services \\
+    auth            & 8001 & User registration, login, JWT issuance (PyJWT + bcrypt) \\
+    orchestrator    & 8002 & Query flow coordination, RAG mode dispatch, conversation storage \\
+    query-processor & 8003 & Query rewriting and HyDE document generation \\
+    retrieval       & 8004 & Hybrid search (Weaviate BM25 + vector, configurable alpha) \\
+    reranker        & 8005 & Cross-encoder reranking (BGE-reranker-v2-m3) \\
+    generation      & 8006 & LLM call, SSE streaming, citation extraction \\
+    ingestion       & 8007 & File upload, content-hash deduplication, MQ publish \\
+    parser          & 8008 & PDF and document text extraction (pypdf / docling) \\
+    chunking        & 8009 & Configurable chunking: fixed-512, recursive, semantic \\
+    embedding       & 8010 & Text embedding: local BGE-M3, Cohere, or OpenAI \\
+    indexing        & 8011 & Weaviate vector insert and document status update \\
+    admin           & 8012 & Project CRUD, document listing, re-index trigger \\
+    eval            & 8013 & RAGAS metrics, async consumer of \texttt{query.completed} events \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  % TODO: TikZ C4 Level 2 — the big container diagram (14 services)
+  \fbox{\parbox{0.95\textwidth}{\centering\vspace{4cm}
+    [Figure: C4 Level 2 — Container Diagram (14 services)]\vspace{4cm}}}
+  \caption{Container diagram showing the ingestion pipeline (asynchronous,
+    event-driven via RabbitMQ) and the query pipeline (synchronous REST + SSE).}
+  \label{fig:c4_container}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Query Pipeline}
+\label{sec:query_pipeline}
+
+% TODO: 3 pages
+% Synchronous REST + SSE streaming
+% Sequence diagram: gateway → auth → orchestrator → QP → retrieval → reranker → generation → SSE
+% RAG mode switching in orchestrator: strategy pattern
+% Conversation persistence in MongoDB
+
+\begin{figure}[htbp]
+  \centering
+  % TODO: TikZ sequence diagram — query flow
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+    [Figure: Query Pipeline Sequence Diagram]\vspace{3cm}}}
+  \caption{Query pipeline sequence: from client request through JWT validation,
+    orchestrator dispatch, retrieval, reranking, and LLM generation to SSE streaming.}
+  \label{fig:seq_query}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Ingestion Pipeline}
+\label{sec:ingestion_pipeline}
+
+% TODO: 2 pages
+% Async, event-driven via RabbitMQ
+% Steps: upload → parse → chunk → embed → index → status update
+% Content-hash deduplication
+% Chunking strategy comparison
+
+\begin{figure}[htbp]
+  \centering
+  % TODO: TikZ sequence diagram — ingestion flow
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+    [Figure: Ingestion Pipeline Sequence Diagram]\vspace{3cm}}}
+  \caption{Ingestion pipeline: asynchronous event-driven document processing from
+    upload through parsing, chunking, embedding, to vector indexing.}
+  \label{fig:seq_ingestion}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Data Model}
+\label{sec:data_model}
+
+% TODO: 3 pages
+% MongoDB collections: users, projects, documents, chunks, conversations, eval_results
+% Weaviate schema: MedRAGChunk
+% Rationale: MongoDB for metadata + Weaviate for vectors
+
+\begin{figure}[htbp]
+  \centering
+  % TODO: TikZ UML class-style data model
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+    [Figure: MongoDB Data Model]\vspace{3cm}}}
+  \caption{MongoDB collection schema. Each document links to its parent project;
+    chunks carry a reference to their source document and strategy metadata.}
+  \label{fig:data_model}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Security Design}
+\label{sec:security}
+
+% TODO: 1 page
+% JWT validation at gateway, role-based access (admin vs. user)
+% Project-scoped retrieval: a user cannot query another project's documents
+% bcrypt password hashing, configurable JWT expiry

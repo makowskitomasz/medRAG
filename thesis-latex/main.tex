@@ -1,0 +1,216 @@
+% ============================================================
+%  AGH Master's Thesis — main.tex
+%  Author : Tomasz Makowski
+%  Supervisor : prof. dr hab. inż. Antoni Ligęza
+%  Year   : 2026
+% ============================================================
+\documentclass[pdflatex,en,11pt]{aghdpl}
+
+% ---- Language & encoding -----------------------------------
+\usepackage[english]{babel}
+\usepackage[utf8]{inputenc}
+
+% ---- Typography & spacing ----------------------------------
+\usepackage{microtype}
+\usepackage{setspace}
+
+% ---- Mathematics -------------------------------------------
+\usepackage{amsmath,amssymb,amsthm}
+
+% ---- Tables ------------------------------------------------
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{longtable}
+\usepackage{array}
+
+% ---- Figures & graphics ------------------------------------
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+
+% ---- TikZ (architecture & flow diagrams) -------------------
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usetikzlibrary{
+  arrows.meta,
+  positioning,
+  shapes.geometric,
+  shapes.misc,
+  fit,
+  backgrounds,
+  decorations.pathreplacing,
+  calc,
+  trees,
+  mindmap
+}
+
+% ---- Code listings -----------------------------------------
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{codebg}{RGB}{248,248,248}
+\definecolor{codecomment}{RGB}{100,100,100}
+\definecolor{codestring}{RGB}{163,21,21}
+\definecolor{codekeyword}{RGB}{0,0,200}
+
+\lstset{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\small,
+  breakatwhitespace=false,
+  breaklines=true,
+  captionpos=b,
+  commentstyle=\color{codecomment},
+  frame=single,
+  keepspaces=true,
+  keywordstyle=\color{codekeyword}\bfseries,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  rulecolor=\color{gray!30},
+  showspaces=false,
+  showstringspaces=false,
+  stringstyle=\color{codestring},
+  tabsize=2
+}
+
+% ---- Hyperlinks (load last) --------------------------------
+\usepackage[
+  pdftitle={Retrieval-Augmented Generation for Improving Large Language Models},
+  pdfauthor={Tomasz Makowski},
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=blue,
+  bookmarks=true
+]{hyperref}
+
+% ---- Algorithms --------------------------------------------
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+
+% ---- Custom commands ---------------------------------------
+\newcommand{\rarerag}{\textsc{rare-rag}}
+\newcommand{\medrag}{\textit{medRAG}}
+\newcommand{\eg}{\textit{e.g.},\ }
+\newcommand{\ie}{\textit{i.e.},\ }
+\newcommand{\etal}{\textit{et~al.}}
+
+% ---- Theorem environments ----------------------------------
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{hypothesis}{Hypothesis}[chapter]
+
+% ===========================================================
+%  Title page metadata
+% ===========================================================
+\author{Tomasz Makowski}
+\shortauthor{T. Makowski}
+
+\titlePL{Retrieval-Augmented Generation w zastosowaniu do poprawy jakości dużych modeli językowych: Analiza technologiczna i projekt eksperymentalnego systemu doradczego}
+\titleEN{Retrieval-Augmented Generation for Improving Large Language Models: Technology Analysis and Design of an Experimental Advisory System}
+
+\shorttitlePL{RAG dla LLM: Analiza technologiczna i projekt systemu doradczego}
+\shorttitleEN{RAG for LLMs: Technology Analysis and Advisory System Design}
+
+\thesistypePL{Praca magisterska}
+\thesistypeEN{Master of Science Thesis}
+
+\supervisorPL{prof. dr hab. inż. Antoni Ligęza}
+\supervisorEN{Antoni Ligęza, Professor}
+
+\date{2026}
+
+\departmentPL{Katedra Informatyki Stosowanej}
+\departmentEN{Department of Applied Computer Science}
+
+\facultyPL{Wydział Elektrotechniki, Automatyki, Informatyki i Inżynierii Biomedycznej}
+\facultyEN{Faculty of Electrical Engineering, Automatics, Computer Science and Biomedical Engineering}
+
+\acknowledgements{%
+  I would like to thank prof. dr hab. inż. Antoni Ligęza for his guidance and
+  insightful discussions throughout the development of this thesis.
+  I also thank the open-source community behind Weaviate, FastAPI, RAGAS, and
+  the HotpotQA dataset for making reproducible research possible.
+}
+
+\setlength{\cftsecnumwidth}{10mm}
+
+% ===========================================================
+\begin{document}
+
+\titlepages
+
+% ---- Abstract ----------------------------------------------
+\begin{abstract}
+One of the most powerful applications enabled by large language models (LLMs) is
+sophisticated question-answering, advisory, and decision support.
+The quality of such applications can be significantly enhanced through
+Retrieval-Augmented Generation (RAG) --- a technique that grounds model responses
+in external, domain-specific knowledge retrieved at inference time.
+
+This thesis presents a technology analysis of state-of-the-art RAG architectures
+and the design of an experimental advisory system for the medical domain,
+specifically targeting the discovery of potential drug--drug interactions (DDI).
+We survey eight families of RAG architectures --- from the vanilla
+retrieve-then-generate pipeline through Self-RAG, Corrective RAG, and agentic
+multi-agent approaches --- and introduce RARE-RAG
+(\textit{Risk-Aware Routed Evidence-graph RAG}), a novel architecture that
+combines query complexity routing, hybrid evidence retrieval, set-wise evidence
+selection, and a grounding verifier with abstention capability.
+
+An empirical evaluation on the HotpotQA benchmark (9{,}000 question--answer pairs
+across nine RAG modes) shows that RARE-RAG achieves the highest faithfulness score
+(0.976) among all evaluated architectures, while maintaining competitive answer
+accuracy (Token~F1: 0.543). The system is implemented as an open-source
+microservice platform comprising 14 services with configurable RAG strategies.
+
+\bigskip
+\noindent\textbf{Keywords:} Retrieval-Augmented Generation, Large Language Models,
+drug interaction detection, decision support systems, multi-agent RAG, faithfulness,
+RAGAS evaluation, microservices, HotpotQA
+\end{abstract}
+
+% ---- Abstract in Polish ------------------------------------
+\begin{abstract}
+\begin{otherlanguage}{polish}
+% TODO: Polish abstract — translate after English draft is final
+Jedną z najbardziej wartościowych aplikacji dużych modeli językowych (LLM) są
+zaawansowane systemy pytań i odpowiedzi, systemy doradcze oraz wspomagające
+podejmowanie decyzji. Jakość takich aplikacji można znacznie poprawić dzięki
+technice Retrieval-Augmented Generation (RAG), która opiera odpowiedzi modelu
+na zewnętrznej, dziedzinowej wiedzy pobranej w czasie wnioskowania.
+
+W niniejszej pracy przedstawiono analizę technologiczną nowoczesnych architektur
+RAG oraz projekt eksperymentalnego systemu doradczego w dziedzinie medycznej,
+ukierunkowanego na wykrywanie potencjalnych interakcji leków.
+% TODO: complete Polish abstract
+\end{otherlanguage}
+\end{abstract}
+
+% ---- Table of contents -------------------------------------
+\tableofcontents
+\clearpage
+
+\listoffigures
+\clearpage
+
+\listoftables
+\clearpage
+
+% ===========================================================
+%  Chapters
+% ===========================================================
+\include{chapters/ch1_introduction}
+\include{chapters/ch2_background}
+\include{chapters/ch3_rare_rag}
+\include{chapters/ch4_system_design}
+\include{chapters/ch5_implementation}
+\include{chapters/ch6_evaluation}
+\include{chapters/ch7_conclusions}
+
+% ===========================================================
+%  Bibliography
+% ===========================================================
+\bibliographystyle{alpha}
+\bibliography{bibliography}
+
+\end{document}

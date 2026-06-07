@@ -1,0 +1,115 @@
+% ============================================================
+%  Chapter 1 — Introduction
+% ============================================================
+\chapter{Introduction}
+\label{cha:introduction}
+
+% ------------------------------------------------------------
+\section{Motivation}
+\label{sec:motivation}
+
+Consider a patient in their sixties managing three chronic conditions: atrial fibrillation,
+type~2 diabetes, and chronic kidney disease.
+Three separate specialists --- a cardiologist, an endocrinologist, and a nephrologist ---
+each prescribe their own regimen.
+The result is a daily combination of seven or more drugs, often without any single
+physician having reviewed the complete medication list for cross-drug interactions.
+Polypharmacy of this kind affects an estimated 40\% of patients over 65 in developed
+countries~\cite{masnoon2017polypharmacy}, and drug--drug interactions (DDIs) contribute
+to tens of thousands of preventable hospital admissions each year~\cite{lazarou1998ade}.
+
+Modern large language models (LLMs) are fluent, broad-knowledge reasoners that can, in
+principle, answer clinical questions about drug safety.
+Yet they are not safe for this task out of the box: they hallucinate, their training
+knowledge has a cutoff date, and they cannot explain \emph{why} a specific interaction
+exists based on citable evidence.
+Retrieval-Augmented Generation (RAG) addresses these weaknesses by grounding every
+response in retrieved source documents, making answers traceable and updatable without
+retraining the model.
+
+This thesis investigates how different RAG architectures perform on a multi-hop
+question-answering benchmark, proposes a novel architecture tailored for high-stakes
+advisory tasks, and demonstrates the approach through a prototype drug interaction
+advisory system.
+
+% ------------------------------------------------------------
+\section{Problem Statement}
+\label{sec:problem}
+
+Three research questions guide this work:
+
+\begin{description}
+  \item[RQ1] Which RAG architecture achieves the best trade-off between answer quality
+    (Token~F1, Exact Match) and latency on a multi-hop reasoning benchmark?
+
+  \item[RQ2] Does a routing-aware, set-wise evidence selection approach with a grounding
+    verifier (\rarerag{}) achieve higher faithfulness than single-path RAG architectures?
+
+  \item[RQ3] Can a configurable microservice RAG platform serve as a reliable technology
+    demonstrator for drug interaction advisory, with results that are traceable to source
+    documents?
+\end{description}
+
+% ------------------------------------------------------------
+\section{Scope and Limitations}
+\label{sec:scope}
+
+This thesis covers:
+\begin{itemize}
+  \item a survey of eight RAG architecture families (Chapter~\ref{cha:background});
+  \item the design of \rarerag{}, a novel four-component architecture
+        (Chapter~\ref{cha:rare_rag});
+  \item implementation of a 14-service microservice platform with configurable RAG
+        strategies (Chapters~\ref{cha:system_design}--\ref{cha:implementation});
+  \item an empirical benchmark on HotpotQA: nine RAG modes, 1{,}000 questions each
+        (Chapter~\ref{cha:evaluation}).
+\end{itemize}
+
+The following are explicitly out of scope:
+\begin{itemize}
+  \item clinical validation or patient-facing deployment;
+  \item regulatory compliance (MDR, FDA SaMD guidance);
+  \item fine-tuning or pre-training of language models;
+  \item evaluation on the drug interaction corpus (planned as future work ---
+        infrastructure and data preparation scripts are available in the repository).
+\end{itemize}
+
+% ------------------------------------------------------------
+\section{Contributions}
+\label{sec:contributions}
+
+The main contributions of this thesis are:
+
+\begin{enumerate}
+  \item \textbf{Comparative empirical study} of nine RAG pipeline variants on
+    HotpotQA (9{,}000 evaluated questions), using both lexical (Token~F1, EM, ROUGE-L)
+    and RAGAS-based (faithfulness, answer relevance, context recall) metrics, with
+    latency and cost analysis.
+
+  \item \textbf{\rarerag{} architecture} --- a novel RAG pipeline combining query
+    complexity routing, hybrid BM25+vector retrieval, set-wise evidence selection,
+    and a grounding verifier with abstention.
+    \rarerag{} achieves the highest faithfulness score (0.976) across all evaluated modes.
+
+  \item \textbf{Open-source \medrag{} platform} --- a production-grade microservice
+    system comprising 14 services, configurable chunking strategies, embedding providers,
+    and RAG modes, with full CI/CD pipeline and Docker deployment.
+\end{enumerate}
+
+% ------------------------------------------------------------
+\section{Thesis Organisation}
+\label{sec:organisation}
+
+The remainder of this thesis is organised as follows.
+Chapter~\ref{cha:background} surveys the evolution of RAG from the original
+retrieve-then-generate paradigm through agentic multi-agent systems and positions this
+work within the literature.
+Chapter~\ref{cha:rare_rag} presents the \rarerag{} architecture in detail, covering its
+four components and the hypotheses it addresses.
+Chapter~\ref{cha:system_design} documents the full microservice architecture of the
+\medrag{} platform using C4 diagrams and sequence models.
+Chapter~\ref{cha:implementation} describes selected non-trivial implementation decisions:
+embedding abstraction, hybrid search tuning, SSE streaming, and evaluation integration.
+Chapter~\ref{cha:evaluation} presents the experimental setup, results, and discussion.
+Chapter~\ref{cha:conclusions} summarises the findings, revisits the research questions,
+and outlines directions for future work.

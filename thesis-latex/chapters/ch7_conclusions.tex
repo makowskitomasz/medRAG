@@ -1,0 +1,70 @@
+% ============================================================
+%  Chapter 7 — Conclusions and Future Work
+% ============================================================
+\chapter{Conclusions and Future Work}
+\label{cha:conclusions}
+
+% TODO: write full chapter — skeleton below
+% Target: 5–6 pages
+
+% ------------------------------------------------------------
+\section{Summary of Findings}
+\label{sec:summary}
+
+% TODO: 1.5 pages
+% Revisit all three RQs with evidence
+
+% RQ1: best latency-quality trade-off → vanilla (9s, F1=0.537) or corrective_rag (12s, F1=0.539)
+%       for latency-critical use cases; self_reflection (F1=0.545) for accuracy-critical.
+% RQ2: RARE-RAG achieves highest faithfulness (0.976) — Hypothesis 2 confirmed.
+%       Grounding verifier contribution is measurable.
+% RQ3: System demonstrated on synthetic DDI queries; abstention mechanism works;
+%       full corpus evaluation deferred.
+
+% ------------------------------------------------------------
+\section{Main Contributions}
+\label{sec:contributions_summary}
+
+% TODO: 0.5 page — bullet list of the three contributions (reference Chapter 1)
+
+% ------------------------------------------------------------
+\section{Limitations}
+\label{sec:limitations}
+
+% TODO: 1 page
+% 1. HotpotQA only — English, Wikipedia domain; results may not generalise to medical text
+% 2. LLM-as-judge circularity: RAGAS faithfulness uses same model family for evaluation and generation
+% 3. Set-wise selection is greedy approximate, not optimal
+% 4. RARE-RAG latency (30.8s) is high for real-time advisory; caching needed
+% 5. No human evaluation loop (pharmacist/cardiologist assessment)
+
+% ------------------------------------------------------------
+\section{Future Work}
+\label{sec:future_work}
+
+% TODO: 2 pages
+
+\subsection{Drug Interaction Corpus Evaluation}
+% DDI corpus preparation scripts are in the repository (scripts/prepare_ddi_corpus.py)
+% Full evaluation on OpenFDA + DrugBank data planned for post-thesis phase
+% Would validate whether results on HotpotQA generalise to medical domain
+
+\subsection{Graph-Enhanced Evidence Selection}
+% Replace greedy set-wise selection with knowledge-graph expansion
+% Drug entities → graph edges (interaction, contraindication, synergy)
+% GraphRAG-style community detection over drug knowledge graph
+
+\subsection{Latency Optimisation}
+% Router pre-caching for common query types
+% Batched grounding verification
+% Speculative retrieval: start fast path in parallel with routing decision
+
+\subsection{Human Evaluation}
+% Pharmacist / cardiologist in-the-loop study
+% Blinded comparison: RARE-RAG vs. baseline vs. human expert
+% Trustability and explainability assessment
+
+\subsection{Production Readiness}
+% Compliance: MDR, FDA SaMD guidance, audit logging
+% Multi-tenancy isolation, rate limiting, PII handling
+% Monitoring: RAGAS drift detection in production (eval service already in place)

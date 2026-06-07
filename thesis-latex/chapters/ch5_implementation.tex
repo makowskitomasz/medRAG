@@ -1,0 +1,101 @@
+% ============================================================
+%  Chapter 5 — Implementation
+% ============================================================
+\chapter{Implementation}
+\label{cha:implementation}
+
+% TODO: write full chapter — skeleton below
+% Target: 8–10 pages
+% Focus: non-trivial technical decisions, not a code tour
+
+% ------------------------------------------------------------
+\section{Technology Stack}
+\label{sec:tech_stack}
+
+% TODO: 1 page
+% Python 3.12, FastAPI, uv, pydantic-settings, structured JSON logging
+% Next.js 15, TypeScript, Tailwind CSS, shadcn/ui
+% Docker multi-stage non-root, docker-compose
+% BGE-M3 via sentence-transformers, BGE-reranker-v2-m3 as cross-encoder
+
+% ------------------------------------------------------------
+\section{Embedding Provider Abstraction}
+\label{sec:embedding_abstraction}
+
+% TODO: 1.5 pages
+% Strategy interface: embed_texts(texts: List[str]) -> List[List[float]]
+% Three providers: local BGE-M3, Cohere Embed v3, OpenAI text-embedding-3
+% Configured via EMBEDDING_PROVIDER env var per deployment
+% Trade-off table: quality vs. cost vs. latency per provider
+
+\begin{figure}[htbp]
+  \centering
+  % TODO: TikZ UML class diagram — EmbeddingProvider strategy
+  \fbox{\parbox{0.7\textwidth}{\centering\vspace{2cm}
+    [Figure: Embedding Provider Strategy Class Diagram]\vspace{2cm}}}
+  \caption{Embedding provider strategy pattern. The \texttt{EmbeddingProvider}
+    abstract base class defines a single interface used by the orchestrator;
+    concrete providers encapsulate model-specific logic.}
+  \label{fig:embedding_strategy}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Hybrid Search and Alpha Tuning}
+\label{sec:hybrid_search}
+
+% TODO: 2 pages
+% Weaviate hybrid query: alpha parameter balances BM25 and vector score
+% RRF fusion formula
+% Empirical alpha=0.5 on dev split
+% Why hybrid beats pure vector on HotpotQA (entity-heavy questions)
+
+% ------------------------------------------------------------
+\section{SSE Streaming Architecture}
+\label{sec:sse_streaming}
+
+% TODO: 1.5 pages
+% FastAPI StreamingResponse + generator pattern
+% Token-by-token forwarding from Anthropic SDK .stream()
+% Citation injection after stream completion
+% Frontend EventSource handling in Next.js
+
+\begin{figure}[htbp]
+  \centering
+  % TODO: TikZ sequence diagram — SSE streaming
+  \fbox{\parbox{0.8\textwidth}{\centering\vspace{2cm}
+    [Figure: SSE Streaming Sequence Diagram]\vspace{2cm}}}
+  \caption{Server-Sent Events streaming: the generation service proxies the LLM
+    token stream directly to the client while buffering citations for post-stream
+    injection.}
+  \label{fig:sse_streaming}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{RAGAS Evaluation Integration}
+\label{sec:ragas_integration}
+
+% TODO: 2 pages
+% Async consumer of query.completed RabbitMQ events
+% RAGAS pipeline: faithfulness (NLI), answer relevance (cosine), context recall
+% LLM-as-judge calls — cost implications (~$0.006 per question)
+% Per-question metrics stored in MongoDB eval_results collection
+
+\begin{figure}[htbp]
+  \centering
+  % TODO: TikZ pipeline flow — RAGAS evaluation
+  \fbox{\parbox{0.8\textwidth}{\centering\vspace{2cm}
+    [Figure: RAGAS Evaluation Pipeline]\vspace{2cm}}}
+  \caption{Evaluation pipeline: the eval service consumes \texttt{query.completed}
+    events from RabbitMQ, computes RAGAS metrics using the LLM-as-judge approach,
+    and persists per-question results to MongoDB.}
+  \label{fig:ragas_pipeline}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{CI/CD Pipeline}
+\label{sec:cicd}
+
+% TODO: 1 page
+% GitHub Actions: ruff + mypy + pytest per changed service
+% docker compose build + healthcheck smoke test on develop push
+% Secrets: ANTHROPIC_API_KEY for integration tests

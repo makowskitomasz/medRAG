@@ -1,0 +1,156 @@
+% ============================================================
+%  Chapter 6 — Experimental Evaluation
+% ============================================================
+\chapter{Experimental Evaluation}
+\label{cha:evaluation}
+
+% TODO: write full chapter — skeleton below
+% Target: 14–16 pages
+% This chapter is data-driven — all claims must reference figures or tables
+
+% ------------------------------------------------------------
+\section{Experimental Setup}
+\label{sec:exp_setup}
+
+% TODO: 2 pages
+
+\subsection{Dataset: HotpotQA}
+% HotpotQA: Yang et al. 2018 — multi-hop reasoning over Wikipedia
+% 1000 questions per mode, 9 modes = 9000 evaluated questions
+% Why HotpotQA: multi-hop nature stresses retrieval; widely used RAG benchmark
+% Cite: \cite{yang2018hotpotqa}
+
+\subsection{Metrics}
+% Token F1: token-level overlap between predicted and gold answer
+% Exact Match (EM): binary — 1 iff prediction equals gold after normalisation
+% ROUGE-L: longest common subsequence F-measure
+% Faithfulness (RAGAS): fraction of answer claims supported by retrieved context
+% Answer Relevance (RAGAS): cosine similarity of reverse-generated questions
+% Context Recall (RAGAS): fraction of gold answer attributable to retrieved context
+% Latency: mean, median, p95 (wall clock ms per query)
+
+\subsection{Infrastructure}
+% LLM: claude-sonnet-4-6 (Anthropic API)
+% Embeddings: local BGE-M3 (sentence-transformers, no API cost)
+% Vector store: Weaviate 1.27, hybrid alpha = 0.5
+% Hardware: TODO (your machine spec)
+% Total cost: ~\$60, total time: ~45,000 seconds
+
+% ------------------------------------------------------------
+\section{Answer Quality Results}
+\label{sec:results_quality}
+
+% TODO: 3 pages
+
+Table~\ref{tab:results_full} summarises all metrics for all nine evaluated modes.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Full benchmark results on HotpotQA ($n = 1{,}000$ per mode). Best value
+    per metric in \textbf{bold}.}
+  \label{tab:results_full}
+  \begin{tabular}{@{}lrrrrrrr@{}}
+    \toprule
+    \textbf{Mode} & \textbf{F1} & \textbf{EM} & \textbf{ROUGE-L}
+      & \textbf{Faith.} & \textbf{Ans.Rel.} & \textbf{Ctx.Rec.} & \textbf{Lat.~(s)} \\
+    \midrule
+    Vanilla            & 0.5368 & 0.316 & 0.5356 & 0.9391 & 0.5256 & 0.9710 &  9.1 \\
+    HyDE               & 0.5411 & 0.315 & 0.5412 & 0.9709 & 0.5162 & 0.9750 & 22.7 \\
+    Query Rewriting    & 0.5373 & 0.312 & 0.5374 & 0.9640 & 0.5235 & 0.9575 & 22.7 \\
+    Self-Reflection    & \textbf{0.5454} & \textbf{0.329} & \textbf{0.5454}
+                                         & 0.9740 & 0.5146 & 0.9715 & 20.0 \\
+    Multi-Agent        & 0.5251 & 0.309 & 0.5250 & 0.9672 & 0.5248 & 0.9695 & 10.2 \\
+    Corrective RAG     & 0.5392 & 0.323 & 0.5399 & 0.9730 & 0.5239 & 0.9680 & 11.8 \\
+    Iter. Multi-hop    & 0.5329 & 0.314 & 0.5324 & 0.9686 & 0.5147 & 0.9530 & 26.0 \\
+    MADAM-RAG          & 0.4873 & 0.282 & 0.4868 & 0.9498 & 0.5319 & 0.9259 & 29.0 \\
+    \rarerag{} (ours)  & 0.5432 & 0.320 & 0.5432 & \textbf{0.9764} & 0.5212 & 0.9690 & 30.8 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  % TODO: include seaborn figure — bar chart Token F1 + EM per mode
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+    [Figure: Token F1 and Exact Match per RAG mode — seaborn]\vspace{3cm}}}
+  \caption{Token~F1 and Exact Match scores for all nine evaluated RAG modes.
+    Self-Reflection achieves the highest EM (0.329); vanilla remains a competitive
+    baseline with significantly lower latency.}
+  \label{fig:results_f1_em}
+\end{figure}
+
+% TODO: prose analysis — self_reflection best EM, RARE-RAG competitive F1, MADAM-RAG worst
+
+% ------------------------------------------------------------
+\section{Faithfulness and Grounding}
+\label{sec:results_faithfulness}
+
+% TODO: 3 pages
+
+\begin{figure}[htbp]
+  \centering
+  % TODO: seaborn bar chart — Faithfulness per mode with value labels
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+    [Figure: Faithfulness per RAG mode]\vspace{3cm}}}
+  \caption{Faithfulness scores (RAGAS) for all nine modes.
+    \rarerag{} achieves the highest faithfulness (0.976), confirming
+    Hypothesis~\ref{hyp:faithfulness}.}
+  \label{fig:results_faithfulness}
+\end{figure}
+
+% TODO: discuss — grounding verifier effect, HyDE also high, vanilla surprisingly solid
+
+% ------------------------------------------------------------
+\section{Latency and Cost Trade-off}
+\label{sec:results_latency}
+
+% TODO: 3 pages
+
+\begin{figure}[htbp]
+  \centering
+  % TODO: seaborn scatter — Latency vs. Token F1, bubble size = faithfulness
+  \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
+    [Figure: Latency vs. Token F1 scatter plot (bubble = faithfulness)]\vspace{3cm}}}
+  \caption{Quality--latency trade-off across all evaluated modes. Bubble size
+    represents faithfulness. Vanilla RAG and Multi-Agent lie on the Pareto
+    frontier for the latency--accuracy objective; \rarerag{} trades latency for
+    maximum faithfulness.}
+  \label{fig:latency_scatter}
+\end{figure}
+
+% TODO: Pareto analysis, corrective_rag as best cost-quality ratio
+
+% ------------------------------------------------------------
+\section{Multi-Metric Overview}
+\label{sec:results_radar}
+
+\begin{figure}[htbp]
+  \centering
+  % TODO: radar chart — 5 metrics × 9 modes (or selected modes for clarity)
+  \fbox{\parbox{0.8\textwidth}{\centering\vspace{3cm}
+    [Figure: Radar chart — 5 metrics × selected modes]\vspace{3cm}}}
+  \caption{Radar chart comparing five evaluation dimensions across selected
+    representative modes. \rarerag{} is distinguished by its faithfulness; vanilla
+    by its latency efficiency; self-reflection by its answer accuracy.}
+  \label{fig:radar}
+\end{figure}
+
+% ------------------------------------------------------------
+\section{Discussion}
+\label{sec:discussion}
+
+% TODO: 2 pages
+% - Why faithfulness != accuracy (faithful to wrong context)
+% - MADAM-RAG failure: debate good for disambiguation, bad for factoid QA
+% - RARE-RAG vs. self_reflection: different targets (faithfulness vs. EM)
+% - Limitations: HotpotQA English/Wikipedia only
+% - LLM-as-judge circularity in RAGAS faithfulness
+
+% ------------------------------------------------------------
+\section{Drug Interaction Advisory Demonstration}
+\label{sec:ddi_demo}
+
+% TODO: 1 page
+% Qualitative examples: synthetic patient query → system response with citations
+% RARE-RAG abstention on unanswerable query
+% Note: full DDI corpus evaluation is planned as future work (scripts in repo)

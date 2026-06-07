@@ -1,0 +1,239 @@
+% ============================================================
+%  Bibliography — medRAG Master's Thesis
+%  Sources drawn from: deep-research-report.md + PDF review
+% ============================================================
+
+% ---- Foundational RAG papers --------------------------------
+
+@inproceedings{lewis2020rag,
+  author    = {Patrick Lewis and Ethan Perez and Aleksandra Piktus and
+               Fabio Petroni and Vladimir Karpukhin and Naman Goyal and
+               Heinrich Küttler and Mike Lewis and Wen-tau Yih and
+               Tim Rocktäschel and Sebastian Riedel and Douwe Kiela},
+  title     = {Retrieval-Augmented Generation for Knowledge-Intensive {NLP} Tasks},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  volume    = {33},
+  pages     = {9459--9474},
+  year      = {2020}
+}
+
+@article{gao2022hyde,
+  author    = {Luyu Gao and Xueguang Ma and Jimmy Lin and Jamie Callan},
+  title     = {Precise Zero-Shot Dense Retrieval without Relevance Labels},
+  journal   = {arXiv preprint arXiv:2212.10496},
+  year      = {2022}
+}
+
+@inproceedings{asai2023selfrag,
+  author    = {Akari Asai and Zeqiu Wu and Yizhong Wang and Avirup Sil and Hannaneh Hajishirzi},
+  title     = {Self-{RAG}: Learning to Retrieve, Generate, and Critique through
+               Self-Reflection},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2024}
+}
+
+@article{yan2024crag,
+  author    = {Shi-Qi Yan and Jia-Chen Gu and Yun Zhu and Zhen-Hua Ling},
+  title     = {Corrective Retrieval Augmented Generation},
+  journal   = {arXiv preprint arXiv:2401.15884},
+  year      = {2024}
+}
+
+@article{jeong2024adaptiverag,
+  author    = {Soyeong Jeong and Jinheon Baek and Sukmin Cho and Sung Ju Hwang and Jong Park},
+  title     = {Adaptive-{RAG}: Learning to Adapt Retrieval-Augmented Large Language Models
+               through Question Complexity},
+  booktitle = {Proceedings of NAACL},
+  year      = {2024}
+}
+
+% ---- Graph and Hierarchical RAG ----------------------------
+
+@article{edge2024graphrag,
+  author    = {Darren Edge and Ha Trinh and Newman Cheng and Joshua Bradley and
+               Alex Chao and Apurva Mody and Steven Truitt and Jonathan Larson},
+  title     = {From Local to Global: A Graph {RAG} Approach to Query-Focused Summarization},
+  journal   = {arXiv preprint arXiv:2404.16130},
+  year      = {2024}
+}
+
+@article{sarthi2024raptor,
+  author    = {Parth Sarthi and Salman Abdullah and Aditi Tuli and Shubh Khanna and
+               Anna Goldie and Christopher D. Manning},
+  title     = {{RAPTOR}: Recursive Abstractive Processing for Tree-Organized Retrieval},
+  journal   = {arXiv preprint arXiv:2401.18059},
+  year      = {2024}
+}
+
+% ---- Iterative and Multi-hop RAG ---------------------------
+
+@article{wang2025chain,
+  author    = {Liang Wang and Haonan Chen and Nan Yang and Xiaolong Huang and
+               Zhicheng Dou and Furu Wei},
+  title     = {Chain-of-Retrieval Augmented Generation},
+  journal   = {arXiv preprint arXiv:2501.14342},
+  year      = {2025}
+}
+
+% ---- Agentic and Multi-Agent RAG ---------------------------
+
+@article{singh2025agenticrag,
+  author    = {Aditi Singh and Abul Ehtesham and Saket Kumar and Tala Talaei Khoei and
+               Athanasios V. Vasilakos},
+  title     = {Agentic Retrieval-Augmented Generation: A Survey on Agentic {RAG}},
+  journal   = {arXiv preprint arXiv:2501.09136},
+  year      = {2025}
+}
+
+@article{du2026arag,
+  author    = {Mingxuan Du and Benfeng Xu and Chiwei Zhu and Shaohan Wang and
+               Pengyu Wang and Xiaorui Wang and Zhendong Mao},
+  title     = {{A-RAG}: Scaling Agentic Retrieval-Augmented Generation via
+               Hierarchical Retrieval Interfaces},
+  journal   = {arXiv preprint arXiv:2602.03442},
+  year      = {2026}
+}
+
+@article{chen2026jade,
+  author    = {Yiqun Chen and others},
+  title     = {{JADE}: Bridging the Strategic-Operational Gap in Dynamic Agentic {RAG}},
+  journal   = {arXiv preprint arXiv:2601.21916},
+  year      = {2026}
+}
+
+@article{nguyen2025marag,
+  author    = {Thang Nguyen and Peter Chin and Yu-Wing Tai},
+  title     = {{MA-RAG}: Multi-Agent Retrieval-Augmented Generation via Collaborative
+               Chain-of-Thought Reasoning},
+  journal   = {arXiv preprint arXiv:2505.20096},
+  year      = {2025}
+}
+
+@article{wang2025madamrag,
+  author    = {Han Wang and Archiki Prasad and Elias Stengel-Eskin and Mohit Bansal},
+  title     = {Retrieval-Augmented Generation with Conflicting Evidence},
+  booktitle = {Conference on Language Modeling (COLM)},
+  year      = {2025}
+}
+
+% ---- Routing and Dynamic RAG --------------------------------
+
+@article{zhang2025ragrouter,
+  author    = {Jiarui Zhang and others},
+  title     = {{RAGRouter}: Learning to Route Queries to Multiple
+               Retrieval-Augmented Language Models},
+  journal   = {arXiv preprint},
+  year      = {2025}
+}
+
+% ---- Retrieval models ---------------------------------------
+
+@inproceedings{karpukhin2020dpr,
+  author    = {Vladimir Karpukhin and Barlas Oğuz and Sewon Min and Patrick Lewis and
+               Ledell Wu and Sergey Edunov and Danqi Chen and Wen-tau Yih},
+  title     = {Dense Passage Retrieval for Open-Domain Question Answering},
+  booktitle = {Proceedings of EMNLP},
+  year      = {2020}
+}
+
+@inproceedings{khattab2020colbert,
+  author    = {Omar Khattab and Matei Zaharia},
+  title     = {{ColBERT}: Efficient and Effective Passage Search via Contextualized
+               Late Interaction over {BERT}},
+  booktitle = {Proceedings of ACM SIGIR},
+  year      = {2020}
+}
+
+@inproceedings{santhanam2022colbertv2,
+  author    = {Keshav Santhanam and Omar Khattab and Jon Saad-Falcon and
+               Christopher Potts and Matei Zaharia},
+  title     = {{ColBERTv2}: Effective and Efficient Retrieval via Lightweight Late
+               Interaction},
+  booktitle = {Proceedings of NAACL},
+  year      = {2022}
+}
+
+@article{izacard2021contriever,
+  author    = {Gautier Izacard and Mathilde Caron and Lucas Bourdoukan and
+               Patrick Joulin and Armand Joulin and Gabriel Synnaeve and Edouard Grave},
+  title     = {Unsupervised Dense Information Retrieval with Contrastive Learning},
+  journal   = {arXiv preprint arXiv:2112.09118},
+  year      = {2021}
+}
+
+% ---- Evaluation ---------------------------------------------
+
+@article{es2023ragas,
+  author    = {Shahul Es and Jithin James and Luis Espinosa-Anke and Steven Schockaert},
+  title     = {{RAGAS}: Automated Evaluation of Retrieval Augmented Generation},
+  journal   = {arXiv preprint arXiv:2309.15217},
+  year      = {2023}
+}
+
+@inproceedings{yang2018hotpotqa,
+  author    = {Zhilin Yang and Peng Qi and Saizheng Zhang and Yoshua Bengio and
+               William Cohen and Ruslan Salakhutdinov and Christopher D. Manning},
+  title     = {{HotpotQA}: A Dataset for Diverse, Explainable Multi-hop Question Answering},
+  booktitle = {Proceedings of EMNLP},
+  year      = {2018}
+}
+
+@article{thakur2021beir,
+  author    = {Nandan Thakur and Nils Reimers and Andreas Rücklé and
+               Abhishek Srivastava and Iryna Gurevych},
+  title     = {{BEIR}: A Heterogeneous Benchmark for Zero-Shot Evaluation of
+               Information Retrieval Models},
+  booktitle = {NeurIPS Datasets and Benchmarks},
+  year      = {2021}
+}
+
+% ---- LLM hallucination & trustability -----------------------
+
+@article{ji2023hallucination,
+  author    = {Ziwei Ji and Nayeon Lee and Rita Frieske and Tiezheng Yu and Dan Su and
+               Yan Xu and Etsuko Ishii and Ye Jin Bang and Andrea Madotto and Pascale Fung},
+  title     = {Survey of Hallucination in Natural Language Generation},
+  journal   = {ACM Computing Surveys},
+  volume    = {55},
+  number    = {12},
+  pages     = {1--38},
+  year      = {2023}
+}
+
+% ---- Medical / clinical background --------------------------
+
+@article{masnoon2017polypharmacy,
+  author    = {Nashwa Masnoon and Sarita Shakib and Lynthia Kalisch-Ellett and
+               Craig M. Caughey},
+  title     = {What is polypharmacy? A systematic review of definitions},
+  journal   = {BMC Geriatrics},
+  volume    = {17},
+  pages     = {230},
+  year      = {2017}
+}
+
+@article{lazarou1998ade,
+  author    = {Jason Lazarou and Bruce H. Pomeranz and Paul N. Corey},
+  title     = {Incidence of Adverse Drug Reactions in Hospitalized Patients},
+  journal   = {JAMA},
+  volume    = {279},
+  number    = {15},
+  pages     = {1200--1205},
+  year      = {1998}
+}
+
+% ---- Infrastructure & frameworks ----------------------------
+
+@misc{weaviate2024,
+  author    = {{Weaviate B.V.}},
+  title     = {Weaviate: Vector Database with Hybrid Search},
+  year      = {2024},
+  howpublished = {\url{https://weaviate.io}}
+}
+
+@article{reimers2019sentencetransformers,
+  author    = {Nils Reimers and Iryna Gurevych},
+  title     = {Sentence-{BERT}: Sentence Embeddings using Siamese {BERT}-Networks},
+  booktitle = {Proceedings of EMNLP},
+  year      = {2019}
+}

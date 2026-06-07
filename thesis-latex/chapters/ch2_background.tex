@@ -1,0 +1,160 @@
+% ============================================================
+%  Chapter 2 — Background & Literature Review
+% ============================================================
+\chapter{Background and Literature Review}
+\label{cha:background}
+
+% TODO: write full chapter — skeleton below
+% Target: 18–22 pages
+
+% ------------------------------------------------------------
+\section{From Language Models to Retrieval-Augmented Generation}
+\label{sec:lm_to_rag}
+
+% TODO: 2 pages
+% - LLM strengths and weaknesses (hallucination, knowledge cutoff)
+% - Parametric vs. non-parametric knowledge
+% - Lewis et al. 2020: original RAG paper — retrieve-then-generate
+% - Why RAG matters: updatable, traceable, no retraining
+
+% Placeholder paragraph:
+Large language models (LLMs) excel at fluent text generation and general-purpose
+reasoning, but suffer from two fundamental limitations in knowledge-intensive
+applications: (1)~their parametric knowledge is frozen at training time, making
+them unreliable for domains that evolve rapidly; and (2)~they are prone to
+\emph{hallucination} --- the generation of plausible-sounding but factually
+incorrect statements~\cite{ji2023hallucination}.
+Retrieval-Augmented Generation, introduced by Lewis~\etal~\cite{lewis2020rag},
+addresses both issues by augmenting the generation process with dynamically
+retrieved documents, grounding each response in citable source material.
+
+% ------------------------------------------------------------
+\section{Retrieval Foundations}
+\label{sec:retrieval_foundations}
+
+% TODO: 3 pages
+% 2.2.1 Sparse retrieval: BM25, SPLADE v2
+% 2.2.2 Dense retrieval: DPR, Contriever
+% 2.2.3 Late interaction: ColBERT, ColBERTv2
+% 2.2.4 Hybrid search: RRF fusion, alpha parameter
+% 2.2.5 Cross-encoder reranking: BGE-reranker-v2-m3
+
+\subsection{Sparse Retrieval}
+% TODO
+
+\subsection{Dense Retrieval}
+% TODO
+
+\subsection{Late Interaction and Hybrid Search}
+% TODO
+
+\subsection{Cross-Encoder Reranking}
+% TODO
+
+% ------------------------------------------------------------
+\section{RAG Architecture Families}
+\label{sec:rag_families}
+
+% TODO: 10 pages — core of the chapter
+% One sub-section per architecture family
+% Opening table: 8 families × (year, key idea, retrieval, generation, benchmark, weakness)
+
+The literature on RAG has expanded rapidly since 2020.
+Table~\ref{tab:rag_families} provides an overview of the eight architecture families
+surveyed in this chapter, ordered chronologically and by complexity.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Overview of surveyed RAG architecture families.}
+  \label{tab:rag_families}
+  \begin{tabularx}{\textwidth}{@{}lllX@{}}
+    \toprule
+    \textbf{Family} & \textbf{Year} & \textbf{Key paper} & \textbf{Core idea} \\
+    \midrule
+    Vanilla RAG & 2020 & Lewis et al.~\cite{lewis2020rag}
+      & Single-pass retrieve-then-generate \\
+    HyDE / Query Rewriting & 2022 & Gao et al.~\cite{gao2022hyde}
+      & Embed hypothetical answer to improve retrieval alignment \\
+    Self-RAG & 2023 & Asai et al.~\cite{asai2023selfrag}
+      & Reflection tokens for adaptive retrieval and self-critique \\
+    Corrective RAG & 2024 & Yan et al.~\cite{yan2024crag}
+      & Correctness evaluation with web-search fallback \\
+    Graph / Hierarchical RAG & 2024 & Edge et al.~\cite{edge2024graphrag}; Sarthi et al.~\cite{sarthi2024raptor}
+      & Knowledge graphs and hierarchical tree summaries \\
+    Iterative Multi-hop RAG & 2025 & Wang et al.~\cite{wang2025chain}
+      & Multi-step evidence chaining across retrieval calls \\
+    Agentic / Multi-Agent RAG & 2025 & Singh et al.~\cite{singh2025agenticrag}
+      & Planner--executor agents, tool-augmented retrieval \\
+    \rarerag{} (this work) & 2026 & ---
+      & Routing + hybrid retrieval + set-wise selection + grounding verifier \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Vanilla RAG}
+\label{subsec:vanilla_rag}
+% TODO
+
+\subsection{HyDE and Query Rewriting}
+\label{subsec:hyde}
+% TODO
+
+\subsection{Self-RAG}
+\label{subsec:self_rag}
+% TODO
+
+\subsection{Corrective RAG}
+\label{subsec:corrective_rag}
+% TODO
+
+\subsection{Graph and Hierarchical RAG}
+\label{subsec:graph_rag}
+% TODO
+
+\subsection{Iterative Multi-Hop RAG}
+\label{subsec:multihop}
+% TODO
+
+\subsection{Agentic and Multi-Agent RAG}
+\label{subsec:agentic_rag}
+% TODO
+
+% ------------------------------------------------------------
+\section{Evaluation of RAG Systems}
+\label{sec:rag_evaluation}
+
+% TODO: 3 pages
+% 2.4.1 End-to-end metrics: Token F1, EM, ROUGE-L
+% 2.4.2 RAGAS: faithfulness, answer relevance, context recall, context precision
+% 2.4.3 Benchmarks: HotpotQA, BEIR, CRAG, RAGBench
+% 2.4.4 Latency and cost as first-class metrics
+
+\subsection{Lexical Overlap Metrics}
+% TODO
+
+\subsection{The RAGAS Framework}
+\label{subsec:ragas}
+% TODO — cite Es et al. 2023
+
+\subsection{Benchmarks and Datasets}
+\label{subsec:benchmarks}
+% TODO — HotpotQA: Yang et al. 2018
+
+% ------------------------------------------------------------
+\section{Related Work in Clinical and Medical NLP}
+\label{sec:medical_nlp}
+
+% TODO: 2 pages
+% - Clinical decision support systems
+% - Drug interaction detection: rule-based / ML / LLM
+% - Trustability, explainability, hallucination in high-stakes domains
+
+% ------------------------------------------------------------
+\section{Summary}
+\label{sec:background_summary}
+
+% TODO: 0.5 page
+% Summarise the gap this thesis addresses:
+% - No architecture routes by query risk/complexity
+% - No set-wise evidence selection in microservice context
+% - No systematic comparison of 9 modes on 1000 questions each
