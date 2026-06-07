@@ -56,10 +56,10 @@ async def test_generate_hypothetical_document_returns_passage():
         " due to dual antiplatelet and anticoagulant effects."
     )
     client = _make_client(passage)
-    result = await generate_hypothetical_document(
+    doc, _, _ = await generate_hypothetical_document(
         "Can aspirin and warfarin be taken together?", client, "model-x"
     )
-    assert result == passage
+    assert doc == passage
     client.chat.completions.create.assert_awaited_once()
 
 
