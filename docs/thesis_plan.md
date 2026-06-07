@@ -381,21 +381,6 @@ Present benchmark results, interpret findings, validate or reject hypotheses fro
 
 ---
 
-## Writing schedule (July–August 2026)
-
-| Week | Target |
-|------|--------|
-| July 1–7 | Chapter 2 (background) — heaviest literature work |
-| July 8–14 | Chapter 3 (RARE-RAG) + Chapter 7 (conclusions) |
-| July 15–21 | Chapter 4 (system design) + all TikZ diagrams |
-| July 22–28 | Chapter 6 (evaluation) + all seaborn figures |
-| July 29–Aug 4 | Chapter 5 (implementation) + Chapter 1 (introduction) |
-| Aug 5–11 | Full draft review, abstract PL+EN, acknowledgements |
-| Aug 12–18 | Promotor review round 1 — fix comments |
-| Aug 19–25 | Final pass, print-ready PDF, Overleaf sync |
-
----
-
 ## Diagrams to create (master list)
 
 ### TikZ (LaTeX-native, vector, beautiful)

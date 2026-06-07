@@ -24,14 +24,50 @@
 % TODO: 1 page + figure
 
 \begin{figure}[htbp]
-  \centering
-  % TODO: TikZ C4 Level 1 diagram
-  \fbox{\parbox{0.8\textwidth}{\centering\vspace{2cm}
-    [Figure: C4 Level 1 — System Context]\vspace{2cm}}}
-  \caption{System context diagram. Two actors (Patient/User and Administrator)
-    interact with the \medrag{} system boundary. External dependencies are
-    the LLM provider (Anthropic) and the embedding provider (BGE-M3 or Cohere).}
-  \label{fig:c4_context}
+\centering
+\begin{tikzpicture}[
+  actor/.style  = {rectangle, rounded corners=3pt,
+                   draw=gray!60, fill=gray!8, thick,
+                   minimum width=2.8cm, minimum height=0.85cm, align=center,
+                   font=\small},
+  system/.style = {rectangle, rounded corners=8pt,
+                   draw=blue!55, fill=blue!7, very thick,
+                   minimum width=5.5cm, minimum height=3.2cm, align=center},
+  ext/.style    = {rectangle, rounded corners=4pt,
+                   draw=purple!50, fill=purple!5, thick,
+                   dashed, minimum width=3.0cm, minimum height=0.85cm,
+                   align=center, font=\small},
+  arr/.style    = {-{Stealth[length=5pt]}, thick, black!60},
+  lbl/.style    = {font=\footnotesize, fill=white, inner sep=1pt},
+]
+
+% actors
+\node[actor] (user)   at (-5.5, 0) {Patient\,/\,User\\[-1pt]{\tiny queries drug interactions}};
+\node[actor] (admin)  at (-5.5,-2.0) {Administrator\\[-1pt]{\tiny manages projects \& docs}};
+
+% system box
+\node[system] (medrag) at (0, -1.0) {};
+\node[font=\small\bfseries, blue!60] at (0, 0.6)  {\medrag{} Platform};
+\node[font=\footnotesize]            at (0, -0.1) {14 microservices};
+\node[font=\footnotesize]            at (0, -0.7) {FastAPI + Weaviate + MongoDB};
+\node[font=\footnotesize]            at (0, -1.3) {RabbitMQ ingestion pipeline};
+
+% external dependencies
+\node[ext] (llm)     at (5.5,  0.2) {Anthropic LLM\\[-1pt]{\tiny Claude API}};
+\node[ext] (embedpv) at (5.5, -2.2) {Embedding Provider\\[-1pt]{\tiny BGE-M3 / Cohere / OpenAI}};
+
+% arrows
+\draw[arr] (user.east)   -- node[lbl,above=1pt]{REST / SSE}       (medrag.west |- user);
+\draw[arr] (admin.east)  -- node[lbl,above=1pt]{REST}             (medrag.west |- admin);
+\draw[arr] (medrag.east |- llm)     -- node[lbl,above=1pt]{HTTPS} (llm.west);
+\draw[arr] (medrag.east |- embedpv) -- node[lbl,above=1pt]{HTTPS} (embedpv.west);
+
+\end{tikzpicture}
+\caption{System context diagram. Two actors (Patient/User and Administrator)
+  interact with the \medrag{} system boundary via REST and SSE. External
+  dependencies are the LLM provider (Anthropic Claude) and the configurable
+  embedding provider (BGE-M3 by default).}
+\label{fig:c4_context}
 \end{figure}
 
 % ------------------------------------------------------------
@@ -68,14 +104,133 @@ The \medrag{} platform consists of 14 services, listed in Table~\ref{tab:service
   \end{tabularx}
 \end{table}
 
-\begin{figure}[htbp]
-  \centering
-  % TODO: TikZ C4 Level 2 — the big container diagram (14 services)
-  \fbox{\parbox{0.95\textwidth}{\centering\vspace{4cm}
-    [Figure: C4 Level 2 — Container Diagram (14 services)]\vspace{4cm}}}
-  \caption{Container diagram showing the ingestion pipeline (asynchronous,
-    event-driven via RabbitMQ) and the query pipeline (synchronous REST + SSE).}
-  \label{fig:c4_container}
+\begin{figure}[p]
+\centering
+\begin{tikzpicture}[
+  svc/.style   = {rectangle, rounded corners=3pt,
+                  draw=blue!50, fill=blue!6, thick,
+                  minimum width=3.0cm, minimum height=0.65cm,
+                  align=center, font=\footnotesize},
+  mq/.style    = {rectangle, rounded corners=3pt,
+                  draw=orange!60, fill=orange!8, thick,
+                  minimum width=3.0cm, minimum height=0.65cm,
+                  align=center, font=\footnotesize},
+  infra/.style = {rectangle, rounded corners=3pt,
+                  draw=gray!60, fill=gray!10, thick,
+                  minimum width=2.6cm, minimum height=0.65cm,
+                  align=center, font=\footnotesize},
+  ext/.style   = {rectangle, rounded corners=3pt,
+                  draw=purple!50, fill=purple!5, thick, dashed,
+                  minimum width=2.8cm, minimum height=0.65cm,
+                  align=center, font=\footnotesize},
+  actor/.style = {rectangle, rounded corners=3pt,
+                  draw=gray!55, fill=gray!7, thick,
+                  minimum width=2.4cm, minimum height=0.65cm,
+                  align=center, font=\footnotesize},
+  supp/.style  = {rectangle, rounded corners=3pt,
+                  draw=teal!50, fill=teal!5, thick,
+                  minimum width=3.0cm, minimum height=0.65cm,
+                  align=center, font=\footnotesize},
+  arr/.style   = {-{Stealth[length=4pt]}, thick, black!60},
+  lbl/.style   = {font=\scriptsize, fill=white, inner sep=1pt},
+]
+
+% ── Clients (y = 9) ──────────────────────────────────────────────
+\node[actor] (user)    at (2.5, 9.0) {User\\[-1pt]{\tiny REST / SSE}};
+\node[actor] (admin_u) at (5.5, 9.0) {Admin User\\[-1pt]{\tiny REST}};
+
+% ── Gateway tier (y = 7.5) ───────────────────────────────────────
+\node[svc]   (gw)   at (2.5, 7.5) {api-gateway\\\tiny:8000};
+\node[svc]   (auth) at (9.5, 7.5) {auth\\\tiny:8001};
+
+% ── Query Pipeline group (x = 0–6, y = 2.2–6.5) ─────────────────
+\draw[rounded corners=6pt, fill=blue!3, draw=blue!35, dashed]
+    (-0.2, 2.0) rectangle (5.7, 6.8);
+\node[font=\footnotesize\bfseries, blue!50] at (2.75, 6.5) {Query Pipeline};
+
+\node[svc] (orch)   at (2.5, 5.9) {orchestrator\\\tiny:8002};
+\node[svc] (qp)     at (2.5, 5.1) {query-processor\\\tiny:8003};
+\node[svc] (retr)   at (2.5, 4.3) {retrieval\\\tiny:8004};
+\node[svc] (rerank) at (2.5, 3.5) {reranker\\\tiny:8005};
+\node[svc] (gen_s)  at (2.5, 2.7) {generation\\\tiny:8006};
+
+% ── Ingestion Pipeline group (x = 6.5–13, y = 1.4–6.5) ──────────
+\draw[rounded corners=6pt, fill=orange!3, draw=orange!40, dashed]
+    (6.5, 1.2) rectangle (12.7, 6.8);
+\node[font=\footnotesize\bfseries, orange!60] at (9.6, 6.5) {Ingestion Pipeline};
+
+\node[svc]   (ingest) at (9.5, 5.9) {ingestion\\\tiny:8007};
+\node[mq]    (rmq_s)  at (9.5, 5.1) {RabbitMQ broker\\\tiny async events};
+\node[svc]   (parser) at (9.5, 4.3) {parser\\\tiny:8008};
+\node[svc]   (chunk)  at (9.5, 3.5) {chunking\\\tiny:8009};
+\node[svc]   (embed)  at (9.5, 2.7) {embedding\\\tiny:8010};
+\node[svc]   (idx)    at (9.5, 1.9) {indexing\\\tiny:8011};
+
+% ── Support services (y = 1.0) ───────────────────────────────────
+\node[supp] (admin_s) at (2.5, 0.5) {admin\\\tiny:8012};
+\node[supp] (eval_s)  at (5.5, 0.5) {eval\\\tiny:8013};
+
+% ── Infrastructure (y = -0.8) ────────────────────────────────────
+\draw[rounded corners=6pt, fill=gray!5, draw=gray!40]
+    (-0.2, -1.7) rectangle (12.7, -0.2);
+\node[font=\footnotesize\bfseries, gray!60] at (6.25, -0.4) {Infrastructure};
+\node[infra] (mongo)    at (2.0,  -1.1) {MongoDB\\\tiny:27017};
+\node[infra] (weaviate) at (6.25, -1.1) {Weaviate\\\tiny:8080};
+\node[infra] (rmq_i)    at (10.5, -1.1) {RabbitMQ\\\tiny:5672};
+
+% ── External (y = -3.0) ──────────────────────────────────────────
+\draw[rounded corners=6pt, fill=purple!3, draw=purple!30, dashed]
+    (-0.2, -3.4) rectangle (12.7, -2.2);
+\node[font=\footnotesize\bfseries, purple!50] at (6.25, -2.35) {External APIs};
+\node[ext] (llm_e)  at (3.0,  -2.95) {Anthropic LLM\\{\tiny claude-sonnet-4-6}};
+\node[ext] (emb_e)  at (9.0,  -2.95) {Embedding Provider\\{\tiny BGE-M3 / Cohere}};
+
+% ── Arrows ───────────────────────────────────────────────────────
+% clients → gateway
+\draw[arr] (user)    -- (gw);
+\draw[arr] (admin_u) -- (gw);
+
+% gateway → auth (JWT validation)
+\draw[arr, dashed] (gw.east) -- node[lbl,above=1pt]{JWT check} (auth.west);
+
+% gateway → query pipeline
+\draw[arr] (gw.south) -- node[lbl,right=1pt]{query} (orch.north);
+
+% gateway → ingestion
+\draw[arr] (gw.east) -- ++(0.6,0) -- ++(0,-0.9) -- node[lbl,above=1pt]{upload} (ingest.north);
+
+% internal query pipeline (↓)
+\draw[arr] (orch)   -- (qp);
+\draw[arr] (qp)     -- (retr);
+\draw[arr] (retr)   -- (rerank);
+\draw[arr] (rerank) -- (gen_s);
+
+% internal ingestion pipeline (↓)
+\draw[arr] (ingest) -- (rmq_s);
+\draw[arr] (rmq_s)  -- (parser);
+\draw[arr] (parser) -- (chunk);
+\draw[arr] (chunk)  -- (embed);
+\draw[arr] (embed)  -- (idx);
+
+% retrieval + indexing ↔ Weaviate
+\draw[arr, <->] (retr.south) -- ++(0,-0.35) -- ++(3.75,0) -- (weaviate.north);
+\draw[arr]      (idx.south)  -- ++(0,-0.35) -- ++(-3.25,0) -- (weaviate.north);
+
+% generation → LLM external
+\draw[arr] (gen_s.west)  -- ++(-0.8,0) -- ++(0,-3.2) -- (llm_e.north);
+
+% embedding → embedding provider
+\draw[arr] (embed.east) -- ++(0.8,0) -- ++(0,-2.5) -- (emb_e.north);
+
+% eval ← RabbitMQ (query.completed)
+\draw[arr, dashed] (rmq_i.west) -- ++(-4.75,0) -- (eval_s.south);
+
+\end{tikzpicture}
+\caption{Container diagram showing all 14 \medrag{} services grouped into the
+  synchronous Query Pipeline (blue) and the asynchronous Ingestion Pipeline (orange).
+  Dashed arrows indicate event-driven or optional communication.
+  The eval service consumes \texttt{query.completed} events from RabbitMQ.}
+\label{fig:c4_container}
 \end{figure}
 
 % ------------------------------------------------------------
@@ -89,13 +244,70 @@ The \medrag{} platform consists of 14 services, listed in Table~\ref{tab:service
 % Conversation persistence in MongoDB
 
 \begin{figure}[htbp]
-  \centering
-  % TODO: TikZ sequence diagram — query flow
-  \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
-    [Figure: Query Pipeline Sequence Diagram]\vspace{3cm}}}
-  \caption{Query pipeline sequence: from client request through JWT validation,
-    orchestrator dispatch, retrieval, reranking, and LLM generation to SSE streaming.}
-  \label{fig:seq_query}
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+  part/.style = {rectangle, draw=blue!50, fill=blue!7, thick,
+                 minimum width=2.8cm, minimum height=0.75cm,
+                 align=center, font=\footnotesize\bfseries},
+  msg/.style  = {-{Stealth[length=4pt]}, thick, black!65},
+  ret/.style  = {-{Stealth[length=4pt]}, thick, black!40, dashed},
+  lbl/.style  = {font=\scriptsize, fill=white, inner sep=1pt, align=center},
+  act/.style  = {fill=blue!18, draw=blue!45, thin},
+]
+
+% participant boxes
+\node[part] at (0,    0) {Client};
+\node[part] at (3.5,  0) {API Gateway};
+\node[part] at (7.5,  0) {Orchestrator};
+\node[part] at (12.0, 0) {Retrieval\,+\,Reranker};
+\node[part] at (16.5, 0) {Generation};
+
+% lifelines
+\foreach \x in {0, 3.5, 7.5, 12.0, 16.5}{
+  \draw[gray!40, dashed, thin] (\x, -0.38) -- (\x, -9.8);
+}
+
+% 1. POST /chat/query
+\draw[msg] (0,-1.0) -- node[lbl,above]{POST /chat/query} (3.5,-1.0);
+
+% 2. forward (JWT validated)
+\draw[msg] (3.5,-1.8) -- node[lbl,above]{validate JWT + forward} (7.5,-1.8);
+
+% 3. [optional] activation box on orchestrator = query rewriting / HyDE
+\draw[act] (7.38,-2.4) rectangle (7.62,-3.4);
+\node[lbl, gray!70, align=left] at (9.0,-2.9) {\textit{[opt.]} rewrite query\\HyDE / query rewriting};
+
+% 4. retrieve
+\draw[msg] (7.5,-3.5) -- node[lbl,above]{retrieve($q$,\;$k{=}20$)} (12.0,-3.5);
+
+% 5. activation on retrieval+reranker
+\draw[act] (11.88,-3.5) rectangle (12.12,-4.6);
+
+% 6. return top-k passages
+\draw[ret] (12.0,-4.7) -- node[lbl,above]{top-5 passages} (7.5,-4.7);
+
+% 7. generate
+\draw[msg] (7.5,-5.5) -- node[lbl,above]{generate($q$,\;passages)} (16.5,-5.5);
+
+% 8. activation on generation (LLM call)
+\draw[act] (16.38,-5.5) rectangle (16.62,-7.2);
+\node[lbl, gray!70] at (18.2,-6.35) {Anthropic\\LLM call};
+
+% 9. SSE stream tokens → gateway → client
+\draw[ret] (16.5,-7.3) -- node[lbl,above]{SSE stream} (3.5,-7.3);
+\draw[ret] (3.5, -8.0) -- node[lbl,above]{SSE stream (proxied)} (0,-8.0);
+
+% 10. async eval event
+\draw[msg, dotted, thick] (7.5,-9.0) -- node[lbl,above]{\texttt{query.completed} (async)} (12.0,-9.0);
+
+\end{tikzpicture}}
+\caption{Query pipeline sequence. The API Gateway validates the JWT and forwards
+  the request to the Orchestrator. Optional query rewriting or HyDE expansion
+  (activation box) precedes retrieval. Generation streams tokens back to the client
+  via Server-Sent Events. A \texttt{query.completed} event is published
+  asynchronously for the eval service.}
+\label{fig:seq_query}
 \end{figure}
 
 % ------------------------------------------------------------
@@ -109,13 +321,56 @@ The \medrag{} platform consists of 14 services, listed in Table~\ref{tab:service
 % Chunking strategy comparison
 
 \begin{figure}[htbp]
-  \centering
-  % TODO: TikZ sequence diagram — ingestion flow
-  \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}
-    [Figure: Ingestion Pipeline Sequence Diagram]\vspace{3cm}}}
-  \caption{Ingestion pipeline: asynchronous event-driven document processing from
-    upload through parsing, chunking, embedding, to vector indexing.}
-  \label{fig:seq_ingestion}
+\centering
+\begin{tikzpicture}[
+  svc/.style   = {rectangle, rounded corners=5pt,
+                  draw=blue!50, fill=blue!6, thick,
+                  minimum width=2.6cm, minimum height=0.9cm, align=center,
+                  font=\small},
+  mq/.style    = {rectangle, rounded corners=5pt,
+                  draw=orange!60, fill=orange!8, thick,
+                  minimum width=2.6cm, minimum height=0.9cm, align=center,
+                  font=\small},
+  store/.style = {cylinder, draw=gray!60, fill=gray!9, thick,
+                  shape border rotate=90, aspect=0.25,
+                  minimum width=2.4cm, minimum height=0.85cm, align=center,
+                  font=\small},
+  arr/.style   = {-{Stealth[length=5pt]}, thick, black!65},
+  sub/.style   = {font=\scriptsize, fill=white, inner sep=1pt},
+]
+
+% ── nodes (left to right) ─────────────────────────────────────────
+\node[svc]   (ingest)  at ( 0,   0) {Ingestion\\:8007};
+\node[mq]    (rmq)     at ( 3.4, 0) {RabbitMQ\\broker};
+\node[svc]   (parser)  at ( 6.8, 0) {Parser\\:8008};
+\node[svc]   (chunk)   at (10.2, 0) {Chunking\\:8009};
+\node[svc]   (emb)     at (10.2,-2.0) {Embedding\\:8010};
+\node[svc]   (idx)     at ( 6.8,-2.0) {Indexing\\:8011};
+
+% ── storage nodes ─────────────────────────────────────────────────
+\node[store] (mongo)    at ( 0,  -3.5) {MongoDB};
+\node[store] (weaviate) at ( 6.8,-3.5) {Weaviate};
+
+% ── event labels ──────────────────────────────────────────────────
+\draw[arr] (ingest) -- node[sub,above=1pt]{\texttt{file.uploaded}} (rmq);
+\draw[arr] (rmq)    -- node[sub,above=1pt]{\texttt{consume}} (parser);
+\draw[arr] (parser) -- node[sub,above=1pt]{\texttt{file.parsed}} (chunk);
+\draw[arr] (chunk.south) -- ++(0,-0.5) -- ++(3.4,0) -- (emb.north);
+\node[sub] at (8.5,-0.65) {\texttt{chunks.created}};
+\draw[arr] (emb.west) -- node[sub,above=1pt]{\texttt{embeddings.ready}} (idx.east);
+
+% ── storage arrows ────────────────────────────────────────────────
+\draw[arr] (ingest.south) -- node[sub,right=1pt]{dedup check} (mongo.north);
+\draw[arr] (idx.south)    -- node[sub,right=1pt]{upsert vectors} (weaviate.north);
+\draw[arr] (idx.west)     -- ++(-3.8,0) -- node[sub,right=1pt]{update status} (mongo.east);
+
+\end{tikzpicture}
+\caption{Ingestion pipeline: asynchronous event-driven document processing.
+  Each stage publishes a completion event to RabbitMQ, consumed by the next
+  stage. The Ingestion service performs content-hash deduplication against
+  MongoDB before publishing. Final vectors are written to Weaviate by the
+  Indexing service.}
+\label{fig:seq_ingestion}
 \end{figure}
 
 % ------------------------------------------------------------
