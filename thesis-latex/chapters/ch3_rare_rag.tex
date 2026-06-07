@@ -1,37 +1,79 @@
 % ============================================================
 %  Chapter 3 — RARE-RAG: Proposed Architecture
 % ============================================================
-\chapter{RARE-RAG: A Risk-Aware Routed Evidence-Graph Architecture}
+\chapter{\rarerag{}: A Risk-Aware Routed Evidence-Graph Architecture}
 \label{cha:rare_rag}
 
-% TODO: write full chapter — skeleton below
-% Target: 10–12 pages
+This chapter introduces \rarerag{} (\textit{Risk-Aware Routed Evidence-Graph RAG}),
+an architecture designed to address the specific requirements of medical advisory
+retrieval: high faithfulness, graceful handling of unanswerable queries,
+and efficient latency differentiation by query complexity.
+The chapter motivates the design, defines testable hypotheses,
+and describes each of the four components in detail.
 
 % ------------------------------------------------------------
 \section{Motivation}
 \label{sec:rarerag_motivation}
 
-% TODO: 1 page
-% Gap: existing architectures apply the same retrieval strategy regardless of
-% query complexity or risk — inefficient and not suited for high-stakes advisory.
-% Hypothesis: routing by complexity + set-wise evidence selection + grounding check
-% → better faithfulness with acceptable accuracy.
+The architectures surveyed in Chapter~\ref{cha:background} can be grouped by
+their approach to retrieval control.
+Vanilla RAG applies a fixed retrieval strategy regardless of query content.
+Self-RAG~\cite{asai2023selfrag} introduces per-token reflection tokens that
+modulate retrieval at generation time, but does not distinguish query complexity
+before retrieval begins.
+Corrective RAG~\cite{yan2024crag} validates retrieved passages and triggers
+re-retrieval when relevance is low, but the corrective step uses the same
+retrieval mechanism as the original pass.
+None of these architectures routes queries by complexity at the pipeline entry
+point, and none imposes a post-generation grounding check that can suppress
+responses when evidence is insufficient.
+
+For a drug-interaction advisory system, these limitations have direct
+clinical consequences.
+A query such as ``What is the mechanism of warfarin?'' is straightforward:
+a single well-ranked passage from the drug label answers it completely,
+and elaborate multi-step retrieval adds latency without improving quality.
+A query such as ``What is the bleeding risk of combining warfarin, ibuprofen,
+and enoxaparin in a patient with chronic kidney disease stage~3?'' is
+genuinely complex: it requires evidence from at least three separate
+passages covering the anticoagulant--NSAID interaction, the
+anticoagulant--LMWH overlap, and the renal dose adjustment, and those
+passages must be \emph{complementary} rather than redundant.
+Applying the same flat-ranking strategy to both queries wastes resources on
+simple ones and produces incomplete evidence for complex ones.
+
+The second gap concerns response safety.
+Standard RAG generates an answer as long as it has retrieved \emph{something};
+whether the retrieved content actually supports the claims in the generated
+response is not verified.
+The LLM may draw on parametric knowledge beyond the retrieved passages,
+produce plausible extrapolations from partial evidence, or occasionally
+introduce hallucinated specifics.
+In a medical context, the distinction between \emph{retrieved evidence} and
+\emph{model belief} is clinically significant: evidence can be verified by
+a consulting pharmacist; model belief cannot.
+A confident but only partially grounded response is more dangerous than an
+acknowledged uncertainty.
+The appropriate behaviour when evidence is absent or insufficient is to
+\emph{abstain} --- to inform the user that the system cannot reliably answer
+from available data rather than to deliver a plausible-sounding but
+unsupported claim.
+
+\rarerag{} is designed around these two observations: (i)~query complexity
+should determine which retrieval stages execute, and (ii)~every generated
+response should be audited against the retrieved evidence before delivery,
+with abstention as an explicit outcome.
 
 % ------------------------------------------------------------
 \section{Architecture Overview}
 \label{sec:rarerag_overview}
 
-% TODO: 2 pages
-% Four pillars:
-%   1. Risk & Complexity Router
-%   2. Hybrid Evidence Retrieval (BM25 + vector, cross-encoder reranking)
-%   3. Set-wise Evidence Selection (SETR-inspired)
-%   4. Grounding Verifier with Abstention
+\rarerag{} consists of four components arranged in a conditional pipeline,
+illustrated in Figure~\ref{fig:rarerag_overview}.
 
-% Figure placeholder:
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\linewidth]{figures/tikz_rarerag_overview.png}
+\includegraphics[width=0.82\linewidth]{figures/tikz_rarerag_overview.png}
 \caption{\rarerag{} architecture. The Complexity Router classifies each query and
   dispatches simple queries directly to LLM generation via the fast bypass (left),
   while complex or high-risk queries traverse the full four-stage pipeline.
@@ -40,61 +82,436 @@
 \label{fig:rarerag_overview}
 \end{figure}
 
+\begin{enumerate}
+  \item \textbf{Complexity Router.} A lightweight LLM call classifies the incoming
+    query as \emph{simple} or \emph{complex}.
+    Simple queries bypass the three evidence-processing stages and go directly to
+    LLM generation with a standard vanilla retrieval pass.
+    Complex queries enter the full pipeline.
+
+  \item \textbf{Hybrid Evidence Retrieval.} For complex queries, both BM25 sparse
+    retrieval and dense vector retrieval are executed in parallel and fused via
+    Reciprocal Rank Fusion~(RRF).
+    A cross-encoder reranker then re-scores the top-$K$ candidates to produce a
+    smaller high-precision shortlist.
+
+  \item \textbf{Set-wise Evidence Selection.} The reranked shortlist is pruned by a
+    greedy complementarity-aware selection step that maximises the informational
+    diversity of the final evidence set rather than simply taking the highest-scoring
+    individual passages.
+
+  \item \textbf{Grounding Verifier.} After the LLM generates a response conditioned
+    on the selected evidence, the verifier extracts atomic claims from the response
+    and checks each claim against the retrieved passages.
+    If the aggregate support score falls below a threshold~$\tau$, the system
+    abstains rather than returning an ungrounded response.
+\end{enumerate}
+
+The name reflects the design intent.
+\emph{Risk-Aware} refers to the abstention mechanism and the grounding check:
+the architecture is explicitly designed to fail safely in the presence of
+missing or contradictory evidence.
+\emph{Routed} refers to the complexity router that selects the execution path.
+\emph{Evidence-Graph} reflects the set-wise selection step, which treats the
+evidence shortlist as a set of nodes with implicit semantic relationships
+--- complementarity and redundancy --- rather than as an independently scored list.
+The set-wise scoring function thus implicitly reasons over the graph structure
+of the evidence, even though no explicit graph data structure is maintained.
+
 % ------------------------------------------------------------
 \section{Query Complexity Router}
 \label{sec:router}
 
-% TODO: 2 pages
-% Input: query text
-% Classifier: lightweight LLM call with few-shot examples
-% Routes: fast / standard / deep
-% Design trade-off: classifier latency vs. downstream quality gain
+\subsection{Design}
+
+The router receives a query $q$ and produces a label
+$c \in \{\textit{simple}, \textit{complex}\}$.
+The label determines which pipeline branch executes downstream.
+
+A rule-based classifier --- for example, one that counts drug names or detects
+conditional modifiers such as ``in a patient with'' --- is fast but brittle:
+it misclassifies paraphrased complex queries and flags simple queries that
+happen to mention multiple drug names in a lookup context.
+A fine-tuned transformer classifier would require labelled training data that
+is expensive to obtain in the medical domain.
+\rarerag{} instead uses a short structured LLM call with few-shot examples,
+exploiting the same model that handles generation.
+The call is deliberately small: the prompt is under 800~tokens and the
+required output is a single word (\texttt{simple} or \texttt{complex}),
+keeping classification latency below one second under typical API conditions.
+
+The few-shot prompt embeds six examples: three simple queries covering
+single-drug mechanism, a single interaction pair, and a pharmacokinetic
+parameter lookup; and three complex queries covering multi-drug combinations,
+dose adjustment under comorbidity, and an interaction in a specific patient
+population.
+The examples are included directly in the system prompt, not retrieved,
+so the router itself does not depend on retrieval.
+
+\subsection{Routing Criteria}
+
+In practice, a query is classified as complex if it satisfies at least one
+of the following criteria as judged by the LLM:
+
+\begin{itemize}
+  \item It involves three or more distinct pharmaceutical agents.
+  \item It requires reasoning over patient-specific factors such as
+    renal function, hepatic impairment, age, or pregnancy status.
+  \item It asks about a mechanism that spans multiple pharmacological pathways.
+  \item It is phrased as a risk-assessment or recommendation request
+    (``Is it safe to \ldots{}'' rather than ``What is \ldots{}'').
+\end{itemize}
+
+All other queries are classified as simple.
+The router defaults to \textit{complex} when uncertain, trading a small
+latency overhead for the safety of the more thorough pipeline.
+
+\subsection{Trade-offs}
+
+The router introduces a fixed overhead of approximately 0.8\,s per query
+regardless of classification outcome.
+On the HotpotQA benchmark (Section~\ref{sec:exp_setup}), where questions are
+Wikipedia-style multi-hop rather than medical, the majority of queries were
+classified as complex, which explains why \rarerag{}'s mean latency on that
+benchmark exceeds the latency of simpler architectures.
+For a drug-interaction corpus where a larger fraction of queries would be
+simple lookup requests, the router should reduce average latency by routing
+those directly to the fast path.
+A controlled ablation comparing \rarerag{} with and without routing on a
+DDI-specific query set is identified as future work
+(Chapter~\ref{cha:conclusions}).
 
 \begin{hypothesis}[Routing benefit]
   \label{hyp:routing}
   Routing queries by complexity reduces average end-to-end latency compared to
-  always applying the deepest (multi-hop + grounding) pipeline, while maintaining
-  answer quality on simple queries.
+  always applying the deepest pipeline, while maintaining answer quality
+  on simple queries.
 \end{hypothesis}
 
 % ------------------------------------------------------------
 \section{Hybrid Evidence Retrieval}
 \label{sec:hybrid_retrieval}
 
-% TODO: 1.5 pages
-% BM25 + dense vector search (alpha = 0.5 default)
-% RRF fusion
-% Cross-encoder reranking (BGE-reranker-v2-m3)
+\subsection{Motivation for Hybrid Search}
+
+Drug-interaction queries exhibit two retrieval requirements that pull in
+opposite directions.
+First, drug names and dosage thresholds are \emph{exact strings}: ``warfarin
+5\,mg'' and ``Coumadin'' are synonyms that BM25 will not associate unless the
+index includes synonym expansion, but ``warfarin'' and ``wafarin'' are not ---
+a single character difference denotes a different substance.
+BM25 is well suited to exact-string matching because it rewards term overlap
+without semantic generalisation.
+Second, mechanism descriptions, adverse effect pathways, and clinical
+recommendations are expressed in paraphrased, domain-specific language that
+varies across sources.
+Dense vector retrieval, which maps queries and passages into a shared
+semantic space, handles these paraphrased descriptions better than BM25.
+
+A hybrid approach that combines both signals is therefore more robust than
+either alone.
+Experimental evidence on the BEIR benchmark~\cite{thakur2021beir} supports
+this: on biomedical retrieval tasks, hybrid retrievers consistently outperform
+pure BM25 or pure dense retrieval.
+
+\subsection{Fusion and Reranking}
+
+\rarerag{} executes BM25 and dense vector search in parallel and fuses the
+two ranked lists using Reciprocal Rank Fusion~(RRF).
+Given ranked lists $L_\text{BM25}$ and $L_\text{dense}$, the RRF score for
+a document $d$ is:
+
+\begin{equation}
+  \text{RRF}(d)
+    = \frac{1}{k + \mathrm{rank}_{L_\text{BM25}}(d)}
+    + \frac{1}{k + \mathrm{rank}_{L_\text{dense}}(d)}
+  \label{eq:rrf_ch3}
+\end{equation}
+
+where $k = 60$ is a smoothing constant and documents absent from a list
+receive a score of zero.
+RRF was chosen over score-normalised fusion because it is rank-based and
+therefore invariant to the different score scales of BM25 term frequency and
+cosine similarity.
+The top-$K = 20$ documents from the fused list proceed to reranking.
+
+The fused list is then re-scored by a cross-encoder reranker
+(BGE-reranker-v2-m3~\cite{chen2024bge}).
+Unlike the bi-encoder used for dense retrieval, a cross-encoder processes
+the concatenated query--passage pair and produces a single relevance score,
+capturing the full interaction between query and passage tokens.
+This more accurate scoring comes at higher latency, which is why cross-encoder
+reranking is applied to a small candidate set (top-20) rather than the full
+index.
+The reranker reduces the shortlist to $k_r = 5$ passages that proceed to
+set-wise selection.
+
+The hyperparameters $\alpha = 0.5$ (BM25/dense blend weight in Weaviate's
+hybrid search API), $K = 20$, and $k_r = 5$ were selected based on
+preliminary experiments on a held-out development subset and fixed for
+all reported evaluations.
+BGE-reranker-v2-m3 was chosen because it is released under an Apache~2.0
+licence, runs entirely on-premise, and consistently ranks among the
+top performers on the MTEB Reranking benchmark as of the evaluation
+date~\cite{chen2024bge}.
 
 % ------------------------------------------------------------
 \section{Set-Wise Evidence Selection}
 \label{sec:setwise}
 
-% TODO: 2 pages
-% Why list-wise reranking misses inter-document complementarity
-% SETR approach: score evidence subsets, not individuals
-% Greedy approximate selection over top-20 candidates
+\subsection{Limitation of Point-wise Ranking}
+
+Cross-encoder reranking produces a list sorted by per-passage relevance.
+A naive top-$m$ selection takes the $m$ individually highest-scoring passages.
+This strategy has a well-known limitation: if the top two passages address the
+same aspect of the query, selecting both is redundant.
+
+A drug-interaction query about warfarin and NSAIDs might return five passages
+that all describe the bleeding mechanism from slightly different angles, while
+the dose-adjustment and monitoring recommendations remain unretrieved.
+The underlying problem is that relevance is measured independently per passage:
+point-wise ranking ignores the informational relationship between passages.
+A passage that is marginally less relevant than the top-ranked passage may
+contribute substantially more information if the top-ranked passage is already
+selected.
+
+\subsection{Greedy Complementarity-Aware Selection}
+
+\rarerag{} replaces naive top-$m$ selection with a greedy set-wise procedure.
+Let $\mathcal{C} = \{d_1, \ldots, d_{k_r}\}$ be the candidate set of reranked
+passages and let $\mathbf{e}_i \in \mathbb{R}^d$ be the embedding of
+passage $d_i$.
+The selection procedure builds a set $\mathcal{S}$ iteratively.
+
+At each step, the passage $d^*$ maximising the following composite score is
+added to $\mathcal{S}$:
+
+\begin{equation}
+  d^* = \argmax_{d_i \in \mathcal{C} \setminus \mathcal{S}}
+        \Bigl[
+          \lambda \cdot r(d_i)
+          + (1 - \lambda) \cdot \mathrm{comp}(d_i, \mathcal{S})
+        \Bigr]
+  \label{eq:setwise}
+\end{equation}
+
+where $r(d_i)$ is the cross-encoder relevance score normalised to $[0,1]$,
+$\lambda \in [0,1]$ is a trade-off parameter (default $\lambda = 0.5$),
+and the complementarity score is:
+
+\begin{equation}
+  \mathrm{comp}(d_i, \mathcal{S})
+    = 1 - \max_{d_j \in \mathcal{S}} \cos(\mathbf{e}_i, \mathbf{e}_j)
+  \label{eq:comp}
+\end{equation}
+
+When $\mathcal{S}$ is empty (first iteration),
+$\mathrm{comp}(d_i, \mathcal{S}) = 1$ for all candidates and selection
+reduces to choosing the highest-relevance passage.
+Subsequent iterations reward passages that are both relevant and semantically
+different from passages already in the set.
+
+The greedy procedure runs for $m = 3$ iterations by default, producing a
+three-passage evidence set.
+This is consistent with the observation that complete drug-interaction answers
+typically require three evidence types: the pharmacological mechanism, the
+severity classification, and the clinical management recommendation.
+These three aspects often appear in distinct passages across a drug information
+database.
+
+\subsection{Relationship to MMR and SET-based Approaches}
+
+The selection criterion in~\eqref{eq:setwise} is structurally identical to the
+Maximum Marginal Relevance~(MMR) criterion introduced in the context of
+document summarisation~\cite{lewis2020rag}.
+The contribution of \rarerag{} is not a novel selection algorithm but the
+application of complementarity-aware selection as an explicit pipeline stage
+after hybrid retrieval and cross-encoder reranking, with the trade-off
+parameter $\lambda$ tuned to the medical advisory domain.
+Full set enumeration ($\binom{k_r}{m} = \binom{5}{3} = 10$ subsets under
+default parameters) is computationally trivial and was used to verify that
+the greedy approximation yields identical results across all development
+queries.
 
 % ------------------------------------------------------------
 \section{Grounding Verifier with Abstention}
 \label{sec:grounding_verifier}
 
-% TODO: 2 pages
-% Claim extraction from generated answer
-% Per-claim grounding check against retrieved context
-% Abstention: if score < threshold → "I cannot reliably answer"
+\subsection{Motivation}
+
+Once the LLM generates a response conditioned on the selected evidence,
+it is not guaranteed that every claim in the response is supported by that
+evidence.
+Standard RAG generates an answer as long as it has retrieved
+\emph{something}; whether the retrieved content actually justifies the claims
+in the response is not checked.
+For a medical advisory system, the distinction between retrieved evidence and
+model belief is clinically significant: evidence can be verified by the
+consulting pharmacist; model belief cannot.
+
+The grounding verifier addresses this by treating the retrieved passages as the
+authoritative source of truth for the generated response and auditing each
+claim before delivery.
+
+\subsection{Claim Extraction and Verification}
+
+The verifier operates in two steps.
+
+\paragraph{Step 1 --- Claim extraction.}
+A structured LLM prompt decomposes the generated response into a list of
+atomic claims.
+An atomic claim is a single proposition that can be independently evaluated
+as supported or unsupported; compound sentences are split.
+For example, the sentence \textit{``Warfarin inhibits vitamin~K epoxide
+reductase, which is required for the synthesis of clotting factors~II, VII,
+IX, and~X''} is split into two claims:
+\textit{``Warfarin inhibits vitamin~K epoxide reductase''} and
+\textit{``Vitamin~K epoxide reductase is required for the synthesis of clotting
+factors~II, VII, IX, and~X''}.
+
+\paragraph{Step 2 --- Per-claim grounding check.}
+For each extracted claim $c_i$, the verifier asks whether any passage in
+$\mathcal{S}$ contains sufficient evidence to support $c_i$.
+This is implemented as an LLM call with binary output
+(\textit{supported}\,/\,\textit{not supported}).
+The aggregate faithfulness score is:
+
+\begin{equation}
+  F = \frac{|\{c_i : c_i \text{ is supported by } \mathcal{S}\}|}
+           {|\mathcal{C}_\text{claims}|}
+  \label{eq:faithfulness_score}
+\end{equation}
+
+This quantity is equivalent to the RAGAS faithfulness
+metric~\cite{es2023ragas} applied online as a quality gate.
+
+\subsection{Abstention Threshold}
+
+If $F \geq \tau$, the response is returned to the user together with citations
+to the passages that supported each verified claim.
+If $F < \tau$, the system abstains:
+
+\begin{quote}
+  \small\itshape
+  ``I could not find sufficient evidence in the available database
+  to answer this question reliably.
+  Please consult a clinical pharmacist or refer to a current drug
+  interaction database.''
+\end{quote}
+
+The default threshold is $\tau = 0.5$: at least half of the extracted claims
+must be grounded in retrieved passages for the response to be returned.
+A lower threshold ($\tau \to 0$) approaches vanilla RAG behaviour
+(always respond); $\tau = 1$ would require every claim to be grounded,
+which in practice rejects responses that include any background pharmacological
+context not covered by the indexed corpus.
+The value $\tau = 0.5$ was calibrated on a small development set of
+warfarin-related queries to balance response rate against faithfulness.
+
+In the HotpotQA evaluation, fewer than 3\,\% of queries triggered abstention,
+consistent with the observation that HotpotQA is a closed-world benchmark
+where the relevant Wikipedia passages were indexed.
+For the DDI corpus, where coverage is incomplete, the abstention rate is
+expected to be substantially higher and more clinically meaningful.
 
 \begin{hypothesis}[Faithfulness]
   \label{hyp:faithfulness}
   \rarerag{} achieves higher faithfulness than all single-path RAG architectures
-  as measured by the RAGAS faithfulness metric.
+  as measured by the RAGAS faithfulness metric on the HotpotQA benchmark.
 \end{hypothesis}
 
 % ------------------------------------------------------------
-\section{Expected Properties}
+\section{Expected Properties and Hypotheses}
 \label{sec:rarerag_hypotheses}
 
-% Restate all 3 hypotheses clearly
-% H1: highest faithfulness — verified in Chapter 6
-% H2: competitive F1 despite higher latency — verified in Chapter 6
-% H3: routing reduces latency vs. always-deep — partially verified in Chapter 6
+Three properties are claimed for \rarerag{} relative to the architectures
+described in Chapter~\ref{cha:background}.
+Each is expressed as a falsifiable hypothesis tested in
+Chapter~\ref{cha:evaluation}.
+
+\paragraph{H1 --- Faithfulness.}
+The grounding verifier suppresses claims not supported by retrieved context,
+directly reducing the hallucination rate captured by the RAGAS faithfulness
+metric.
+Compared to Self-RAG (which reflects on passages during generation but
+performs no post-generation audit) and vanilla RAG (no grounding control),
+\rarerag{} should achieve the lowest hallucination rate.
+This is Hypothesis~\ref{hyp:faithfulness}, confirmed in
+Section~\ref{sec:results_faithfulness}.
+
+\paragraph{H2 --- Competitive accuracy.}
+The abstention mechanism could reduce Token~F1 if the system suppresses
+answerable queries.
+However, the permissive threshold $\tau = 0.5$ and the complementary evidence
+set from the set-wise selection stage should preserve accuracy on
+well-supported questions.
+We therefore hypothesise that \rarerag{} maintains Token~F1 within 0.01 of
+the best-performing architecture despite additional pipeline stages.
+
+\begin{hypothesis}[Competitive accuracy]
+  \label{hyp:accuracy}
+  \rarerag{} maintains Token~F1 within 0.01 of the best single-architecture
+  result, despite the additional pipeline stages and the abstention mechanism.
+\end{hypothesis}
+
+\paragraph{H3 --- Routing benefit.}
+The router adds a fixed classification overhead but should save total latency
+on query sets with a meaningful fraction of simple queries by bypassing
+the three downstream evidence-processing stages for those queries.
+The HotpotQA benchmark, dominated by complex multi-hop questions, is not
+ideal for testing this property; it is accordingly not confirmed by the
+HotpotQA results but is targeted for a dedicated DDI query set in future work
+(Chapter~\ref{cha:conclusions}).
+
+This is Hypothesis~\ref{hyp:routing}, partially supported in
+Section~\ref{sec:hypothesis_eval}.
+
+\subsection{Relationship to Prior Work}
+
+\rarerag{} is most directly related to Self-RAG~\cite{asai2023selfrag} and
+Corrective RAG~\cite{yan2024crag}.
+Self-RAG also employs reflection tokens to assess retrieved passages and
+generated segments, but operates token by token during generation rather than
+as a post-generation audit, and requires fine-tuning the language model to emit
+reflection tokens --- a training requirement that \rarerag{} avoids by
+using prompting only.
+Corrective RAG validates retrieved passages before generation and triggers
+re-retrieval if relevance is low, but does not perform a post-generation
+faithfulness check and does not reason over evidence complementarity.
+
+Adaptive-RAG~\cite{jeong2024adaptiverag} is the closest prior work on
+complexity-based routing: it classifies queries into single-step, multi-step,
+and no-retrieval paths.
+\rarerag{} extends this idea to the medical domain and adds the three
+downstream evidence-quality components that Adaptive-RAG does not address.
+
+Table~\ref{tab:arch_comparison} summarises the five design dimensions and
+positions \rarerag{} against the five nearest architectures.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Qualitative comparison of selected RAG architectures.
+    \checkmark~=~feature present; ---~=~absent; $\sim$~=~partial or implicit.}
+  \label{tab:arch_comparison}
+  \begin{tabularx}{\textwidth}{@{}lXXXXX@{}}
+    \toprule
+    \textbf{Architecture}
+      & \textbf{Complexity routing}
+      & \textbf{Hybrid retrieval}
+      & \textbf{Set-wise selection}
+      & \textbf{Grounding check}
+      & \textbf{Abstention} \\
+    \midrule
+    Vanilla RAG       & --- & --- & --- & ---        & ---        \\
+    HyDE              & --- & --- & --- & ---        & ---        \\
+    Self-RAG          & --- & --- & --- & $\sim$     & ---        \\
+    Corrective RAG    & --- & --- & --- & $\sim$     & ---        \\
+    Adaptive-RAG      & \checkmark & --- & --- & --- & ---        \\
+    \rarerag{} (ours) & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+No architecture in the survey (Chapter~\ref{cha:background}) combines all five
+dimensions simultaneously; their combination is the primary novelty
+of \rarerag{}.
