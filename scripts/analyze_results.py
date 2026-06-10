@@ -8,16 +8,20 @@ Reads:
 
 Writes:
   results/summary_table.csv
+  results/summary_by_difficulty.csv
   results/plots/token_f1_em.png
   results/plots/faithfulness_by_mode.png
   results/plots/latency_by_mode.png
   results/plots/latency_vs_quality.png
   results/plots/heatmap.png
   results/plots/radar.png
+  results/plots/correctness_by_difficulty.png
+  results/plots/heatmap_by_difficulty.png
 
 Usage:
     python scripts/analyze_results.py \\
-        --input results/hotpotqa_results.json \\
+        --input results/ddi_results.json \\
+        --benchmark data/ddi_benchmark.json \\
         --mongo-uri mongodb://localhost:27017 \\
         --project-id <PROJECT_ID> \\
         --output-dir results/
@@ -64,10 +68,19 @@ RAG_MODE_LABELS = {
     "rare_rag": "RARE RAG",
 }
 
+DIFFICULTY_LABELS = {
+    "L1": "L1 – Single Drug",
+    "L2": "L2 – Two Drugs",
+    "L3": "L3 – Multi-hop",
+    "L4": "L4 – Polypharmacy",
+    "L5": "L5 – Expert PK/PD",
+}
+
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Analyze medRAG benchmark results")
     p.add_argument("--input", nargs="+", required=True)
+    p.add_argument("--benchmark", default=None, help="Benchmark JSON with difficulty levels")
     p.add_argument("--mongo-uri", default="mongodb://localhost:27017")
     p.add_argument("--project-id", default=None)
     p.add_argument("--output-dir", default="results")
@@ -75,7 +88,6 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _load_latency(paths: list[str]) -> Any:
-    """Load latency + token_count from JSON files, deduplicated."""
     import pandas as pd
 
     rows: list[dict] = []
@@ -91,8 +103,21 @@ def _load_latency(paths: list[str]) -> Any:
 
 
 def _load_results(paths: list[str]) -> Any:
-    """Kept for backward compat — actual data comes from MongoDB."""
     return _load_latency(paths)
+
+
+def _load_difficulty_map(benchmark_path: str | None) -> dict[str, str]:
+    """Return {question_text: level} from benchmark JSON."""
+    if not benchmark_path or not Path(benchmark_path).exists():
+        return {}
+    data = json.loads(Path(benchmark_path).read_text(encoding="utf-8"))
+    result: dict[str, str] = {}
+    for item in data:
+        q = item.get("question", "")
+        level = item.get("level") or item.get("metadata", {}).get("difficulty", "")
+        if q and level:
+            result[q] = str(level)
+    return result
 
 
 def _enrich_from_mongo(df: Any, mongo_uri: str, project_id: str | None) -> Any:
@@ -120,7 +145,6 @@ def _enrich_from_mongo(df: Any, mongo_uri: str, project_id: str | None) -> Any:
     metrics_df = pd.json_normalize(eval_df["metrics"])
     eval_df = pd.concat([eval_df.drop(columns=["metrics"]), metrics_df], axis=1)
 
-    # Deduplicate: per (question, rag_mode) keep latest by timestamp
     if "timestamp" in eval_df.columns:
         eval_df["timestamp"] = pd.to_datetime(eval_df["timestamp"], utc=True)
         eval_df = eval_df.sort_values("timestamp").drop_duplicates(
@@ -132,15 +156,11 @@ def _enrich_from_mongo(df: Any, mongo_uri: str, project_id: str | None) -> Any:
     metric_cols = [
         c for c in METRIC_COLS if c in eval_df.columns and c not in ("token_count", "latency_ms")
     ]
-    # latency_ms and token_count from MongoDB metrics (complete coverage)
-    for extra in ("latency_ms", "token_count"):
-        metric_cols_all = metric_cols + [extra] if extra in eval_df.columns else metric_cols
     metric_cols_all = metric_cols + [
         c for c in ("latency_ms", "token_count") if c in eval_df.columns
     ]
     print(f"  Eval rows (deduped): {len(eval_df)}  metrics: {metric_cols}")
 
-    # Build main DataFrame from MongoDB — join latency from JSON
     base_cols = ["question", "rag_mode"] + metric_cols_all
     result_df = eval_df[[c for c in base_cols if c in eval_df.columns]].copy()
 
@@ -164,16 +184,13 @@ def _compute_summary(df: Any) -> Any:
         ]
         if c in df.columns
     ]
-    # Quality metrics: mean only
     agg: dict = {col: "mean" for col in quality_cols}
-
     summary = df.groupby("rag_mode").agg(agg)
     summary.columns = [
         col if isinstance(col, str) else "_".join(str(c) for c in col).strip("_")
         for col in summary.columns
     ]
 
-    # Latency separately to avoid MultiIndex pollution
     if "latency_ms" in df.columns:
         lat = df.groupby("rag_mode")["latency_ms"].agg(
             latency_ms_mean="mean",
@@ -185,12 +202,29 @@ def _compute_summary(df: Any) -> Any:
         summary["token_count"] = df.groupby("rag_mode")["token_count"].mean()
 
     summary["n"] = df.groupby("rag_mode").size()
-
-    # Reorder rows to match RAG_MODES order
     order = [m for m in RAG_MODES if m in summary.index]
     summary = summary.loc[order]
-
     return summary.reset_index()
+
+
+def _compute_summary_by_difficulty(df: Any) -> Any | None:
+    if "level" not in df.columns:
+        return None
+
+    quality_cols = [
+        c
+        for c in ["faithfulness", "answer_correctness", "answer_relevance", "context_recall"]
+        if c in df.columns
+    ]
+    if not quality_cols:
+        return None
+
+    agg: dict = {col: "mean" for col in quality_cols}
+    agg["question"] = "count"
+
+    summary = df.groupby(["level", "rag_mode"]).agg(agg).reset_index()
+    summary = summary.rename(columns={"question": "n"})
+    return summary
 
 
 def _plot_token_f1_em(df: Any, plots_dir: Path) -> None:
@@ -310,12 +344,9 @@ def _plot_latency_vs_quality(summary: Any, plots_dir: Path) -> None:
     import matplotlib.pyplot as plt
 
     x_col = "latency_ms_median"
-    y_col = "token_f1" if "token_f1" in summary.columns else "faithfulness_mean"
-    if y_col == "token_f1" and "token_f1" not in summary.columns:
+    y_col = "token_f1" if "token_f1" in summary.columns else "faithfulness"
+    if x_col not in summary.columns or y_col not in summary.columns:
         print("  [SKIP] latency_vs_quality.png — missing data")
-        return
-    if x_col not in summary.columns:
-        print("  [SKIP] latency_vs_quality.png — missing latency data")
         return
 
     sub = summary.dropna(subset=[x_col, y_col])
@@ -324,7 +355,6 @@ def _plot_latency_vs_quality(summary: Any, plots_dir: Path) -> None:
 
     fig, ax = plt.subplots(figsize=(9, 6))
     ax.scatter(sub[x_col] / 1000, sub[y_col], s=140, color="#2196F3", zorder=5)
-
     for _, row in sub.iterrows():
         ax.annotate(
             RAG_MODE_LABELS.get(row["rag_mode"], row["rag_mode"]),
@@ -333,10 +363,9 @@ def _plot_latency_vs_quality(summary: Any, plots_dir: Path) -> None:
             xytext=(8, 4),
             fontsize=9,
         )
-
-    ax.set_title("Latency vs Token F1 per RAG Mode", fontsize=13)
+    ax.set_title("Latency vs Quality per RAG Mode", fontsize=13)
     ax.set_xlabel("Median Latency (s)")
-    ax.set_ylabel("Mean Token F1")
+    ax.set_ylabel(f"Mean {y_col.replace('_', ' ').title()}")
     ax.grid(alpha=0.3)
     fig.tight_layout()
     out = plots_dir / "latency_vs_quality.png"
@@ -418,11 +447,9 @@ def _plot_radar(summary: Any, plots_dir: Path) -> None:
     N = len(metric_cols)
     angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist()
     angles += angles[:1]
-
     colors = plt.cm.tab10.colors  # type: ignore[attr-defined]
 
     fig, ax = plt.subplots(figsize=(9, 9), subplot_kw={"polar": True})
-
     for i, mode in enumerate(modes):
         row = summary[summary["rag_mode"] == mode]
         if row.empty:
@@ -453,6 +480,105 @@ def _plot_radar(summary: Any, plots_dir: Path) -> None:
     print(f"  {out}")
 
 
+def _plot_correctness_by_difficulty(df: Any, plots_dir: Path) -> None:
+    """Line plot: answer_correctness per difficulty level, one line per RAG mode."""
+    import matplotlib.pyplot as plt
+
+    if "level" not in df.columns:
+        print("  [SKIP] correctness_by_difficulty.png — no level data")
+        return
+
+    metric = next((c for c in ["answer_correctness", "faithfulness"] if c in df.columns), None)
+    if metric is None:
+        print("  [SKIP] correctness_by_difficulty.png — no quality metric")
+        return
+
+    levels = sorted(df["level"].dropna().unique())
+    modes = [m for m in RAG_MODES if m in df["rag_mode"].unique()]
+    colors = plt.cm.tab10.colors  # type: ignore[attr-defined]
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for i, mode in enumerate(modes):
+        sub = df[df["rag_mode"] == mode]
+        means = [sub[sub["level"] == lvl][metric].mean() for lvl in levels]
+        ax.plot(
+            levels,
+            means,
+            "o-",
+            linewidth=2,
+            color=colors[i % len(colors)],
+            label=RAG_MODE_LABELS.get(mode, mode),
+            markersize=6,
+        )
+
+    ax.set_title(f"{metric.replace('_', ' ').title()} by Difficulty Level", fontsize=13)
+    ax.set_xlabel("Difficulty Level")
+    ax.set_ylabel(metric.replace("_", " ").title())
+    ax.set_ylim(0, 1)
+    ax.legend(loc="lower left", fontsize=8, ncol=2)
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    out = plots_dir / "correctness_by_difficulty.png"
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    print(f"  {out}")
+
+
+def _plot_heatmap_by_difficulty(df: Any, plots_dir: Path) -> None:
+    """Heatmap: rows = difficulty levels, columns = RAG modes, values = answer_correctness."""
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import seaborn as sns
+
+    if "level" not in df.columns:
+        print("  [SKIP] heatmap_by_difficulty.png — no level data")
+        return
+
+    metric = next((c for c in ["answer_correctness", "faithfulness"] if c in df.columns), None)
+    if metric is None:
+        print("  [SKIP] heatmap_by_difficulty.png — no quality metric")
+        return
+
+    levels = sorted(df["level"].dropna().unique())
+    modes = [m for m in RAG_MODES if m in df["rag_mode"].unique()]
+
+    matrix = np.full((len(levels), len(modes)), np.nan)
+    for i, lvl in enumerate(levels):
+        for j, mode in enumerate(modes):
+            val = df[(df["level"] == lvl) & (df["rag_mode"] == mode)][metric].mean()
+            matrix[i, j] = val
+
+    import pandas as pd
+
+    hm_df = pd.DataFrame(
+        matrix,
+        index=[DIFFICULTY_LABELS.get(lvl, lvl) for lvl in levels],
+        columns=[RAG_MODE_LABELS.get(m, m) for m in modes],
+    )
+
+    fig, ax = plt.subplots(figsize=(13, 4))
+    sns.heatmap(
+        hm_df,
+        annot=True,
+        fmt=".3f",
+        cmap="YlGnBu",
+        vmin=0,
+        vmax=1,
+        ax=ax,
+        linewidths=0.5,
+        cbar_kws={"shrink": 0.8},
+    )
+    ax.set_title(f"{metric.replace('_', ' ').title()} — Difficulty × RAG Mode", fontsize=13)
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    plt.xticks(rotation=30, ha="right")
+    fig.tight_layout()
+    out = plots_dir / "heatmap_by_difficulty.png"
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+    print(f"  {out}")
+
+
 def _print_summary_table(summary: Any) -> None:
     quality_cols = [
         c
@@ -477,7 +603,6 @@ def _print_summary_table(summary: Any) -> None:
     print("\n" + "=" * len(header))
     print(header)
     print("=" * len(header))
-
     for _, row in summary.iterrows():
         line = f"{row['rag_mode']:<22}"
         for c in quality_cols:
@@ -494,12 +619,32 @@ def _print_summary_table(summary: Any) -> None:
     print("=" * len(header))
 
 
+def _print_summary_by_difficulty(summary_diff: Any) -> None:
+    metric_cols = [
+        c
+        for c in ["faithfulness", "answer_correctness", "answer_relevance", "context_recall"]
+        if c in summary_diff.columns
+    ]
+    print("\n── Per-difficulty summary ────────────────────────────")
+    header = f"{'level':<6} {'mode':<22}" + "".join(f"{c:>18}" for c in metric_cols) + f"{'n':>6}"
+    print(header)
+    print("-" * len(header))
+    for _, row in summary_diff.sort_values(["level", "rag_mode"]).iterrows():
+        line = f"{row['level']:<6} {row['rag_mode']:<22}"
+        for c in metric_cols:
+            val = row.get(c)
+            line += f"{val:>18.4f}" if val == val else f"{'—':>18}"
+        line += f"{int(row['n']):>6}"
+        print(line)
+
+
 def _print_rankings(summary: Any) -> None:
     rank_cols = {
         "Token F1": "token_f1",
         "EM": "em",
         "ROUGE-L": "rouge_l",
         "Faithfulness": "faithfulness",
+        "Answer Correctness": "answer_correctness",
         "Latency (lower=better)": "latency_ms_median",
     }
     print("\n── Rankings ─────────────────────────────────────")
@@ -540,16 +685,36 @@ def main() -> None:
     if df.empty:
         raise SystemExit("No valid results found.")
 
+    # Attach difficulty levels from benchmark JSON
+    difficulty_map = _load_difficulty_map(args.benchmark)
+    if difficulty_map:
+        df["level"] = df["question"].map(difficulty_map)
+        found = df["level"].notna().sum()
+        print(f"  Difficulty levels mapped: {found}/{len(df)}")
+    else:
+        print("  [INFO] No --benchmark provided — per-difficulty plots skipped")
+
     print("Enriching with MongoDB eval metrics…")
     df = _enrich_from_mongo(df, args.mongo_uri, args.project_id)
+
+    # Re-attach levels after mongo enrichment (enriched df may not have them)
+    if difficulty_map and "level" not in df.columns:
+        df["level"] = df["question"].map(difficulty_map)
 
     summary = _compute_summary(df)
 
     csv_path = output_dir / "summary_table.csv"
     summary.to_csv(csv_path, index=False)
     print(f"\nSummary table → {csv_path}")
-
     _print_summary_table(summary)
+
+    # Per-difficulty summary
+    summary_diff = _compute_summary_by_difficulty(df)
+    if summary_diff is not None:
+        diff_csv = output_dir / "summary_by_difficulty.csv"
+        summary_diff.to_csv(diff_csv, index=False)
+        print(f"Per-difficulty table → {diff_csv}")
+        _print_summary_by_difficulty(summary_diff)
 
     print("\nGenerating plots…")
     _plot_token_f1_em(df, plots_dir)
@@ -558,6 +723,8 @@ def main() -> None:
     _plot_latency_vs_quality(summary, plots_dir)
     _plot_heatmap(summary, plots_dir)
     _plot_radar(summary, plots_dir)
+    _plot_correctness_by_difficulty(df, plots_dir)
+    _plot_heatmap_by_difficulty(df, plots_dir)
 
     _print_rankings(summary)
     print("\nDone.")

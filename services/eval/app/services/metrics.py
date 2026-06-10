@@ -21,15 +21,18 @@ def _tokenise(text: str) -> list[str]:
 
 
 def token_f1(prediction: str, gold: str) -> float:
+    from collections import Counter
+
     pred_tokens = _tokenise(prediction)
     gold_tokens = _tokenise(gold)
     if not pred_tokens or not gold_tokens:
         return 0.0
-    common = set(pred_tokens) & set(gold_tokens)
-    if not common:
+    common = Counter(pred_tokens) & Counter(gold_tokens)
+    n_common = sum(common.values())
+    if n_common == 0:
         return 0.0
-    precision = len(common) / len(pred_tokens)
-    recall = len(common) / len(gold_tokens)
+    precision = n_common / len(pred_tokens)
+    recall = n_common / len(gold_tokens)
     return 2 * precision * recall / (precision + recall)
 
 

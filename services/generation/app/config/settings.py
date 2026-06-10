@@ -8,7 +8,7 @@ class Settings(BaseServiceSettings):
     llm_api_key: str = ""
     openrouter_api_key: str = ""
     llm_model: str = "openai/gpt-oss-120b"
-    llm_max_tokens: int = 2048
+    llm_max_tokens: int = 8192
     llm_temperature: float = 0.1
 
     @property

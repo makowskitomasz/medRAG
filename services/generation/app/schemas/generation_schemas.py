@@ -47,6 +47,10 @@ class EvaluationResult(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
 
+    model_config = {
+        "json_schema_extra": {"required": ["score", "reasoning", "input_tokens", "output_tokens"]}
+    }
+
 
 class ConflictDetectionRequest(BaseModel):
     chunks: list[ContextChunk]
@@ -59,6 +63,12 @@ class ConflictDetectionResult(BaseModel):
     reasoning: str
     input_tokens: int = 0
     output_tokens: int = 0
+
+    model_config = {
+        "json_schema_extra": {
+            "required": ["has_conflict", "confidence", "reasoning", "input_tokens", "output_tokens"]
+        }
+    }
 
 
 class CorrectnessRequest(BaseModel):
@@ -73,6 +83,10 @@ class CorrectnessResult(BaseModel):
     reasoning: str
     input_tokens: int = 0
     output_tokens: int = 0
+
+    model_config = {
+        "json_schema_extra": {"required": ["score", "reasoning", "input_tokens", "output_tokens"]}
+    }
 
     @field_validator("score")
     @classmethod

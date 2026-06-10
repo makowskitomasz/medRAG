@@ -246,7 +246,7 @@ async def _run_mode(
 
     async def _process(i: int, pair: dict) -> dict | None:
         question = pair["question"]
-        gold_answer = pair.get("gold_answer", "")
+        gold_answer = pair.get("gold_answer") or pair.get("ground_truth", "")
         qa_metadata = {
             k: v for k, v in pair.items() if k not in ("question", "gold_answer", "context")
         }
