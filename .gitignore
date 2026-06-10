@@ -54,6 +54,6 @@ results/*.log
 results/plots/
 results/final/
 results/hotpotqa_final/
+results/ddi_benchmark_final/
 results/test_fix/
 !results/.gitkeep
-
