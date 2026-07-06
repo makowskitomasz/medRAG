@@ -24,53 +24,50 @@ points = [
 pareto_x = [0.12, 0.50, 0.85]
 pareto_y = [0.08, 0.43, 0.70]
 ax.plot(pareto_x, pareto_y, "g--", lw=1.8, zorder=1)
+# place label right beside the line (at x=0.33, y_line≈0.27), just above it
 ax.text(
-    0.50,
-    0.24,
+    0.30,
+    0.285,
     "Pareto frontier",
-    ha="center",
-    va="center",
+    ha="left",
+    va="bottom",
     fontsize=9,
     color="#448844",
     style="italic",
-    rotation=32,
+    rotation=33,
 )
+
+# Per-label offsets: (dx, dy, ha)
+# Dots ON the Pareto line get labels placed to side/below so they don't sit on the line.
+# Dots off the line get labels toward the clear space.
+LABEL_OFFSETS = {
+    # (dx, dy, ha)  — offsets ≈ circle radius + 2pt margin in data coords
+    "Vanilla RAG": (0.02, -0.052, "left"),  # below-right
+    "HyDE": (0.00, 0.040, "center"),  # above
+    "Self-RAG": (-0.034, 0.008, "right"),  # left (on Pareto line)
+    "Graph RAG": (0.028, 0.036, "left"),  # above-right
+    "Corr. RAG": (0.022, 0.010, "left"),  # right
+    "Iter. Multi-hop": (0.028, -0.008, "left"),  # right (on Pareto line)
+    "MADAM-RAG": (-0.028, 0.036, "right"),  # above-left
+    "rare-rag": (0.00, 0.050, "center"),  # above
+}
 
 # Scatter
 for name, x, y, sz, color, bold in points:
     lw = 2.5 if bold else 0.8
     ec = "#228822" if bold else "#888888"
     ax.scatter(x, y, s=sz, color=color, edgecolors=ec, linewidths=lw, zorder=3)
-    # label placement
-    dx, dy = 0.04, 0.05
-    if name == "HyDE":
-        dx, dy = 0.0, 0.065
-    elif name == "Vanilla RAG":
-        dx, dy = 0.04, -0.065
-    elif name == "rare-rag":
-        dx, dy = -0.045, 0.065
-        ax.text(
-            x + dx,
-            y + dy,
-            name,
-            ha="center",
-            va="bottom",
-            fontsize=10,
-            fontweight="bold",
-            color="#226622",
-            zorder=4,
-        )
-        continue
-    elif name == "Corr. RAG":
-        dx, dy = 0.04, 0.065
+    dx, dy, ha = LABEL_OFFSETS.get(name, (0.04, 0.05, "left"))
+    is_rare = name == "rare-rag"
     ax.text(
         x + dx,
         y + dy,
         name,
-        ha="left",
+        ha=ha,
         va="bottom",
-        fontsize=9.5,
-        color="#333333",
+        fontsize=10 if is_rare else 9.5,
+        fontweight="bold" if is_rare else "normal",
+        color="#226622" if is_rare else "#333333",
         zorder=4,
     )
 

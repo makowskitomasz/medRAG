@@ -4,69 +4,223 @@
 \chapter{Conclusions and Future Work}
 \label{cha:conclusions}
 
-% TODO: write full chapter — skeleton below
-% Target: 5–6 pages
-
 % ------------------------------------------------------------
 \section{Summary of Findings}
 \label{sec:summary}
 
-% TODO: 1.5 pages
-% Revisit all three RQs with evidence
+This thesis set out to compare RAG architectures for medical advisory applications
+and to determine whether a routing-aware, evidence-verified architecture could
+achieve meaningfully higher faithfulness without sacrificing accuracy.
 
-% RQ1: best latency-quality trade-off → vanilla (9s, F1=0.537) or corrective_rag (12s, F1=0.539)
-%       for latency-critical use cases; self_reflection (F1=0.545) for accuracy-critical.
-% RQ2: RARE-RAG achieves highest faithfulness (0.976) — Hypothesis 2 confirmed.
-%       Grounding verifier contribution is measurable.
-% RQ3: System demonstrated on synthetic DDI queries; abstention mechanism works;
-%       full corpus evaluation deferred.
+\paragraph{RQ1: Which RAG architecture achieves the best trade-off between answer
+quality and latency?}
+The answer depends on both the deployment's priorities and the \emph{type} of
+question it will face.
+On HotpotQA, Corrective RAG is the practical sweet spot: Token~F1 = 0.539,
+faithfulness = 0.973, and only 11.8\,s median latency --- near-\rarerag{}
+grounding at one-third of the cost.
+Vanilla RAG is the right choice when latency is the hard constraint (9.1\,s,
+F1 = 0.537).
+
+On the DDI benchmark the picture is more nuanced.
+\textbf{No single architecture wins at every difficulty level.}
+HyDE leads at L1 (simple drug profiles, answer correctness 0.940); Multi-Agent
+at L2 (two-drug interactions, 0.550); Iterative Multi-hop at L3 (multi-hop
+chains, 0.490); Query Rewriting at L4 (polypharmacy, 0.620); and \rarerag{}
+at L5 (expert PK/PD, 0.470).
+Taken together, Query Rewriting offers the strongest \emph{average} performance
+(faithfulness 0.795, correctness 0.539), sitting on the Pareto frontier of
+faithfulness--correctness on DDI, but a deployment that serves a mixed
+case-load cannot optimise for all five levels with a single static architecture.
+This is the central practical finding of the DDI evaluation: \textbf{query
+complexity is the dominant determinant of which architecture performs best},
+not any intrinsic quality of the architecture itself.
+
+\paragraph{RQ2: Does a routing-aware, evidence-selection approach (\rarerag{})
+outperform single-path architectures on faithfulness?}
+Partially yes.
+On HotpotQA, \rarerag{} achieves the highest faithfulness (0.976), confirming
+Hypothesis~H1 (\cref{cha:rare_rag}); the grounding verifier and abstention
+path demonstrably suppress unsupported claims.
+On the DDI benchmark, the picture is more qualified: \rarerag{} ranks fourth
+on aggregate faithfulness (0.760) and does not beat Query Rewriting or MADAM-RAG
+overall.
+It \emph{does} lead on answer correctness at L5 (0.470), confirming
+Hypothesis~H2 --- routing to the most capable sub-pipeline is beneficial
+precisely where multi-step pharmacokinetic reasoning is required.
+The honest interpretation is that \rarerag{}'s routing advantage materialises
+at the difficult end of the complexity spectrum; for routine queries, simpler
+and faster architectures are both cheaper and more accurate.
+This nuance is important: \rarerag{} is not a universally superior architecture,
+but it is the right choice when the query load is skewed toward high-complexity
+clinical questions.
+
+\paragraph{RQ3: Can a RAG-based system serve as a reliable technology
+demonstrator for drug interaction advisory?}
+The qualitative and quantitative evidence is encouraging.
+The system successfully retrieves, reranks, and grounds answers against
+OpenFDA and DrugBank corpora; the abstention mechanism correctly declines to
+answer when retrieved evidence is insufficient (grounding score $< \tau = 0.5$),
+which is a critical safety property for any clinical decision-support tool.
+Faithfulness across all nine modes on the DDI benchmark ranges from 0.67 to
+0.82, indicating that the system rarely fabricates drug interactions outright.
+These results position \medrag{} as a credible proof-of-concept demonstrator,
+though clinical deployment would require pharmacist validation and regulatory
+compliance work beyond the scope of this thesis.
 
 % ------------------------------------------------------------
 \section{Main Contributions}
 \label{sec:contributions_summary}
 
-% TODO: 0.5 page — bullet list of the three contributions (reference Chapter 1)
+The thesis makes three contributions:
+
+\begin{enumerate}
+  \item \textbf{Comparative RAG benchmark.}
+    A systematic empirical comparison of nine RAG architecture families
+    on two benchmarks: HotpotQA ($9 \times 1{,}000$ queries, multi-hop general
+    knowledge) and a purpose-built DDI benchmark ($9 \times 100$ queries,
+    five clinical difficulty levels).
+    The study provides quantitative latency--quality trade-off data across
+    architectures that is absent from prior single-architecture evaluations.
+    The DDI per-level analysis yields a concrete practical finding:
+    no single architecture dominates across all difficulty levels;
+    the optimal choice depends on the complexity distribution of the expected
+    query load, which motivates the routing approach in \rarerag{}.
+
+  \item \textbf{RARE-RAG architecture.}
+    A novel routing-aware RAG meta-pipeline that classifies query complexity,
+    selects the appropriate sub-pipeline, applies set-wise evidence selection,
+    and verifies grounding before responding or abstaining.
+    \rarerag{} achieves the highest faithfulness on HotpotQA (0.976) and the
+    highest answer correctness on expert-level DDI questions (0.470).
+
+  \item \textbf{Open-source medical RAG platform.}
+    \medrag{}: a fully containerised, microservice-based system comprising
+    14 independent services (auth, ingestion, retrieval, reranking, generation,
+    evaluation, and seven RAG pipeline variants) that supports configurable
+    strategies per project without code changes.
+    All evaluation scripts, the DDI benchmark dataset, and the system source
+    code are included in the repository.
+\end{enumerate}
 
 % ------------------------------------------------------------
 \section{Limitations}
 \label{sec:limitations}
 
-% TODO: 1 page
-% 1. HotpotQA only — English, Wikipedia domain; results may not generalise to medical text
-% 2. LLM-as-judge circularity: RAGAS faithfulness uses same model family for evaluation and generation
-% 3. Set-wise selection is greedy approximate, not optimal
-% 4. RARE-RAG latency (30.8s) is high for real-time advisory; caching needed
-% 5. No human evaluation loop (pharmacist/cardiologist assessment)
+Several limitations constrain how broadly these findings can be generalised.
+
+\emph{Single general-knowledge benchmark for primary evaluation.}
+HotpotQA is an English Wikipedia dataset; results on factoid multi-hop
+questions may not transfer to other domains, languages, or longer documents.
+The DDI benchmark partially addresses this, but with only 100 questions per
+mode it has limited statistical power.
+
+\emph{LLM-as-judge circularity.}
+RAGAS faithfulness and answer correctness are assessed by an LLM
+(gpt-5-nano) that is the same model family used for generation.
+A judge model that prefers its own outputs could inflate scores for modes that
+rely on that model more heavily.
+A human evaluation study or a heterogeneous judge would mitigate this risk.
+
+\emph{CPU-only local inference.}
+Embedding and reranking ran on an Apple M1 Pro CPU without GPU acceleration.
+This inflates absolute latency figures by an estimated factor of 10--20 compared
+to a GPU-equipped server; relative latency rankings between modes are unaffected
+but absolute values should not be compared to other studies.
+
+\emph{No pharmacist validation.}
+The DDI ground-truth answers were generated and validated programmatically from
+source documents.
+Clinical experts were not involved in assessing the quality or safety of
+generated responses; the system cannot therefore be considered clinically validated.
+
+\emph{No ablation study of \rarerag{} components.}
+The evaluation treats \rarerag{} as a monolithic system and does not isolate
+the contribution of each component.
+It is therefore not possible to determine from the reported results alone
+whether the faithfulness gain over vanilla RAG is attributable to the grounding
+verifier, to the set-wise evidence selection, to the complexity router, or
+to some interaction among the three.
+An ablation study removing one component at a time would be needed to make that
+attribution; this is identified as future work in \cref{subsec:future_ablation}.
+
+\emph{Greedy set-wise selection.}
+\rarerag{}'s evidence selection is a greedy approximate algorithm rather than
+an optimal set-cover solution.
+For large corpora or high top-$k$ values, a combinatorial optimisation approach
+could improve evidence diversity.
 
 % ------------------------------------------------------------
 \section{Future Work}
 \label{sec:future_work}
 
-% TODO: 2 pages
+\subsection{Ablation Study of \rarerag{} Components}
+\label{subsec:future_ablation}
+The most direct extension of the empirical work is a controlled ablation that
+removes one \rarerag{} component at a time: (1) \rarerag{} without the
+grounding verifier, (2) without set-wise evidence selection (replacing it with
+top-$m$ selection), and (3) without the complexity router (always applying the
+full pipeline).
+Comparing each ablated variant against the full system on both benchmarks would
+quantify the marginal contribution of each component, transforming the current
+integration result into a mechanistic explanation.
+This is the single most important piece of missing evidence for the claims in
+\cref{cha:rare_rag}.
 
-\subsection{Drug Interaction Corpus Evaluation}
-% DDI corpus preparation scripts are in the repository (scripts/prepare_ddi_corpus.py)
-% Full evaluation on OpenFDA + DrugBank data planned for post-thesis phase
-% Would validate whether results on HotpotQA generalise to medical domain
+\subsection{Pharmacist-Validated DDI Evaluation}
+The most clinically meaningful immediate extension is a DDI evaluation with
+expert-validated ground-truth answers.
+Collaboration with a clinical pharmacist to annotate 200--300 real polypharmacy
+cases would yield a benchmark with genuine expert supervision, making faithfulness
+and correctness scores clinically meaningful rather than programmatically
+approximated.
 
 \subsection{Graph-Enhanced Evidence Selection}
-% Replace greedy set-wise selection with knowledge-graph expansion
-% Drug entities → graph edges (interaction, contraindication, synergy)
-% GraphRAG-style community detection over drug knowledge graph
+\rarerag{}'s set-wise selection currently treats retrieved chunks as an
+unstructured set.
+Replacing this with a knowledge-graph expansion step --- mapping drug mentions
+to nodes in a drug--interaction graph and retrieving neighbourhood subgraphs ---
+could improve multi-hop reasoning on L3--L5 questions by surfacing mechanistically
+related evidence that keyword or vector search misses.
 
 \subsection{Latency Optimisation}
-% Router pre-caching for common query types
-% Batched grounding verification
-% Speculative retrieval: start fast path in parallel with routing decision
+The 82.7\,s median latency of \rarerag{} on DDI is too high for real-time advisory.
+Three complementary approaches are promising: router pre-caching for
+recurrent query patterns, speculative retrieval that starts the fast-path
+(Vanilla) in parallel with the routing decision and discards the fast result
+only if the router selects a complex pipeline, and batched grounding
+verification to amortise LLM judge calls across concurrent queries.
 
-\subsection{Human Evaluation}
-% Pharmacist / cardiologist in-the-loop study
-% Blinded comparison: RARE-RAG vs. baseline vs. human expert
-% Trustability and explainability assessment
+\subsection{Human Evaluation and Explainability}
+A blinded comparison study in which clinical pharmacists rate responses from
+\rarerag{}, Vanilla RAG, and a human expert baseline would provide evidence
+beyond automated metrics.
+The citation mechanism already in \medrag{} provides a foundation for
+explainability: each claim in the generated answer is linked to a source
+passage, enabling pharmacists to verify reasoning chains.
+
+\subsection{RARE-RAG as an MCP Server}
+The Model Context Protocol (MCP)~\cite{anthropic2024mcp} defines a standard
+interface through which LLM assistants can invoke external tools and data
+sources at inference time.
+Re-implementing \rarerag{} as an MCP server would allow any MCP-compatible
+model to call the full pipeline --- triage, retrieval, reranking, grounding
+verification --- as a single tool invocation, without requiring the host
+application to manage pipeline orchestration.
+This would shift \medrag{} from a standalone advisory system to a reusable
+RAG capability that can be composed into larger clinical workflows: an
+attending-physician assistant, a discharge-medication checker, or an automated
+drug-interaction screener could all invoke the same \rarerag{} MCP server with
+a single function call.
+The existing REST API layer already exposes the necessary endpoints; an MCP
+adapter would primarily wrap these endpoints in the MCP tool schema, handle
+session state, and stream results back via the MCP content protocol.
 
 \subsection{Production Readiness}
-% Compliance: MDR, FDA SaMD guidance, audit logging
-% Multi-tenancy isolation, rate limiting, PII handling
-% Monitoring: RAGAS drift detection in production (eval service already in place)
-
-\subsection{RARE RAG MCP}
+Deploying \medrag{} in a clinical environment would require compliance with
+relevant regulations (EU MDR, FDA SaMD guidance), multi-tenancy isolation,
+PII handling, and audit logging.
+The evaluation service is already instrumented for production-mode metric
+collection (faithfulness and citation precision without gold answers), which
+provides a foundation for ongoing quality monitoring and drift detection
+without requiring labelled data.

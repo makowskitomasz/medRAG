@@ -19,8 +19,8 @@ GRAY_F = "#ebebeb"
 GRAY_E = "#aaaaaa"
 ARROW = "#555555"
 
-HEAD_LEN = 0.14  # arrowhead length in data units
-HEAD_W = 0.09  # arrowhead half-width in data units
+HEAD_LEN = 0.08  # arrowhead length in data units
+HEAD_W = 0.05  # arrowhead half-width in data units
 
 
 def rbox(ax, cx, cy, w, h, lines, face, edge, fs=10):
@@ -135,47 +135,47 @@ def lbl(ax, x, y, text):
 
 
 fig, ax = plt.subplots(figsize=(9, 7))
-ax.set_xlim(0.3, 8.8)
+ax.set_xlim(-0.3, 9.0)  # symmetric around content centre ≈ 4.35
 ax.set_ylim(0.2, 6.8)
 ax.axis("off")
 
+# Column centres:  C1=1.0  C2=4.4  C3=7.8   (spacing +3.4 each)
+# All rbox edges extended by pad=0.08; cylinder uses square,pad=0.
+PAD = 0.08
+
 # ── boxes ────────────────────────────────────────────────────────────────────
-# Row 1 (y=5.4):  Query | Retriever | Vector Index
-#   Query:     cx=1.4, w=1.6  → right=2.20
-#   Retriever: cx=4.1, w=2.0  → left=3.10, right=5.10
-#   Cylinder:  cx=7.0, w=1.6  → left=6.20, bottom=4.95
-rbox(ax, 1.4, 5.4, 1.6, 0.62, ["Query $q$"], BLUE_F, BLUE_E)
-rbox(ax, 4.1, 5.4, 2.0, 0.70, ["Retriever", "$E_Q(q)$"], BLUE_F, BLUE_E)
-cylinder(ax, 7.0, 5.35, 1.6, 0.80, ["Vector", "Index"])
+rbox(ax, 1.0, 5.4, 1.6, 0.62, ["Query $q$"], BLUE_F, BLUE_E)
+rbox(ax, 4.4, 5.4, 2.0, 0.70, ["Retriever", "$E_Q(q)$"], BLUE_F, BLUE_E)
+cylinder(ax, 7.8, 5.35, 1.6, 0.80, ["Vector", "Index"])
 
-# Row 2 (y=3.0):  LLM Generator | Prompt | Top-k Passages
-#   LLM:    cx=1.4, w=1.7  → right=2.25, bottom=2.65
-#   Prompt: cx=4.1, w=2.2  → left=3.00, right=5.20
-#   Top-k:  cx=7.0, w=1.7  → left=6.15, top=3.31
-rbox(ax, 1.4, 3.0, 1.7, 0.70, ["LLM", "Generator"], RED_F, RED_E)
-rbox(ax, 4.1, 3.0, 2.2, 0.72, ["Prompt", r"$[q;\,d_1;\,\ldots;\,d_k]$"], ORAN_F, ORAN_E)
-rbox(ax, 7.0, 3.0, 1.7, 0.62, ["Top-$k$", "Passages"], GREEN_F, GREEN_E)
+rbox(ax, 1.0, 3.0, 1.7, 0.70, ["LLM", "Generator"], RED_F, RED_E)
+rbox(ax, 4.4, 3.0, 2.2, 0.72, ["Prompt", r"$[q;\,d_1;\,\ldots;\,d_k]$"], ORAN_F, ORAN_E)
+rbox(ax, 7.8, 3.0, 1.7, 0.62, ["Top-$k$", "Passages"], GREEN_F, GREEN_E)
 
-# Row 3 (y=1.0):  Answer
-#   Answer: cx=1.4, w=1.6  → top=1.31
-rbox(ax, 1.4, 1.0, 1.6, 0.62, ["Answer $a$"], BLUE_F, BLUE_E)
+rbox(ax, 1.0, 1.0, 1.6, 0.62, ["Answer $a$"], BLUE_F, BLUE_E)
 
 # ── arrows ───────────────────────────────────────────────────────────────────
-arr(ax, 2.20, 5.40, 3.10, 5.40)  # Query right → Retriever left
-lbl(ax, 2.65, 5.57, "embed")
+# Query right (1.0+0.8+PAD=1.88) → Retriever left (4.4-1.0-PAD=3.32)
+arr(ax, 1.88, 5.40, 3.32, 5.40)
+lbl(ax, 2.60, 5.57, "embed")
 
-arr(ax, 5.10, 5.40, 6.20, 5.40)  # Retriever right → Cylinder left (6.20)
-lbl(ax, 5.65, 5.57, "ANN search")
+# Retriever right (4.4+1.0+PAD=5.48) → Cylinder left (7.8-0.8=7.00, pad=0)
+arr(ax, 5.48, 5.40, 7.00, 5.40)
+lbl(ax, 6.24, 5.57, "ANN search")
 
-arr(ax, 7.00, 4.95, 7.00, 3.31)  # Cylinder bottom (4.95) → Top-k top (3.31)
+# Cylinder bottom (5.35-0.40=4.95) → Top-k top (3.0+0.31+PAD=3.39)
+arr(ax, 7.80, 4.95, 7.80, 3.39)
 
-arr(ax, 6.15, 3.00, 5.20, 3.00)  # Top-k left → Prompt right
-lbl(ax, 5.67, 3.17, "concatenate")
+# Top-k left (7.8-0.85-PAD=6.87) → Prompt right (4.4+1.1+PAD=5.58)
+arr(ax, 6.87, 3.00, 5.58, 3.00)
+lbl(ax, 6.22, 3.17, "concatenate")
 
-arr(ax, 3.00, 3.00, 2.25, 3.00)  # Prompt left → LLM right
-lbl(ax, 2.62, 3.17, "condition")
+# Prompt left (4.4-1.1-PAD=3.22) → LLM right (1.0+0.85+PAD=1.93)
+arr(ax, 3.22, 3.00, 1.93, 3.00)
+lbl(ax, 2.57, 3.17, "condition")
 
-arr(ax, 1.40, 2.65, 1.40, 1.31)  # LLM bottom → Answer top
+# LLM bottom (3.0-0.35-PAD=2.57) → Answer top (1.0+0.31+PAD=1.39)
+arr(ax, 1.00, 2.57, 1.00, 1.39)
 
 plt.savefig("vanilla_rag.png", dpi=200, bbox_inches="tight")
 print("Saved vanilla_rag.png")

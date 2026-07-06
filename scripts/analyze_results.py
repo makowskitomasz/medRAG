@@ -97,7 +97,17 @@ def _load_latency(paths: list[str]) -> Any:
     df = pd.DataFrame(rows)
     if "error" in df.columns:
         df = df[df["error"].isna()]
-    keep = [c for c in ["question", "rag_mode", "latency_ms", "token_count"] if c in df.columns]
+    base_keep = ["question", "rag_mode", "latency_ms", "token_count"]
+    quality_keep = [
+        "token_f1",
+        "em",
+        "rouge_l",
+        "faithfulness",
+        "answer_correctness",
+        "answer_relevance",
+        "context_recall",
+    ]
+    keep = [c for c in base_keep + quality_keep if c in df.columns]
     df = df[keep].drop_duplicates(subset=["question", "rag_mode"], keep="last")
     return df.reset_index(drop=True)
 
@@ -122,7 +132,12 @@ def _load_difficulty_map(benchmark_path: str | None) -> dict[str, str]:
 
 def _enrich_from_mongo(df: Any, mongo_uri: str, project_id: str | None) -> Any:
     import pandas as pd
-    from pymongo import MongoClient
+
+    try:
+        from pymongo import MongoClient
+    except ImportError:
+        print("[WARN] pymongo not installed — skipping MongoDB metric enrichment")
+        return df
 
     try:
         client: MongoClient = MongoClient(mongo_uri, serverSelectionTimeoutMS=3000)
@@ -374,23 +389,27 @@ def _plot_latency_vs_quality(summary: Any, plots_dir: Path) -> None:
     print(f"  {out}")
 
 
-def _plot_heatmap(summary: Any, plots_dir: Path) -> None:
+def _plot_heatmap(summary: Any, plots_dir: Path, exclude_cols: list[str] | None = None) -> None:
     import matplotlib.pyplot as plt
     import seaborn as sns
 
-    metric_cols = [
-        c
-        for c in [
-            "token_f1",
-            "em",
-            "rouge_l",
-            "faithfulness",
-            "answer_correctness",
-            "answer_relevance",
-            "context_recall",
-        ]
-        if c in summary.columns
+    candidate_cols = [
+        "token_f1",
+        "em",
+        "rouge_l",
+        "faithfulness",
+        "answer_correctness",
+        "answer_relevance",
+        "context_recall",
     ]
+    if exclude_cols:
+        candidate_cols = [c for c in candidate_cols if c not in exclude_cols]
+
+    metric_cols = [c for c in candidate_cols if c in summary.columns]
+
+    # Drop columns where ALL values are NaN (metric not computed for this benchmark)
+    metric_cols = [c for c in metric_cols if summary[c].notna().any()]
+
     if not metric_cols:
         print("  [SKIP] heatmap.png — no quality metrics")
         return
@@ -716,12 +735,17 @@ def main() -> None:
         print(f"Per-difficulty table → {diff_csv}")
         _print_summary_by_difficulty(summary_diff)
 
+    # For DDI benchmark, lexical metrics (EM/F1/ROUGE) are not meaningful
+    # (open-ended clinical answers never match gold string exactly)
+    is_ddi = args.benchmark is not None and "ddi" in str(args.benchmark).lower()
+    heatmap_exclude = ["token_f1", "em", "rouge_l"] if is_ddi else None
+
     print("\nGenerating plots…")
     _plot_token_f1_em(df, plots_dir)
     _plot_faithfulness(df, plots_dir)
     _plot_latency(df, plots_dir)
     _plot_latency_vs_quality(summary, plots_dir)
-    _plot_heatmap(summary, plots_dir)
+    _plot_heatmap(summary, plots_dir, exclude_cols=heatmap_exclude)
     _plot_radar(summary, plots_dir)
     _plot_correctness_by_difficulty(df, plots_dir)
     _plot_heatmap_by_difficulty(df, plots_dir)

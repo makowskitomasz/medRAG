@@ -57,8 +57,8 @@ def arr(ax, x0, y0, x1, y1, lbl=""):
 
 
 fig, ax = plt.subplots(figsize=(12, 5))
-ax.set_xlim(0, 12)
-ax.set_ylim(0.5, 5.0)
+ax.set_xlim(-0.7, 12.7)
+ax.set_ylim(0.2, 5.3)
 ax.axis("off")
 
 # ── Central platform box ──────────────────────────────────────────────────────
@@ -123,7 +123,7 @@ ax.text(
 # Patient/User (top-left)
 rbox(
     ax,
-    1.5,
+    0.85,
     3.6,
     2.2,
     0.82,
@@ -136,7 +136,7 @@ rbox(
 # Administrator (bottom-left)
 rbox(
     ax,
-    1.5,
+    0.85,
     1.9,
     2.2,
     0.82,
@@ -150,11 +150,11 @@ rbox(
 # Anthropic LLM (top-right, dashed)
 rbox(
     ax,
-    10.5,
+    11.2,
     3.6,
     2.3,
     0.82,
-    ["Anthropic LLM", "Claude API"],
+    ["LLM API", "(e.g. Claude / GPT)"],
     PINK_F,
     PINK_E,
     fs=9.5,
@@ -164,7 +164,7 @@ rbox(
 # Embedding Provider (bottom-right, dashed)
 rbox(
     ax,
-    10.5,
+    11.2,
     1.9,
     2.3,
     0.82,
@@ -176,14 +176,14 @@ rbox(
 )
 
 # ── Arrows ────────────────────────────────────────────────────────────────────
-# User → platform
-arr(ax, 2.61, 3.60, 3.30, 3.60, "REST / SSE")
+# User → platform  (grey right edge: 0.85+1.1=1.95)
+arr(ax, 1.96, 3.60, 3.30, 3.60, "REST / SSE")
 # Admin → platform
-arr(ax, 2.61, 1.90, 3.30, 1.90, "REST")
-# platform → Anthropic
-arr(ax, 8.70, 3.60, 9.38, 3.60, "HTTPS")
+arr(ax, 1.96, 1.90, 3.30, 1.90, "REST")
+# platform → Anthropic  (pink left edge: 11.2-1.15=10.05)
+arr(ax, 8.70, 3.60, 10.04, 3.60, "HTTPS")
 # platform → Embedding
-arr(ax, 8.70, 1.90, 9.38, 1.90, "HTTPS")
+arr(ax, 8.70, 1.90, 10.04, 1.90, "HTTPS")
 
 plt.tight_layout(pad=0.3)
 plt.savefig("c4_context.png", dpi=200, bbox_inches="tight")

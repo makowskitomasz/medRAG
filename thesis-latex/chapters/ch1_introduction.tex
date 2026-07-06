@@ -18,14 +18,14 @@ Polypharmacy of this kind affects an estimated 40\% of patients over 65 in devel
 countries~\cite{masnoon2017polypharmacy}, and drug--drug interactions (DDIs) contribute
 to tens of thousands of preventable hospital admissions each year~\cite{lazarou1998ade}.
 
-Modern large language models (LLMs) are fluent, broad-knowledge reasoners that can, in
-principle, answer clinical questions about drug safety.
-Yet they are not safe for this task out of the box: they hallucinate, their training
-knowledge has a cutoff date, and they cannot explain \emph{why} a specific interaction
-exists based on citable evidence.
-Retrieval-Augmented Generation (RAG) addresses these weaknesses by grounding every
-response in retrieved source documents, making answers traceable and updatable without
-retraining the model.
+Modern large language models (LLMs) are impressively fluent and broad in their knowledge,
+and they can, in principle, answer clinical questions about drug safety reasonably well.
+But they are not safe for this task out of the box.
+They hallucinate, their training knowledge has a cutoff date, and they cannot
+explain \emph{why} a specific interaction exists or point to citable evidence for it.
+Retrieval-Augmented Generation (RAG) was designed to address exactly these weaknesses:
+by grounding every response in retrieved source documents, answers become traceable
+and can be updated without retraining the model.
 
 This thesis investigates how different RAG architectures perform on a multi-hop
 question-answering benchmark, proposes a novel architecture tailored for high-stakes
@@ -54,19 +54,17 @@ Three research questions guide this work:
 \section{Scope and Limitations}
 \label{sec:scope}
 
-This thesis covers a survey of eight RAG architecture families
-(\cref{cha:background}), the design of \rarerag{} as a novel four-component
-architecture (\cref{cha:rare_rag}), implementation of a 14-service microservice
-platform with configurable RAG strategies
-(\crefrange{cha:system_design}{cha:implementation}), and an empirical benchmark
-on HotpotQA across nine RAG modes with 1{,}000 questions each
-(\cref{cha:evaluation}).
+The thesis covers a survey of eight RAG architecture families (\cref{cha:background})
+and the design of \rarerag{} as a four-component pipeline (\cref{cha:rare_rag}).
+A 14-service microservice platform with configurable RAG strategies is described
+in \cref{cha:system_design,cha:implementation}, and evaluated empirically on
+two benchmarks: HotpotQA ($9 \times 1{,}000$ questions for general multi-hop reasoning)
+and a purpose-built DDI benchmark ($9 \times 100$ questions at five clinical difficulty
+levels), as reported in \cref{cha:evaluation}.
 
-The following are explicitly out of scope: clinical validation or patient-facing
+Several things are explicitly out of scope: clinical validation or patient-facing
 deployment, regulatory compliance (MDR, FDA SaMD guidance), fine-tuning or pre-training
-of language models, and evaluation on the drug interaction corpus --- the latter is
-planned as future work, with infrastructure and data preparation scripts already available
-in the repository.
+of language models, and pharmacist-validated assessment of generated answers.
 
 % ------------------------------------------------------------
 \section{Contributions}
@@ -74,33 +72,34 @@ in the repository.
 
 The main contributions of this thesis are:
 
-The first contribution is a \textbf{comparative empirical study} of nine RAG pipeline
-variants on HotpotQA (9{,}000 evaluated questions), using both lexical metrics
-(Token~F1, EM, ROUGE-L) and RAGAS-based indicators (faithfulness, answer relevance,
-context recall), together with latency and cost analysis.
-The second is the \textbf{\rarerag{} architecture} --- a novel RAG pipeline combining
-query complexity routing, hybrid BM25+vector retrieval, set-wise evidence selection,
-and a grounding verifier with abstention; \rarerag{} achieves the highest faithfulness
-score (0.976) across all evaluated modes.
-The third is the \textbf{open-source \medrag{} platform} --- a production-grade
-microservice system comprising 14 services with configurable chunking strategies,
-embedding providers, and RAG modes, backed by a full CI/CD pipeline and Docker
-deployment.
+A \textbf{comparative empirical study} of nine RAG pipeline variants on two benchmarks:
+HotpotQA ($9 \times 1{,}000$ questions) and a purpose-built DDI benchmark
+($9 \times 100$ questions at five difficulty levels), using lexical metrics
+(Token~F1, EM, ROUGE-L) and RAGAS-based indicators (faithfulness, answer correctness,
+answer relevance), together with latency analysis.
+
+The \textbf{\rarerag{} architecture} --- a new RAG pipeline combining query complexity
+routing, hybrid BM25+vector retrieval, set-wise evidence selection, and a grounding
+verifier with abstention; \rarerag{} achieves the highest faithfulness (0.976) on
+HotpotQA and the highest answer correctness on expert-level DDI questions (L5: 0.470).
+
+The \textbf{open-source \medrag{} platform} --- a microservice system comprising
+14 services with configurable chunking strategies, embedding providers, and RAG modes,
+backed by a full CI/CD pipeline and Docker deployment.
 
 % ------------------------------------------------------------
 \section{Thesis Organisation}
 \label{sec:organisation}
 
-The remainder of this thesis is organised as follows.
 \cref{cha:background} surveys the evolution of RAG from the original
-retrieve-then-generate paradigm through agentic multi-agent systems and positions this
-work within the literature.
-\cref{cha:rare_rag} presents the \rarerag{} architecture in detail, covering its
-four components and the hypotheses it addresses.
-\cref{cha:system_design} documents the full microservice architecture of the
-\medrag{} platform using C4 diagrams and sequence models.
-\cref{cha:implementation} describes selected non-trivial implementation decisions:
+retrieve-then-generate paradigm through agentic multi-agent systems and positions
+this work within the existing literature.
+\cref{cha:rare_rag} describes the \rarerag{} architecture in detail, covering
+each of its four components and the hypotheses they are designed to test.
+The \medrag{} platform's full microservice architecture is documented in
+\cref{cha:system_design} using C4 diagrams and sequence models, and
+\cref{cha:implementation} covers the most important engineering choices:
 embedding abstraction, hybrid search tuning, SSE streaming, and evaluation integration.
-\cref{cha:evaluation} presents the experimental setup, results, and discussion.
-\cref{cha:conclusions} summarises the findings, revisits the research questions,
-and outlines directions for future work.
+Experimental results are presented and discussed in \cref{cha:evaluation}.
+\cref{cha:conclusions} summarises what was found, revisits the research questions,
+and suggests directions for future work.

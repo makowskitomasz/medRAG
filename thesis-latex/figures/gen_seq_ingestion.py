@@ -11,29 +11,31 @@ BLUE_F = "#dce6f7"
 BLUE_E = "#6b8ec7"
 ORAN_F = "#fdeac8"
 ORAN_E = "#c07828"
-GRAY_F = "#ebebeb"
-GRAY_E = "#aaaaaa"
 DB_F = "#f0f0f0"
 DB_E = "#999999"
 ARROW = "#555555"
+PAD = 0.10
+W = 2.2  # box width
+H = 0.85  # box height
 
 
-def rbox(ax, cx, cy, w, h, title, port="", face=BLUE_F, edge=BLUE_E, fs=9.5):
-    p = FBP(
-        (cx - w / 2, cy - h / 2),
-        w,
-        h,
-        boxstyle="round,pad=0.10",
-        linewidth=1.0,
-        edgecolor=edge,
-        facecolor=face,
-        zorder=2,
+def rbox(ax, cx, cy, title, port="", face=BLUE_F, edge=BLUE_E, fs=9.5):
+    ax.add_patch(
+        FBP(
+            (cx - W / 2, cy - H / 2),
+            W,
+            H,
+            boxstyle=f"round,pad={PAD}",
+            linewidth=1.0,
+            edgecolor=edge,
+            facecolor=face,
+            zorder=2,
+        )
     )
-    ax.add_patch(p)
     if port:
         ax.text(
             cx,
-            cy + 0.12,
+            cy + 0.13,
             title,
             ha="center",
             va="center",
@@ -43,7 +45,7 @@ def rbox(ax, cx, cy, w, h, title, port="", face=BLUE_F, edge=BLUE_E, fs=9.5):
         )
         ax.text(
             cx,
-            cy - 0.14,
+            cy - 0.16,
             port,
             ha="center",
             va="center",
@@ -60,48 +62,51 @@ def rbox(ax, cx, cy, w, h, title, port="", face=BLUE_F, edge=BLUE_E, fs=9.5):
             va="center",
             fontsize=fs,
             fontweight="bold",
+            multialignment="center",
             zorder=3,
         )
 
 
-def cylinder(ax, cx, cy, w, h, label, sublabel=""):
-    ew = w
-    eh = 0.25
-    body = FBP(
-        (cx - w / 2, cy - h / 2),
-        w,
-        h,
-        boxstyle="square,pad=0",
-        linewidth=1.0,
-        edgecolor=DB_E,
-        facecolor=DB_F,
-        zorder=2,
+def cylinder(ax, cx, cy, label):
+    cw, ch = 2.2, 0.90
+    ax.add_patch(
+        FBP(
+            (cx - cw / 2, cy - ch / 2),
+            cw,
+            ch,
+            boxstyle="square,pad=0",
+            linewidth=1.0,
+            edgecolor=DB_E,
+            facecolor=DB_F,
+            zorder=2,
+        )
     )
-    ax.add_patch(body)
-    top = mpatches.Ellipse(
-        (cx, cy + h / 2),
-        ew,
-        eh,
-        linewidth=1.0,
-        edgecolor=DB_E,
-        facecolor=DB_F,
-        zorder=3,
+    ax.add_patch(
+        mpatches.Ellipse(
+            (cx, cy + ch / 2),
+            cw,
+            0.26,
+            linewidth=1.0,
+            edgecolor=DB_E,
+            facecolor=DB_F,
+            zorder=3,
+        )
     )
-    ax.add_patch(top)
-    bot = mpatches.Arc(
-        (cx, cy - h / 2),
-        ew,
-        eh,
-        theta1=180,
-        theta2=360,
-        linewidth=1.0,
-        edgecolor=DB_E,
-        zorder=3,
+    ax.add_patch(
+        mpatches.Arc(
+            (cx, cy - ch / 2),
+            cw,
+            0.26,
+            theta1=180,
+            theta2=360,
+            linewidth=1.0,
+            edgecolor=DB_E,
+            zorder=3,
+        )
     )
-    ax.add_patch(bot)
     ax.text(
         cx,
-        cy + 0.08,
+        cy,
         label,
         ha="center",
         va="center",
@@ -109,30 +114,18 @@ def cylinder(ax, cx, cy, w, h, label, sublabel=""):
         fontweight="bold",
         zorder=4,
     )
-    if sublabel:
-        ax.text(
-            cx,
-            cy - 0.16,
-            sublabel,
-            ha="center",
-            va="center",
-            fontsize=7.5,
-            color="#555555",
-            zorder=4,
-        )
 
 
-def arr(ax, x0, y0, x1, y1, lbl="", lbl_dy=0.17, lbl_dx=0.0, mono=False, lw=1.1):
+def arr(ax, x0, y0, x1, y1, lbl="", lbl_dy=0.23, lbl_dx=0.0, mono=False, lw=1.1):
     ax.annotate(
         "",
         xy=(x1, y1),
         xytext=(x0, y0),
-        arrowprops=dict(arrowstyle="-|>", color=ARROW, lw=lw),
+        arrowprops=dict(arrowstyle="-|>", color=ARROW, lw=lw, shrinkA=0, shrinkB=0),
         zorder=1,
     )
     if lbl:
         mx, my = (x0 + x1) / 2, (y0 + y1) / 2
-        ff = "monospace" if mono else "sans-serif"
         ax.text(
             mx + lbl_dx,
             my + lbl_dy,
@@ -141,80 +134,104 @@ def arr(ax, x0, y0, x1, y1, lbl="", lbl_dy=0.17, lbl_dx=0.0, mono=False, lw=1.1)
             va="center",
             fontsize=8.0,
             color="#666666",
-            fontfamily=ff,
+            fontfamily="monospace" if mono else "sans-serif",
         )
 
 
+def line(ax, xs, ys):
+    ax.plot(xs, ys, color=ARROW, lw=1.1, zorder=1)
+
+
+def arrowhead(ax, x0, y0, x1, y1):
+    ax.annotate(
+        "",
+        xy=(x1, y1),
+        xytext=(x0, y0),
+        arrowprops=dict(arrowstyle="-|>", color=ARROW, lw=1.1, shrinkA=0, shrinkB=0),
+        zorder=2,
+    )
+
+
+def lbl(ax, x, y, text, ha="center", mono=False):
+    ax.text(
+        x,
+        y,
+        text,
+        ha=ha,
+        va="center",
+        fontsize=8.0,
+        color="#666666",
+        fontfamily="monospace" if mono else "sans-serif",
+    )
+
+
 # ── canvas ────────────────────────────────────────────────────────────────────
-fig, ax = plt.subplots(figsize=(13, 6.5))
-ax.set_xlim(0, 13)
-ax.set_ylim(0, 6.5)
+fig, ax = plt.subplots(figsize=(14, 9))
+ax.set_xlim(0, 14)
+ax.set_ylim(0, 9)
 ax.axis("off")
 
-# ── Row 1: ingestion pipeline (top, left → right) ─────────────────────────────
-Y1 = 5.0
-rbox(ax, 1.5, Y1, 2.0, 0.72, "Ingestion", ":8007")
-rbox(ax, 4.0, Y1, 2.0, 0.72, "RabbitMQ\nbroker", "", ORAN_F, ORAN_E)
-rbox(ax, 6.8, Y1, 2.0, 0.72, "Parser", ":8008")
-rbox(ax, 9.8, Y1, 2.0, 0.72, "Chunking", ":8009")
+Y1 = 7.5  # row 1: pipeline services
+Y2 = 5.0  # row 2: embedding + indexing
+YDB = 2.2  # databases
 
-# ── Row 2: embedding + indexing (bottom-right) ────────────────────────────────
-Y2 = 2.6
-rbox(ax, 9.8, Y2, 2.0, 0.72, "Embedding", ":8010")
-rbox(ax, 7.0, Y2, 2.0, 0.72, "Indexing", ":8011")
+# ── layout & actual edges  (cx ± W/2 ± PAD  =  cx ± 1.2)
+# 4 boxes × 2.4 + 3 gaps × 1.2 = 13.2 → centered in 14: margin 0.4 each side
+# Row 1  cx:  1.6   5.2   8.8   12.4    gaps = 1.2 between actual edges
+# Ingestion  left=0.4  right=2.8  bottom=6.975
+# RabbitMQ   left=4.0  right=6.4
+# Parser     left=7.6  right=10.0
+# Chunking   left=11.2 right=13.6 bottom=6.975
+#
+# Row 2  cx:  8.8 (Indexing)   12.4 (Embedding)
+# Embedding  left=11.2 right=13.6 top=5.525 bottom=4.475
+# Indexing   left=7.6  right=10.0 top=5.525 bottom=4.475
+#
+# MongoDB    cx=1.6  cy=2.2  top_cap = 2.2+0.45+0.13 = 2.78
+# Weaviate   cx=6.5  cy=2.2  top_cap = 2.78
 
-# ── Databases ─────────────────────────────────────────────────────────────────
-cylinder(ax, 1.8, 1.5, 2.0, 0.90, "MongoDB")
-cylinder(ax, 7.0, 0.6, 2.0, 0.90, "Weaviate")
+TOP_CAP = YDB + 0.45 + 0.13  # ≈ 2.78
 
-# ── Arrows row 1 ─────────────────────────────────────────────────────────────
-arr(ax, 2.50, Y1, 3.00, Y1, "file.uploaded", lbl_dy=0.20, mono=True)
-arr(ax, 5.00, Y1, 5.80, Y1, "consume", lbl_dy=0.20)
-arr(ax, 7.80, Y1, 8.80, Y1, "file.parsed", lbl_dy=0.20, mono=True)
+# ── nodes ────────────────────────────────────────────────────────────────────
+rbox(ax, 1.6, Y1, "Ingestion", ":8007")
+rbox(ax, 5.2, Y1, "RabbitMQ\nbroker", "", ORAN_F, ORAN_E)
+rbox(ax, 8.8, Y1, "Parser", ":8008")
+rbox(ax, 12.4, Y1, "Chunking", ":8009")
+rbox(ax, 12.4, Y2, "Embedding", ":8010")
+rbox(ax, 8.8, Y2, "Indexing", ":8011")
+cylinder(ax, 1.6, YDB, "MongoDB")
+cylinder(ax, 6.5, YDB, "Weaviate")
 
-# Chunking → down-right bend → Embedding (with label chunks.created)
-ax.annotate(
-    "",
-    xy=(9.8, Y2 + 0.36),
-    xytext=(9.8, Y1 - 0.36),
-    arrowprops=dict(
-        arrowstyle="-|>", color=ARROW, lw=1.1, connectionstyle="arc3,rad=0.0"
-    ),
-    zorder=1,
-)
-ax.text(
-    10.4,
-    (Y1 + Y2) / 2,
-    "chunks\n.created",
-    ha="left",
-    va="center",
-    fontsize=7.5,
-    color="#666666",
-    fontfamily="monospace",
-)
+# ── arrows ────────────────────────────────────────────────────────────────────
 
-# Embedding ← Indexing
-arr(ax, 9.8, Y2, 8.00, Y2, "embeddings.ready", lbl_dy=0.20, mono=True)
+# Row 1 horizontal pipeline
+arr(ax, 2.8, Y1, 4.0, Y1, "file.uploaded", lbl_dy=0.24, mono=True)
+arr(ax, 6.4, Y1, 7.6, Y1, "consume", lbl_dy=0.24)
+arr(ax, 10.0, Y1, 11.2, Y1, "file.parsed", lbl_dy=0.24, mono=True)
 
-# ── Arrows: ingestion → MongoDB ───────────────────────────────────────────────
-arr(ax, 1.5, Y1 - 0.36, 1.8, 2.45, "dedup check", lbl_dy=0.0, lbl_dx=0.6)
+# Chunking → Embedding  (straight vertical)
+arr(ax, 12.4, 6.975, 12.4, 5.525)
+lbl(ax, 12.58, 6.25, "chunks.created", ha="left", mono=True)
 
-# Indexing → MongoDB (update status)
-ax.annotate(
-    "",
-    xy=(1.8, 1.95),
-    xytext=(6.0, 2.20),
-    arrowprops=dict(
-        arrowstyle="-|>", color=ARROW, lw=1.1, connectionstyle="arc3,rad=0.1"
-    ),
-    zorder=1,
-)
-ax.text(
-    3.8, 2.5, "update status", ha="center", va="center", fontsize=8.0, color="#666666"
-)
+# Embedding → Indexing  (horizontal left)
+arr(ax, 11.2, Y2, 10.0, Y2, "embeddings.ready", lbl_dy=0.24, mono=True)
 
-# Indexing → Weaviate
-arr(ax, 7.0, Y2 - 0.36, 7.0, 1.05, "upsert vectors", lbl_dy=0.0, lbl_dx=0.7)
+# Ingestion → MongoDB  (straight vertical, dedup check)
+# Ingestion bottom=6.975 → MongoDB top_cap
+line(ax, [1.6, 1.6], [6.975, TOP_CAP])
+arrowhead(ax, 1.6, 3.1, 1.6, TOP_CAP)
+lbl(ax, 1.78, 4.85, "dedup check", ha="left")
+
+# Indexing → MongoDB  (exit left → down at x=4.5 → right-to-left into MongoDB side)
+# x=4.5 is between Weaviate left (5.4) and MongoDB right (2.7) — vertical clears both cylinders
+line(ax, [7.6, 4.5, 4.5, 2.7], [5.35, 5.35, 2.2, 2.2])
+arrowhead(ax, 3.1, 2.2, 2.7, 2.2)
+lbl(ax, 4.7, 3.78, "update status", ha="left")
+
+# Indexing → Weaviate  (exit left side at y=5.15 → left to Weaviate cx=6.5 → down into top cap)
+line(ax, [7.6, 6.5, 6.5], [5.15, 5.15, TOP_CAP])
+arrowhead(ax, 6.5, 3.1, 6.5, TOP_CAP)
+lbl(ax, 6.68, 3.95, "upsert\nvectors", ha="left")
 
 plt.tight_layout(pad=0.3)
 plt.savefig("seq_ingestion.png", dpi=200, bbox_inches="tight")

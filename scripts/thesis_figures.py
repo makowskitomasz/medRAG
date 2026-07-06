@@ -220,9 +220,7 @@ def plot_latency():
 # 4. PARETO SCATTER — faithfulness vs token_f1, leader-line labels
 # ════════════════════════════════════════════════════════════════════════════
 def plot_pareto():
-    # All points are tightly clustered, so labels are placed in two side
-    # columns connected to their points by thin leader lines.
-    fig, ax = plt.subplots(figsize=(9.5, 5.2))
+    fig, ax = plt.subplots(figsize=(9.5, 5.5))
 
     lat_min = df["latency_ms_mean"].min()
     lat_max = df["latency_ms_mean"].max()
@@ -246,54 +244,47 @@ def plot_pareto():
             linewidths=lw,
         )
 
-    # ── leader-line label layout ─────────────────────────────────────────
-    # Left column  (ha="right")  x_text = 0.478
-    # Right column (ha="left")   x_text = 0.549
-    # Points sorted into left/right by token_f1 split ≈ 0.536
-    X_LEFT = 0.478
-    X_RIGHT = 0.550
+    # ── per-label offsets (dx, dy) in points ────────────────────────────
+    # Isolated points: small direct offset, no arrow.
+    # Dense cluster (F1 ≈ 0.539–0.545, Faith ≈ 0.971–0.976): short arrows
+    # to a staggered column to the right of the cluster.
+    OFFSETS = {
+        "MADAM-RAG": ((-9, 9), False),  # isolated, upper-left
+        "Vanilla RAG": ((-9, -11), False),  # isolated lower area
+        "Query Rewriting": ((-9, -13), True),  # below its point
+        "Multi-Agent": ((0, 12), False),  # above
+        "Iterative Multi-hop": ((-4, 14), False),  # above, slightly left
+        # right cluster — staggered column, short arrows
+        "RARE-RAG": ((28, 12), True),
+        "Self-RAG": ((28, 0), True),
+        "Corrective RAG": ((28, -12), True),
+        "HyDE": ((28, -24), True),
+    }
 
-    left_modes = [
-        "MADAM-RAG",
-        "Multi-Agent",
-        "Iterative Multi-hop",
-        "Vanilla RAG",
-        "Query Rewriting",
-    ]
-    right_modes = ["Corrective RAG", "HyDE", "Self-RAG", "RARE-RAG"]
-
-    # evenly space labels vertically within the y-axis range
-    y_lo, y_hi = 0.934, 0.982
-    left_ys = np.linspace(y_hi, y_lo, len(left_modes))
-    right_ys = np.linspace(y_hi, y_lo, len(right_modes))
-
-    label_pos = {}
-    for lab, y_ in zip(left_modes, left_ys, strict=False):
-        label_pos[lab] = (X_LEFT, y_, "right")
-    for lab, y_ in zip(right_modes, right_ys, strict=False):
-        label_pos[lab] = (X_RIGHT, y_, "left")
-
-    arrow_kw = dict(
-        arrowstyle="-", color="grey", lw=0.65, shrinkA=0, shrinkB=4, connectionstyle="arc3,rad=0.0"
-    )
+    thin_arrow = dict(arrowstyle="-", color="#888888", lw=0.7, shrinkA=0, shrinkB=4)
 
     for _, row in df.iterrows():
-        lx, ly, ha = label_pos[row.label]
-        weight = "bold" if row.label == "RARE-RAG" else "normal"
+        lbl = row.label
+        (dx, dy), use_arrow = OFFSETS.get(lbl, ((8, 5), True))
+        weight = "bold" if lbl == "RARE-RAG" else "normal"
+        color = RARE_COLOR if lbl == "RARE-RAG" else color_map[lbl]
+        ha = "right" if dx < 0 else ("center" if dx == 0 else "left")
         ax.annotate(
-            row.label,
+            lbl,
             xy=(row["token_f1"], row["faithfulness"]),
-            xytext=(lx, ly),
+            xytext=(dx, dy),
+            textcoords="offset points",
             ha=ha,
             va="center",
             fontsize=8.5,
             fontweight=weight,
-            arrowprops=arrow_kw,
+            color=color,
+            arrowprops=thin_arrow if use_arrow else None,
             zorder=5,
         )
 
     # ── axes ──────────────────────────────────────────────────────────────
-    ax.set_xlim(0.470, 0.558)
+    ax.set_xlim(0.470, 0.574)  # right margin for cluster labels
     ax.set_ylim(0.930, 0.984)
     ax.set_xlabel("Token F1", labelpad=6)
     ax.set_ylabel("Faithfulness", labelpad=6)
@@ -306,12 +297,22 @@ def plot_pareto():
     ax.yaxis.grid(True, linestyle="--", alpha=0.35, zorder=0)
     ax.set_axisbelow(True)
 
-    # ── latency bubble legend ─────────────────────────────────────────────
-    for lat_val, lab in [(9000, "9 s"), (20000, "20 s"), (45000, "45 s")]:
+    # ── latency bubble legend — upper-left to avoid right-cluster overlap ─
+    for lat_val, lab in [(10000, "10 s"), (20000, "20 s"), (30000, "30 s")]:
         s = 90 + 500 * (lat_val - lat_min) / (lat_max - lat_min)
         ax.scatter([], [], s=s, color="grey", alpha=0.55, label=lab)
-    ax.legend(title="Latency", loc="lower right", framealpha=0.92, fontsize=8, title_fontsize=8)
+    ax.legend(
+        title="Latency",
+        loc="upper left",
+        framealpha=0.92,
+        fontsize=11,
+        title_fontsize=12,
+        labelspacing=1.6,
+        handletextpad=1.0,
+        borderpad=0.9,
+    )
 
+    fig.tight_layout()
     fig.savefig(OUT / "fig_pareto.png", dpi=300)
     plt.close(fig)
     print("✓  fig_pareto.png")

@@ -13,6 +13,8 @@
 % ---- Typography & spacing ----------------------------------
 \usepackage{microtype}
 \usepackage{setspace}
+\hyphenpenalty=10000
+\exhyphenpenalty=10000
 \setlength{\parindent}{0pt}
 
 % ---- Mathematics -------------------------------------------
@@ -201,32 +203,45 @@ University of Science and Technology in Krakow}}}
 
 % ---- Abstract ----------------------------------------------
 \begin{abstract}
-One of the most powerful applications enabled by large language models (LLMs) is
-sophisticated question-answering, advisory, and decision support.
-The quality of such applications can be significantly enhanced through
-Retrieval-Augmented Generation (RAG) --- a technique that grounds model responses
-in external, domain-specific knowledge retrieved at inference time.
+Large language models have made it genuinely possible to build useful question-answering
+and clinical decision-support tools --- something that seemed out of reach just a few
+years ago.
+Getting these systems to actually be trustworthy, however, is considerably harder than
+it first appears.
+Retrieval-Augmented Generation (RAG) is the most widely adopted approach to that
+problem: instead of relying on knowledge baked into model weights at training time,
+it fetches relevant documents at query time and conditions the response on what
+was actually retrieved.
 
-This thesis presents a technology analysis of state-of-the-art RAG architectures
-and the design of an experimental advisory system for the medical domain,
-specifically targeting the discovery of potential drug--drug interactions (DDI).
-We survey eight families of RAG architectures --- from the vanilla
-retrieve-then-generate pipeline through Self-RAG, Corrective RAG, and agentic
-multi-agent approaches --- and introduce RARE-RAG
-(\textit{Risk-Aware Routed Evidence-graph RAG}), a novel architecture that
-combines query complexity routing, hybrid evidence retrieval, set-wise evidence
-selection, and a grounding verifier with abstention capability.
+This thesis looks at how different RAG architectures compare when put to work on a
+concrete medical problem: detecting potential drug--drug interactions (DDI) for
+patients prescribed multiple medications by different specialists.
+Eight families of RAG architectures are surveyed, ranging from the basic
+retrieve-then-generate pipeline all the way to Self-RAG, Corrective RAG, and
+multi-agent debate systems.
+The thesis also introduces RARE-RAG (\textit{Risk-Aware Routed Evidence-graph RAG}),
+a novel architecture that classifies query complexity before deciding which pipeline
+to run, retrieves evidence using hybrid BM25-plus-vector search, picks the most
+complementary set of passages rather than just the top-ranked ones, and verifies
+grounding before returning a response --- or explicitly declines to answer when the
+evidence is too thin.
 
-An empirical evaluation on the HotpotQA benchmark (9{,}000 question--answer pairs
-across nine RAG modes) shows that RARE-RAG achieves the highest faithfulness score
-(0.976) among all evaluated architectures, while maintaining competitive answer
-accuracy (Token~F1: 0.543). The system is implemented as an open-source
-microservice platform comprising 14 services with configurable RAG strategies.
+Experiments on two benchmarks --- HotpotQA ($9 \times 1{,}000$ question--answer
+pairs) and a purpose-built DDI benchmark ($9 \times 100$ queries across five
+clinical difficulty levels --- show that RARE-RAG achieves the highest faithfulness
+(0.976) on HotpotQA and the best answer correctness on the hardest DDI questions
+(L5, expert PK/PD: 0.470).
+For the medical domain specifically, Query Rewriting turns out to offer the best
+overall quality--latency balance (faithfulness 0.795, answer correctness 0.539).
+All nine architectures were evaluated on the same open-source microservice platform,
+comprising 14 independently deployable services with configurable RAG strategies
+and RAGAS-based automated evaluation.
 
 \bigskip
 \noindent\textbf{Keywords:} Retrieval-Augmented Generation, Large Language Models,
-drug interaction detection, decision support systems, multi-agent RAG, faithfulness,
-RAGAS evaluation, microservices, HotpotQA
+drug--drug interaction detection, clinical decision support, RARE-RAG,
+query complexity routing, faithfulness, RAGAS evaluation, microservices,
+HotpotQA, DrugBank, polypharmacy
 \end{abstract}
 
 

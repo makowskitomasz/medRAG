@@ -1,337 +1,303 @@
-"""Regenerate c4_container.png using matplotlib."""
+"""Generate C4 container diagram (level 2) for medRAG."""
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch as FBP
+import matplotlib.patches as mpatches
 
-# ── colour palette ────────────────────────────────────────────────────────────
+# Colors
 BLUE_F = "#dce6f7"
 BLUE_E = "#6b8ec7"
-ORAN_F = "#fdeac8"
-ORAN_E = "#c07828"
+ORAN_F = "#fde8cc"
+ORAN_E = "#d08040"
+GREEN_F = "#d5f0dc"
+GREEN_E = "#5aaa6a"
 GRAY_F = "#ebebeb"
 GRAY_E = "#aaaaaa"
-GRN_F = "#d5f0dc"
-GRN_E = "#5aaa6a"
-PINK_F = "#fde2ec"
-PINK_E = "#cc5577"
-DB_F = "#f0f0f0"
-DB_E = "#999999"
-ARROW = "#666666"
+PURPLE_F = "#e8dff5"
+PURPLE_E = "#8b6bbd"
+ARROW = "#555555"
+
+# Smaller boxes
+BW, BH = 1.3, 0.55  # box width, height
+CW, CH = 1.2, 0.5  # cylinder width, height
+HEAD_LEN = 0.04
+HEAD_W = 0.025
 
 
-def rbox(ax, cx, cy, w, h, title, port="", face=BLUE_F, edge=BLUE_E, fs=8.5):
-    p = FBP(
+def rbox(ax, cx, cy, w, h, lines, face, edge, fs=7):
+    from matplotlib.patches import Rectangle
+
+    p = Rectangle(
         (cx - w / 2, cy - h / 2),
         w,
         h,
-        boxstyle="round,pad=0.07",
-        linewidth=0.9,
+        linewidth=0.8,
         edgecolor=edge,
         facecolor=face,
         zorder=2,
     )
     ax.add_patch(p)
-    if port:
-        ax.text(
-            cx,
-            cy + 0.10,
-            title,
-            ha="center",
-            va="center",
-            fontsize=fs,
-            fontweight="bold",
-            zorder=3,
-        )
-        ax.text(
-            cx,
-            cy - 0.13,
-            port,
-            ha="center",
-            va="center",
-            fontsize=7.0,
-            color="#555555",
-            zorder=3,
-        )
-    else:
-        ax.text(
-            cx,
-            cy,
-            title,
-            ha="center",
-            va="center",
-            fontsize=fs,
-            fontweight="bold",
-            zorder=3,
-        )
-
-
-def actor(ax, cx, cy, w, h, title, subtitle=""):
-    p = FBP(
-        (cx - w / 2, cy - h / 2),
-        w,
-        h,
-        boxstyle="round,pad=0.07",
-        linewidth=0.9,
-        edgecolor=GRAY_E,
-        facecolor=GRAY_F,
-        zorder=2,
-    )
-    ax.add_patch(p)
     ax.text(
         cx,
-        cy + 0.08,
-        title,
+        cy,
+        "\n".join(lines),
         ha="center",
         va="center",
-        fontsize=8.5,
-        fontweight="bold",
+        fontsize=fs,
+        multialignment="center",
+        fontfamily="DejaVu Sans",
         zorder=3,
     )
-    if subtitle:
-        ax.text(
-            cx,
-            cy - 0.13,
-            subtitle,
-            ha="center",
-            va="center",
-            fontsize=6.5,
-            color="#666666",
-            zorder=3,
-        )
 
 
-def cylinder(ax, cx, cy, w, h, label, sublabel=""):
-    ew = w
-    eh = 0.22
+def cylinder(ax, cx, cy, w, h, lines, fs=7):
+    eh = 0.12
     body = FBP(
         (cx - w / 2, cy - h / 2),
         w,
         h,
         boxstyle="square,pad=0",
-        linewidth=0.9,
-        edgecolor=DB_E,
-        facecolor=DB_F,
+        linewidth=0.8,
+        edgecolor=GRAY_E,
+        facecolor=GRAY_F,
         zorder=2,
     )
     ax.add_patch(body)
     top = mpatches.Ellipse(
         (cx, cy + h / 2),
-        ew,
+        w,
         eh,
-        linewidth=0.9,
-        edgecolor=DB_E,
-        facecolor=DB_F,
+        linewidth=0.8,
+        edgecolor=GRAY_E,
+        facecolor=GRAY_F,
         zorder=3,
     )
     ax.add_patch(top)
     bot = mpatches.Arc(
         (cx, cy - h / 2),
-        ew,
+        w,
         eh,
         theta1=180,
         theta2=360,
-        linewidth=0.9,
-        edgecolor=DB_E,
+        linewidth=0.8,
+        edgecolor=GRAY_E,
         zorder=3,
     )
     ax.add_patch(bot)
     ax.text(
         cx,
-        cy + 0.07,
-        label,
+        cy,
+        "\n".join(lines),
         ha="center",
         va="center",
-        fontsize=8.5,
-        fontweight="bold",
+        fontsize=fs,
+        multialignment="center",
         zorder=4,
     )
-    if sublabel:
-        ax.text(
-            cx,
-            cy - 0.14,
-            sublabel,
-            ha="center",
-            va="center",
-            fontsize=7.0,
-            color="#555555",
-            zorder=4,
-        )
 
 
-def group_box(ax, x0, y0, x1, y1, label, face="#f5f5ff", edge=BLUE_E, ls="dashed"):
-    w = x1 - x0
-    h = y1 - y0
-    p = FBP(
-        (x0, y0),
-        w,
-        h,
-        boxstyle="round,pad=0.05",
-        linewidth=1.0,
-        edgecolor=edge,
-        facecolor=face,
-        linestyle=ls,
-        zorder=1,
-        alpha=0.5,
-    )
-    ax.add_patch(p)
+def section_label(ax, x, y, text):
     ax.text(
-        (x0 + x1) / 2,
-        y1 - 0.13,
-        label,
-        ha="center",
-        va="top",
+        x,
+        y,
+        text,
+        ha="left",
+        va="center",
         fontsize=8,
-        color=edge,
         fontweight="bold",
-        zorder=2,
+        color="#444444",
+        zorder=5,
     )
 
 
-def arr(ax, x0, y0, x1, y1, lbl="", dash=False, lw=0.9):
-    ls = "--" if dash else "-"
-    ax.annotate(
-        "",
-        xy=(x1, y1),
-        xytext=(x0, y0),
-        arrowprops=dict(arrowstyle="-|>", color=ARROW, lw=lw, linestyle=ls),
-        zorder=1,
+def arr(ax, x0, y0, x1, y1, dashed=False):
+    dx, dy = x1 - x0, y1 - y0
+    length = (dx**2 + dy**2) ** 0.5
+    if length < 1e-6:
+        return
+    ux, uy = dx / length, dy / length
+    px, py = -uy, ux
+    bx = x1 - ux * HEAD_LEN
+    by = y1 - uy * HEAD_LEN
+    style = "--" if dashed else "-"
+    ax.plot(
+        [x0, bx],
+        [y0, by],
+        color=ARROW,
+        lw=0.8,
+        ls=style,
+        zorder=4,
+        solid_capstyle="butt",
     )
-    if lbl:
-        mx, my = (x0 + x1) / 2, (y0 + y1) / 2
-        ax.text(
-            mx + 0.05,
-            my + 0.10,
-            lbl,
-            ha="center",
-            va="center",
-            fontsize=7,
-            color="#777777",
-            style="italic",
-        )
+    tri = plt.Polygon(
+        [
+            (x1, y1),
+            (bx + px * HEAD_W, by + py * HEAD_W),
+            (bx - px * HEAD_W, by - py * HEAD_W),
+        ],
+        closed=True,
+        facecolor=ARROW,
+        edgecolor=ARROW,
+        zorder=4,
+    )
+    ax.add_patch(tri)
 
 
-# ── canvas ────────────────────────────────────────────────────────────────────
-fig, ax = plt.subplots(figsize=(10, 14))
-ax.set_xlim(0, 10)
-ax.set_ylim(0, 14)
+fig, ax = plt.subplots(figsize=(12, 8))
+ax.set_xlim(0, 12)
+ax.set_ylim(0, 8)
 ax.axis("off")
 
-# ── actors (top) ──────────────────────────────────────────────────────────────
-actor(ax, 2.0, 13.2, 1.8, 0.60, "User", "REST / SSE")
-actor(ax, 5.5, 13.2, 1.8, 0.60, "Admin User", "REST")
+# Spacing - exact half dimensions for arrow endpoints
+hw, hh = BW / 2, BH / 2
+chw, chh = CW / 2, CH / 2
 
-# ── api-gateway ───────────────────────────────────────────────────────────────
-rbox(ax, 3.5, 12.0, 2.2, 0.58, "api-gateway", ":8000")
+# Row Y positions
+ROW1 = 7.0  # top row (gateway, orchestrator, query-processor, admin)
+ROW2 = 5.8  # second row (auth, retrieval, reranker, generation, eval)
+ROW3 = 4.0  # ingestion pipeline
+ROW4 = 2.6  # data stores
+ROW5 = 1.2  # RabbitMQ
 
-# ── auth ──────────────────────────────────────────────────────────────────────
-rbox(ax, 7.0, 12.0, 1.8, 0.58, "auth", ":8001")
+# Column X positions (centered layout)
+C_GW = 1.0  # gateway/auth
+C_ORCH = 3.0  # orchestrator
+C_QP = 4.5  # query-processor
+C_RET = 3.0  # retrieval
+C_RER = 4.5  # reranker
+C_GEN = 6.0  # generation
+C_ADM = 8.0  # admin/eval
+C_ING = 1.0  # ingestion
+C_PAR = 2.5  # parser
+C_CHU = 4.0  # chunking
+C_EMB = 5.5  # embedding
+C_IDX = 7.0  # indexing
+C_DB = 10.0  # MongoDB/Weaviate
+C_MQ = 4.0  # RabbitMQ
 
-# ── Query Pipeline group ──────────────────────────────────────────────────────
-group_box(ax, 0.5, 7.8, 4.5, 11.4, "Query Pipeline", face="#f0f4ff", edge=BLUE_E)
+# === SECTION LABELS ===
+section_label(ax, 0.3, 7.6, "Gateway & Auth")
+section_label(ax, 2.5, 7.6, "Query Pipeline (sync)")
+section_label(ax, 0.3, 4.6, "Ingestion Pipeline (async)")
+section_label(ax, 7.5, 7.6, "Admin & Eval")
+section_label(ax, 9.0, 3.5, "Data Stores")
 
-QX = 2.5
-for i, (svc, port) in enumerate(
-    [
-        ("orchestrator", ":8002"),
-        ("query-processor", ":8003"),
-        ("retrieval", ":8004"),
-        ("reranker", ":8005"),
-        ("generation", ":8006"),
-    ]
-):
-    y = 11.0 - i * 0.68
-    rbox(ax, QX, y, 2.8, 0.52, svc, port)
+# === BOXES ===
+# Gateway & Auth
+rbox(ax, C_GW, ROW1, BW, BH, ["api-gateway", "(8000)"], BLUE_F, BLUE_E)
+rbox(ax, C_GW, ROW2, BW, BH, ["auth", "(8001)"], BLUE_F, BLUE_E)
 
-# ── Ingestion Pipeline group ──────────────────────────────────────────────────
-group_box(ax, 5.3, 7.8, 9.5, 11.4, "Ingestion Pipeline", face="#fff8f0", edge=ORAN_E)
+# Query Pipeline
+rbox(ax, C_ORCH, ROW1, BW, BH, ["orchestrator", "(8002)"], BLUE_F, BLUE_E)
+rbox(ax, C_QP, ROW1, BW, BH, ["query-proc", "(8003)"], BLUE_F, BLUE_E)
+rbox(ax, C_RET, ROW2, BW, BH, ["retrieval", "(8004)"], BLUE_F, BLUE_E)
+rbox(ax, C_RER, ROW2, BW, BH, ["reranker", "(8005)"], BLUE_F, BLUE_E)
+rbox(ax, C_GEN, ROW2, BW, BH, ["generation", "(8006)"], BLUE_F, BLUE_E)
 
-IX = 7.4
-rbox(ax, IX, 11.0, 2.2, 0.52, "ingestion", ":8007")
-rbox(ax, IX, 10.3, 2.2, 0.52, "RabbitMQ broker", "async events", ORAN_F, ORAN_E)
-for i, (svc, port) in enumerate(
-    [
-        ("parser", ":8008"),
-        ("chunking", ":8009"),
-        ("embedding", ":8010"),
-        ("indexing", ":8011"),
-    ]
-):
-    y = 9.6 - i * 0.60
-    rbox(ax, IX, y, 2.2, 0.48, svc, port)
+# Ingestion Pipeline
+rbox(ax, C_ING, ROW3, BW, BH, ["ingestion", "(8007)"], ORAN_F, ORAN_E)
+rbox(ax, C_PAR, ROW3, BW, BH, ["parser", "(8008)"], ORAN_F, ORAN_E)
+rbox(ax, C_CHU, ROW3, BW, BH, ["chunking", "(8009)"], ORAN_F, ORAN_E)
+rbox(ax, C_EMB, ROW3, BW, BH, ["embedding", "(8010)"], ORAN_F, ORAN_E)
+rbox(ax, C_IDX, ROW3, BW, BH, ["indexing", "(8011)"], ORAN_F, ORAN_E)
 
-# ── admin + eval ──────────────────────────────────────────────────────────────
-rbox(ax, 2.0, 7.1, 2.2, 0.52, "admin", ":8012")
-rbox(ax, 5.0, 7.1, 2.2, 0.52, "eval", ":8013")
+# Admin & Eval
+rbox(ax, C_ADM, ROW1, BW, BH, ["admin", "(8012)"], GREEN_F, GREEN_E)
+rbox(ax, C_ADM, ROW2, BW, BH, ["eval", "(8013)"], GREEN_F, GREEN_E)
 
-# ── Infrastructure ────────────────────────────────────────────────────────────
-group_box(
-    ax,
-    0.5,
-    5.0,
-    9.5,
-    6.6,
-    "Infrastructure",
-    face="#f5f5f5",
-    edge="#999999",
-    ls="dashed",
-)
+# Data Stores
+cylinder(ax, C_DB, ROW4 + 0.4, CW, CH, ["MongoDB"])
+cylinder(ax, C_DB, ROW4 - 0.4, CW, CH, ["Weaviate"])
 
-cylinder(ax, 2.0, 5.8, 2.0, 0.72, "MongoDB", ":27017")
-cylinder(ax, 5.0, 5.8, 2.0, 0.72, "Weaviate", ":8080")
-cylinder(ax, 8.0, 5.8, 2.0, 0.72, "RabbitMQ", ":5672")
+# RabbitMQ
+rbox(ax, C_MQ, ROW5, 1.5, BH, ["RabbitMQ"], PURPLE_F, PURPLE_E)
 
-# ── External APIs ─────────────────────────────────────────────────────────────
-group_box(
-    ax, 0.5, 2.8, 9.5, 4.4, "External APIs", face="#fff0f5", edge=PINK_E, ls="dashed"
-)
 
-rbox(ax, 2.8, 3.6, 3.0, 0.80, "Anthropic LLM", "claude-sonnet-4-6", PINK_F, PINK_E)
-rbox(ax, 7.2, 3.6, 3.0, 0.80, "Embedding Provider", "BGE-M3 / Cohere", PINK_F, PINK_E)
+# === ARROWS ===
+# Helper for L-shaped arrows (orthogonal routing)
+def L_arr(ax, x0, y0, x1, y1, corner, dashed=False):
+    """Draw L-shaped arrow: start->corner->end"""
+    cx, cy = corner
+    style = "--" if dashed else "-"
+    ax.plot([x0, cx], [y0, cy], color=ARROW, lw=0.8, ls=style, zorder=4)
+    arr(ax, cx, cy, x1, y1, dashed=dashed)
 
-# ── Arrows ────────────────────────────────────────────────────────────────────
-# User → api-gateway
-arr(ax, 2.0, 12.90, 2.8, 12.29)
-# Admin → api-gateway
-arr(ax, 5.5, 12.90, 4.6, 12.29)
-# api-gateway → auth (JWT check dashed)
-arr(ax, 4.60, 12.00, 6.10, 12.00, "JWT check", dash=True)
-# api-gateway → orchestrator
-arr(ax, 3.5, 11.71, 2.8, 11.24, "query")
-# api-gateway → ingestion
-arr(ax, 4.40, 11.71, 6.30, 11.24, "upload")
-# orchestrator → query-processor
-arr(ax, 2.5, 10.74, 2.5, 10.56)
-# query-processor → retrieval
-arr(ax, 2.5, 10.08, 2.5, 9.90)
-# retrieval → reranker
-arr(ax, 2.5, 9.42, 2.5, 9.24)
-# reranker → generation
-arr(ax, 2.5, 8.76, 2.5, 8.58)
-# ingestion → RabbitMQ broker
-arr(ax, 7.4, 10.74, 7.4, 10.56)
-# RabbitMQ broker → parser
-arr(ax, 7.4, 10.08, 7.4, 9.90)
-# parser → chunking
-arr(ax, 7.4, 9.42, 7.4, 9.24)
-# chunking → embedding
-arr(ax, 7.4, 8.76, 7.4, 8.58)
-# embedding → indexing
-arr(ax, 7.4, 8.10, 7.4, 7.92)
-# query pipeline → MongoDB
-arr(ax, 2.5, 7.80, 2.0, 6.16)
-# indexing → Weaviate
-arr(ax, 7.4, 7.54, 5.2, 6.16)
-# ingestion → MongoDB
-arr(ax, 6.30, 11.00, 2.8, 6.16, dash=True)
-# generation → Anthropic
-arr(ax, 2.5, 8.32, 2.2, 4.00, dash=True)
-# embedding → Embedding Provider
-arr(ax, 7.4, 7.80, 6.6, 4.00, dash=True)
 
-plt.tight_layout(pad=0.2)
+# Gateway & Auth
+arr(ax, C_GW, ROW1 - hh, C_GW, ROW2 + hh)  # gateway -> auth
+arr(ax, C_GW + hw, ROW1, C_ORCH - hw, ROW1)  # gateway -> orchestrator
+
+# Query Pipeline
+arr(ax, C_ORCH + hw, ROW1, C_QP - hw, ROW1)  # orchestrator -> query-processor
+arr(ax, C_ORCH, ROW1 - hh, C_RET, ROW2 + hh)  # orchestrator -> retrieval
+arr(ax, C_RET + hw, ROW2, C_RER - hw, ROW2)  # retrieval -> reranker
+arr(ax, C_RER + hw, ROW2, C_GEN - hw, ROW2)  # reranker -> generation
+
+# Ingestion Pipeline (dashed)
+arr(ax, C_ING + hw, ROW3, C_PAR - hw, ROW3, dashed=True)
+arr(ax, C_PAR + hw, ROW3, C_CHU - hw, ROW3, dashed=True)
+arr(ax, C_CHU + hw, ROW3, C_EMB - hw, ROW3, dashed=True)
+arr(ax, C_EMB + hw, ROW3, C_IDX - hw, ROW3, dashed=True)
+
+# Ingestion -> RabbitMQ (L-shape: down then right)
+MQ_HW = 0.75  # RabbitMQ half-width
+L_arr(ax, C_ING, ROW3 - hh, C_MQ - MQ_HW, ROW5, (C_ING, ROW5), dashed=True)
+
+# Retrieval -> Weaviate (down from retrieval, right above ingestion, down after indexing, then to Weaviate)
+ABOVE_ING_Y = ROW3 + hh + 0.15  # above ingestion pipeline
+AFTER_IDX_X = C_IDX + hw + 0.15  # after indexing
+ax.plot(
+    [C_RET, C_RET], [ROW2 - hh, ABOVE_ING_Y], color=ARROW, lw=0.8, zorder=1
+)  # down from retrieval
+ax.plot(
+    [C_RET, AFTER_IDX_X], [ABOVE_ING_Y, ABOVE_ING_Y], color=ARROW, lw=0.8, zorder=1
+)  # right above ingestion
+ax.plot(
+    [AFTER_IDX_X, AFTER_IDX_X], [ABOVE_ING_Y, ROW4 - 0.4], color=ARROW, lw=0.8, zorder=1
+)  # down after indexing
+arr(ax, AFTER_IDX_X, ROW4 - 0.4, C_DB - chw, ROW4 - 0.4)  # right to Weaviate
+
+# Indexing -> Weaviate (down then right)
+WEAV_Y = ROW4 - 0.4
+MONGO_Y = ROW4 + 0.4
+IDX_WEAV_Y = WEAV_Y - 0.15  # at Weaviate level but lower than retrieval line
+ax.plot(
+    [C_IDX + 0.2, C_IDX + 0.2], [ROW3 - hh, IDX_WEAV_Y], color=ARROW, lw=0.8, zorder=1
+)  # down from indexing
+arr(ax, C_IDX + 0.2, IDX_WEAV_Y, C_DB - chw, IDX_WEAV_Y)  # right to Weaviate left edge
+
+# Indexing -> MongoDB (down then right)
+ax.plot(
+    [C_IDX, C_IDX], [ROW3 - hh, MONGO_Y], color=ARROW, lw=0.8, zorder=1
+)  # down from indexing
+arr(ax, C_IDX, MONGO_Y, C_DB - chw, MONGO_Y)  # right to MongoDB
+
+# Eval -> RabbitMQ (route right of indexing, then down, then left)
+EVAL_RIGHT_X = (
+    C_IDX + hw + 0.3
+)  # right of indexing (offset from retrieval->weaviate line)
+ax.plot(
+    [C_ADM - hw, EVAL_RIGHT_X], [ROW2, ROW2], color=ARROW, lw=0.8, ls="--", zorder=1
+)  # left from eval
+ax.plot(
+    [EVAL_RIGHT_X, EVAL_RIGHT_X], [ROW2, ROW5], color=ARROW, lw=0.8, ls="--", zorder=1
+)  # down
+arr(ax, EVAL_RIGHT_X, ROW5, C_MQ + MQ_HW, ROW5, dashed=True)  # left to RabbitMQ
+
+# Admin -> MongoDB (right then down to MongoDB top)
+ax.plot(
+    [C_ADM + hw, C_DB], [ROW1, ROW1], color=ARROW, lw=0.8, zorder=1
+)  # right from admin
+arr(ax, C_DB, ROW1, C_DB, MONGO_Y + chh + 0.08)  # down to MongoDB top
+
+# Eval -> MongoDB (right then down)
+ax.plot(
+    [C_ADM + hw, C_DB + 0.15], [ROW2, ROW2], color=ARROW, lw=0.8, zorder=1
+)  # right from eval
+arr(ax, C_DB + 0.15, ROW2, C_DB + 0.15, MONGO_Y + chh + 0.08)  # down to MongoDB top
+
 plt.savefig("c4_container.png", dpi=200, bbox_inches="tight")
 print("Saved c4_container.png")
