@@ -12,17 +12,23 @@ from app.schemas.generation_schemas import (
     CorrectnessResult,
     EvaluationRequest,
     EvaluationResult,
+    ExtractRequest,
+    ExtractResult,
     GenerationRequest,
     GenerationResult,
+    VerifyClaimsRequest,
+    VerifyClaimsResult,
 )
 from app.services.generation_service import (
     assess_correctness,
     detect_conflict,
     evaluate_answer,
+    extract_finding,
     generate,
     generate_stream,
     get_instructor_client,
     get_llm_client,
+    verify_claims,
 )
 
 router = APIRouter()
@@ -66,6 +72,26 @@ async def conflict_detection(
     model = cfg.llm_model
     iclient = get_instructor_client(cfg.llm_base_url, cfg.resolved_api_key, model)
     return await detect_conflict(request, iclient, model)
+
+
+@router.post("/extract", response_model=ExtractResult)
+async def extract(
+    request: ExtractRequest,
+    cfg: Settings = Depends(get_settings),
+) -> ExtractResult:
+    model = request.llm_model or cfg.llm_model
+    iclient = get_instructor_client(cfg.llm_base_url, cfg.resolved_api_key, model)
+    return await extract_finding(request, iclient, model)
+
+
+@router.post("/verify_claims", response_model=VerifyClaimsResult)
+async def verify(
+    request: VerifyClaimsRequest,
+    cfg: Settings = Depends(get_settings),
+) -> VerifyClaimsResult:
+    model = request.llm_model or cfg.llm_model
+    iclient = get_instructor_client(cfg.llm_base_url, cfg.resolved_api_key, model)
+    return await verify_claims(request, iclient, model)
 
 
 @router.post("/correctness", response_model=CorrectnessResult)

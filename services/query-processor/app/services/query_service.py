@@ -2,6 +2,7 @@ import instructor
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
+from app.schemas.query_schemas import PlanStep
 from app.services.llm_client import chat_complete
 from app.services.prompt_loader import render
 
@@ -91,6 +92,46 @@ async def decompose_query(
     usage = completion.usage
     return (
         result.sub_questions,
+        usage.prompt_tokens if usage else 0,
+        usage.completion_tokens if usage else 0,
+    )
+
+
+class _PlanResult(BaseModel):
+    steps: list[PlanStep] = Field(
+        description="Sub-tasks for the Executor agents.",
+        min_length=1,
+        max_length=4,
+    )
+
+    model_config = {"json_schema_extra": {"required": ["steps"]}}
+
+
+async def plan_query(
+    query: str,
+    client: instructor.AsyncInstructor,
+    model: str,
+    max_steps: int = 4,
+    prompt_overrides: dict[str, str] | None = None,
+) -> tuple[list[PlanStep], int, int]:
+    """Planner agent: split the query into independent Executor sub-tasks."""
+    system = (prompt_overrides or {}).get("plan_system") or render(
+        "plan_system.j2",
+        max_steps=max_steps,
+        domain="drug interactions and pharmacology",
+    )
+    result, completion = await client.chat.completions.create_with_completion(
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": f"Plan the sub-tasks for this question: {query}"},
+        ],
+        response_model=_PlanResult,
+        max_retries=_MAX_RETRIES,
+    )
+    usage = completion.usage
+    return (
+        result.steps[:max_steps],
         usage.prompt_tokens if usage else 0,
         usage.completion_tokens if usage else 0,
     )

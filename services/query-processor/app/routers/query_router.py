@@ -8,6 +8,8 @@ from app.schemas.query_schemas import (
     DecomposeResponse,
     HyDERequest,
     HyDEResponse,
+    PlanRequest,
+    PlanResponse,
     QueryRewriteRequest,
     QueryRewriteResponse,
     TriageRequest,
@@ -17,6 +19,7 @@ from app.services.llm_client import get_instructor_client, get_llm_client
 from app.services.query_service import (
     decompose_query,
     generate_hypothetical_document,
+    plan_query,
     rewrite_query,
     triage_query,
 )
@@ -89,6 +92,27 @@ async def decompose(
     return DecomposeResponse(
         original_query=request.query,
         sub_questions=sub_questions,
+        input_tokens=inp,
+        output_tokens=out,
+    )
+
+
+@router.post("/plan", response_model=PlanResponse)
+async def plan(
+    request: PlanRequest,
+    cfg: Settings = Depends(get_settings),
+    iclient: instructor.AsyncInstructor = Depends(get_iclient),
+) -> PlanResponse:
+    steps, inp, out = await plan_query(
+        request.query,
+        iclient,
+        request.llm_model or cfg.llm_model,
+        max_steps=request.max_steps,
+        prompt_overrides=request.prompt_overrides,
+    )
+    return PlanResponse(
+        original_query=request.query,
+        steps=steps,
         input_tokens=inp,
         output_tokens=out,
     )
