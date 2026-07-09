@@ -7,7 +7,7 @@ from app.pipelines.corrective_rag import CorrectiveRagPipeline
 from app.pipelines.factory import get_pipeline
 from app.pipelines.hyde import HydePipeline
 from app.pipelines.iterative_multihop import IterativeMultiHopPipeline
-from app.pipelines.madam_rag import MadamRagPipeline
+from app.pipelines.madam_rag import _AGENTS, MadamRagPipeline
 from app.pipelines.multi_agent import MultiAgentPipeline
 from app.pipelines.query_rewriting import QueryRewritingPipeline
 from app.pipelines.rare_rag import RareRagPipeline
@@ -248,17 +248,16 @@ async def test_iterative_multihop_deduplicates_across_sub_questions():
 
 
 @pytest.mark.asyncio
-async def test_madam_rag_uses_cautious_query_when_conflict_detected():
+async def test_madam_rag_debates_then_judges():
     http = MagicMock()
     settings = MagicMock()
     pipeline = MadamRagPipeline(http, settings)
 
     chunks = [{"chunk_id": "c1", "content": "text", "score": 0.8}]
 
-    pipeline._perspective_retrieve = AsyncMock(return_value=chunks)
-    pipeline._detect_conflict = AsyncMock(return_value=(True, 0.9))
+    pipeline._agent_retrieve = AsyncMock(return_value=chunks)
     pipeline._rerank = AsyncMock(return_value=chunks)
-    pipeline._generate = AsyncMock(return_value=("cautious answer", []))
+    pipeline._generate = AsyncMock(return_value=("answer", []))
 
     result = await pipeline.run(
         query="Is warfarin safe?",
@@ -271,38 +270,34 @@ async def test_madam_rag_uses_cautious_query_when_conflict_detected():
         rerank_top_n=3,
     )
 
-    generate_call_query = pipeline._generate.call_args[0][0]
-    assert "conflicting" in generate_call_query.lower() or "NOTE" in generate_call_query
-    assert result.answer == "cautious answer"
+    # 2 candidate answers + 2 revisions + 1 judge
+    assert pipeline._generate.await_count == 5
+    assert result.answer == "answer"
+
+    judge_kwargs = pipeline._generate.call_args.kwargs
+    assert "judge" in judge_kwargs["task_instructions"].lower()
+    assert len(judge_kwargs["evidence_notes"]) == 2
 
 
 @pytest.mark.asyncio
-async def test_madam_rag_no_cautious_query_when_no_conflict():
+async def test_madam_rag_revision_sees_opposing_answer():
     http = MagicMock()
     settings = MagicMock()
     pipeline = MadamRagPipeline(http, settings)
 
     chunks = [{"chunk_id": "c1", "content": "text", "score": 0.8}]
-
-    pipeline._perspective_retrieve = AsyncMock(return_value=chunks)
-    pipeline._detect_conflict = AsyncMock(return_value=(False, 0.1))
+    pipeline._agent_retrieve = AsyncMock(return_value=chunks)
     pipeline._rerank = AsyncMock(return_value=chunks)
-    pipeline._generate = AsyncMock(return_value=("normal answer", []))
+    pipeline._generate = AsyncMock(side_effect=[("draft-A", []), ("draft-B", []), ("x", [])] * 2)
 
-    result = await pipeline.run(
-        query="What is warfarin?",
-        project_id="proj-1",
-        conversation_id="conv-1",
-        conversation_history=[],
-        rag_mode="madam_rag",
-        top_k=9,
-        alpha=0.5,
-        rerank_top_n=3,
+    revised = await pipeline._revise(
+        _AGENTS[0], "q", chunks, own="draft-A", other="draft-B", other_name="Skeptic"
     )
 
-    generate_call_query = pipeline._generate.call_args[0][0]
-    assert generate_call_query == "What is warfarin?"
-    assert result.answer == "normal answer"
+    notes = pipeline._generate.call_args.kwargs["evidence_notes"]
+    assert any("draft-A" in n for n in notes)
+    assert any("draft-B" in n and "Skeptic" in n for n in notes)
+    assert revised == "draft-A"
 
 
 @pytest.mark.asyncio
@@ -318,7 +313,7 @@ async def test_rare_rag_routes_and_returns_answer_when_grounded():
 
     pipeline._triage = AsyncMock(return_value="vanilla")
     pipeline._retrieve = AsyncMock(return_value=chunks)
-    pipeline._evaluate_answer = AsyncMock(return_value=0.9)
+    pipeline._verify_claims = AsyncMock(return_value=0.9)
 
     from app.schemas.orchestrator_schemas import QueryResponse
 
@@ -359,7 +354,7 @@ async def test_rare_rag_abstains_when_grounding_too_low():
 
     pipeline._triage = AsyncMock(return_value="vanilla")
     pipeline._retrieve = AsyncMock(return_value=chunks)
-    pipeline._evaluate_answer = AsyncMock(return_value=0.1)
+    pipeline._verify_claims = AsyncMock(return_value=0.1)
 
     from app.schemas.orchestrator_schemas import QueryResponse
 

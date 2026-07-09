@@ -36,7 +36,12 @@ def build_messages(
     context_block = build_context_block(chunks)
     user_message = f"Context:\n{context_block}"
     if evidence_notes:
-        user_message += f"\n\nIntermediate findings:\n{build_notes_block(evidence_notes)}"
+        # [FINDING_N] labels only index the notes below; only [SOURCE_N] is a citable source,
+        # so citation extraction never sees a finding marker.
+        user_message += (
+            "\n\nIntermediate findings (internal notes — never cite a [FINDING_N] label "
+            f"in your answer):\n{build_notes_block(evidence_notes)}"
+        )
     user_message += f"\n\nQuestion: {query}"
 
     messages: list[dict] = [{"role": "system", "content": system}]

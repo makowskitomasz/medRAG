@@ -115,6 +115,8 @@ class RagPipeline(ABC):
         return resp.json()["chunks"]
 
     async def _rerank(self, query: str, chunks: list[dict], top_n: int) -> list[dict]:
+        if not chunks:
+            return []
         payload = {"query": query, "chunks": chunks, "top_n": top_n}
         resp = await self.http.post(f"{self.settings.reranker_url}/rerank", json=payload)
         resp.raise_for_status()
@@ -246,6 +248,19 @@ class RagPipeline(ABC):
             return "No supporting evidence found.", next_question_draft or ""
         return data.get("finding", ""), data.get("next_question", "")
 
+    async def _plan(self, query: str, max_steps: int = 4) -> list[dict]:
+        """Planner agent: decompose the query into independent sub-tasks."""
+        try:
+            data = await self._tracked_post(
+                f"{self.settings.query_processor_url}/plan",
+                {"query": query, "max_steps": max_steps},
+            )
+        except Exception as exc:
+            _logger.warning("planning failed, falling back to single step", error=str(exc))
+            return [{"sub_task": query, "focus": ""}]
+        steps: list[dict] = data.get("steps") or []
+        return steps or [{"sub_task": query, "focus": ""}]
+
     async def _verify_claims(self, answer: str, chunks: list[dict]) -> float:
         """Claim-level grounding score in [0, 1] (thesis §3.6)."""
         payload: dict = {"answer": answer, "chunks": chunks}
@@ -294,13 +309,20 @@ class RagPipeline(ABC):
         conversation_history: list[dict],
         conversation_id: str,
         rag_mode: str,
+        evidence_notes: list[str] | None = None,
+        task_instructions: str | None = None,
     ) -> AsyncGenerator[str, None]:
+        self._last_chunks = chunks
         payload: dict = {
             "query": query,
             "chunks": chunks,
             "conversation_history": conversation_history,
             "prompt_overrides": self.prompt_overrides,
         }
+        if evidence_notes:
+            payload["evidence_notes"] = evidence_notes
+        if task_instructions:
+            payload["task_instructions"] = task_instructions
         if self.llm_model:
             payload["llm_model"] = self.llm_model
         url = f"{self.settings.generation_url}/generate/stream"
