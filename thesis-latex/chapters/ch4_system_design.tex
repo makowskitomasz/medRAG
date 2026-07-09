@@ -36,9 +36,9 @@ MongoDB's \texttt{projects} collection.  Each project document carries a
 \texttt{multi\_agent}).  The orchestrator reads \texttt{rag\_mode} on each
 incoming request and instantiates the appropriate pipeline variant.  Adding a
 new strategy requires no changes to the caller: only the new implementation
-module and a mapping entry in the orchestrator's factory are needed.  This
-adherence to the Open--Closed Principle ensures that ablation experiments can
-be run by changing a single database field.
+module and a mapping entry in the orchestrator's factory are needed.  In
+practice this means that switching an ablation experiment from one RAG
+architecture to another is a single database field change.
 
 \paragraph{Decoupled, event-driven ingestion.}
 Document ingestion --- parsing, chunking, embedding, and indexing --- is an
@@ -279,9 +279,14 @@ orchestrator first calls the \texttt{query-processor} service, which asks the
 LLM to produce a hypothetical answer document~\cite{gao2022hyde}; that
 synthetic document is then encoded and used as the retrieval query instead of
 --- or concatenated with --- the original question.  In \texttt{self\_reflection}
-mode the orchestrator calls \texttt{query-processor} to iteratively refine the
-query based on an initial retrieved context~\cite{asai2024selfrag}, then
-re-retrieves before sending to generation.  In \texttt{multi\_agent} mode
+mode the orchestrator drafts a full answer, scores its own sufficiency with a
+separate LLM call, and --- if the score falls below a fixed threshold ---
+appends a refinement instruction to the query and re-retrieves before drafting
+again, for at most two iterations.  This is a deliberately simplified,
+prompt-based approximation of Self-RAG~\cite{asai2024selfrag}: it operates on the
+whole answer rather than emitting the per-segment reflection tokens
+(\cref{fig:selfrag}) that the original method requires, since those tokens
+depend on a fine-tuned decoder that is not used here.  In \texttt{multi\_agent} mode
 multiple parallel retrieval sub-queries are issued and their results are
 merged before reranking.  Because each mode is encapsulated behind the same
 \texttt{/process} endpoint of \texttt{query-processor}, the orchestrator's
@@ -449,10 +454,10 @@ is configured with an \emph{HNSW} (Hierarchical Navigable Small World) index,
 with \texttt{m=16} bidirectional connections per node and
 \texttt{efConstruction=64} neighbours explored during construction.  These
 values reflect commonly recommended defaults that balance index build time
-against query-time recall~\cite{malkov2018hnsw}.  Crucially, Weaviate is
-configured with \texttt{vectorizer: none}, meaning that it stores but does
-not compute vectors; all vectorisation is delegated to the \texttt{embedding}
-service.  After writing all vectors for a document, the indexing service
+against query-time recall~\cite{malkov2018hnsw}.  One detail matters here:
+Weaviate is configured with \texttt{vectorizer: none}, meaning that it stores
+but does not compute vectors; all vectorisation is delegated to the
+\texttt{embedding} service.  After writing all vectors for a document, the indexing service
 updates the document's status to \texttt{indexed} in MongoDB and publishes
 a \texttt{document.indexed} event that triggers a WebSocket notification
 to any open admin console sessions.
@@ -571,12 +576,11 @@ experimental datasets used in \cref{cha:evaluation} --- a few tens
 of thousands of drug-interaction chunks --- the index operates well within
 these limits.
 
-The \texttt{project\_id} filter applied to every query is a critical design
-choice.  Weaviate's \texttt{where} filter is evaluated at the index
-level before distance computation, which means that documents from other
-projects do not incur any scoring overhead and cannot leak into the result
-set.  This property is central to the security model described in
-\cref{sec:security}.
+The \texttt{project\_id} filter applied to every query does double duty.
+Weaviate's \texttt{where} filter is evaluated at the index
+level before distance computation, so documents from other
+projects incur no scoring overhead --- and cannot leak into the result
+set, a property the security model in \cref{sec:security} depends on.
 
 \subsection{Rationale for the Hybrid Store Architecture}
 
@@ -695,16 +699,7 @@ on the internal network.
 \section{Chapter Summary}
 \label{sec:design_summary}
 
-This chapter covered the full design of \medrag{} across six areas:
-the guiding principles, the system context with its two human actors and two
-external cloud dependencies, the decomposition into fourteen microservices and
-their communication topology, the synchronous query pipeline with its configurable
-RAG-mode strategy pattern, the asynchronous ingestion pipeline with its
-event-driven four-stage message flow, the dual-store data model combining MongoDB
-metadata with Weaviate vector search, and the three-layer security model that
-enforces project-level data isolation.
-
-The central design choice is the \emph{strategy pattern} applied uniformly
+The central design choice in \medrag{} is the \emph{strategy pattern} applied uniformly
 to chunking, embedding, and RAG mode selection: because all variant behaviour
 is expressed as a named string in a MongoDB document, the same running system
 can participate in ablation experiments across all four RAG architectures

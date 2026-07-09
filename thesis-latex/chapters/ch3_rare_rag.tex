@@ -312,11 +312,10 @@ the greedy approximation yields identical results across all development queries
 Once the LLM generates a response conditioned on the selected evidence,
 there is no guarantee that every claim in the response is actually supported
 by that evidence.
-Standard RAG generates an answer as long as it has retrieved \emph{something};
-whether the retrieved content justifies the claims in the response is never checked.
-For a medical advisory system, the distinction between retrieved evidence and
-model belief is clinically significant: evidence can be verified by the
-consulting pharmacist; model belief cannot.
+The model may fill gaps from parametric knowledge or extrapolate beyond what the
+passages say --- and, as argued in \cref{sec:rarerag_motivation}, a claim that
+cannot be traced to a retrieved passage cannot be verified by a consulting
+pharmacist.
 
 The grounding verifier addresses this by treating the retrieved passages as the
 authoritative source of truth for the generated response and auditing each

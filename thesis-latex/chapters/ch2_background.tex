@@ -127,7 +127,7 @@ The $\text{IDF}$ term down-weights terms that appear in many documents.
 
 Despite its simplicity, BM25 remains competitive on many benchmarks: on the
 BEIR heterogeneous retrieval benchmark~\cite{thakur2021beir}, it actually outperforms
-many neural retrievers on out-of-domain corpora, which is a somewhat surprising result.
+many neural retrievers on out-of-domain corpora.
 
 SPLADE~v2 extended the sparse paradigm to learned sparse representations,
 where a BERT encoder produces a sparse vector over the vocabulary rather than
@@ -295,7 +295,8 @@ Third, a language model generates the answer conditioned on that prompt.
 
 The appeal of this pipeline is its simplicity: each component can be independently
 swapped, and the only trainable interaction between them is through the prompt.
-\cref{fig:vanilla_rag} illustrates the three-stage flow.
+\cref{fig:vanilla_rag} illustrates the flow; its seven nodes group into the
+three stages of retrieval, augmentation, and generation.
 
 % ------------------------------------------------------------------
 % Figure 2.2 — Vanilla RAG Pipeline
@@ -349,8 +350,8 @@ any retrieval backend.
 \subsection{Self-RAG}
 \label{subsec:self_rag}
 
-Self-RAG~\cite{asai2024selfrag} represents a qualitative shift from the retrieve-then-
-generate paradigm to a \emph{generate-with-retrieval-on-demand} paradigm.
+Self-RAG~\cite{asai2024selfrag} represents a qualitative shift from the
+retrieve-then-generate paradigm to a \emph{generate-with-retrieval-on-demand} paradigm.
 The core idea is a set of special reflection tokens injected into the
 generation vocabulary: \texttt{[Retrieve]} signals that additional retrieval is needed;
 \texttt{[IsRel]}/\texttt{[IsNotRel]} judges whether a retrieved passage is relevant;
@@ -684,10 +685,6 @@ than providing a plausible-sounding but unverified response.
 % ------------------------------------------------------------
 \section{Summary}
 \label{sec:background_summary}
-
-This chapter traced the development of RAG from its foundations in dense retrieval
-and the original Lewis \etal framework, through six families of increasingly
-sophisticated architectures, to the evaluation methodology used in this thesis.
 
 Looking across the surveyed architectures, three gaps stand out that motivate the
 \rarerag{} design in \cref{cha:rare_rag}.

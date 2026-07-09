@@ -154,10 +154,10 @@ the string value to the corresponding class, instantiates it (loading the model
 weights for \texttt{LocalBGEProvider}, or initialising the SDK client for the
 API-based providers), and stores the instance in the FastAPI application state.
 All endpoints that require embeddings declare a \texttt{Depends(get\_provider)}
-parameter; FastAPI resolves this dependency automatically.  Crucially, no
+parameter; FastAPI resolves this dependency automatically.  No
 business-logic code imports a concrete provider class --- only the abstract base
-class is imported, so changing the provider requires only an environment variable
-change, with no code modification.
+class --- so changing the provider is an environment variable change,
+nothing more.
 
 \subsection{Provider Trade-offs}
 

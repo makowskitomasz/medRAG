@@ -10,7 +10,7 @@ Seven metrics are evaluated: three overlap-based accuracy measures,
 three RAGAS-based RAG-quality indicators, and wall-clock query latency.
 The central question is whether \rarerag{} achieves higher faithfulness than
 competing architectures while remaining competitive on answer accuracy
-(\cref{hyp:faithfulness,hyp:routing} in \cref{cha:rare_rag}).
+(\cref{hyp:faithfulness,hyp:accuracy} in \cref{cha:rare_rag}).
 
 % ------------------------------------------------------------
 \section{Experimental Setup}
@@ -118,7 +118,8 @@ architecture requires.
     Vanilla         & Single retrieve-then-generate pass; no query transformation. \\
     HyDE            & Generates a hypothetical document from the query before retrieval. \\
     Query Rewriting & Rewrites the query to improve retrieval recall before retrieving. \\
-    Self-Reflection & Reflects on retrieved passages and regenerates if evidence is weak. \\
+    Self-Reflection & Drafts an answer, self-scores its sufficiency, and re-drafts
+                      once if the score is below threshold.\footnotemark \\
     Multi-Agent     & Multiple specialist agents vote on the final answer. \\
     Corrective RAG  & Validates retrieved passages and triggers a corrective retrieval
                       step if relevance is below threshold. \\
@@ -129,6 +130,9 @@ architecture requires.
     \bottomrule
   \end{tabularx}
 \end{table}
+\footnotetext{This mode is a prompt-based approximation of Self-RAG that operates
+on the whole answer, not the per-segment reflection-token mechanism of the
+original method~\cite{asai2024selfrag}; see \cref{sec:query_pipeline}.}
 
 \subsection{Hardware and Software Environment}
 \label{subsec:hw_env}
