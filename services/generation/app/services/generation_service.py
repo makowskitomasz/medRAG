@@ -3,8 +3,10 @@ from collections.abc import AsyncGenerator
 
 import instructor
 from openai import AsyncOpenAI
+from pydantic import BaseModel, Field
 
 from app.schemas.generation_schemas import (
+    ClaimVerdict,
     ConflictDetectionRequest,
     ConflictDetectionResult,
     ContextChunk,
@@ -12,14 +14,19 @@ from app.schemas.generation_schemas import (
     CorrectnessResult,
     EvaluationRequest,
     EvaluationResult,
+    ExtractRequest,
+    ExtractResult,
     GenerationRequest,
     GenerationResult,
+    VerifyClaimsRequest,
+    VerifyClaimsResult,
 )
 from app.services.citation_extractor import extract_citations
 from app.services.prompt_builder import build_messages
 from app.services.prompt_loader import render
 
 _MAX_RETRIES = 2
+_MAX_CLAIMS = 10
 
 _STRUCTURED_OUTPUTS_MODELS = {"openai/gpt-oss-120b"}
 
@@ -48,6 +55,17 @@ def get_instructor_client(
     return _instructor_clients[mode]
 
 
+def _messages_for(request: GenerationRequest) -> list[dict]:
+    return build_messages(
+        request.query,
+        request.chunks,
+        request.conversation_history,
+        request.prompt_overrides,
+        evidence_notes=request.evidence_notes,
+        task_instructions=request.task_instructions,
+    )
+
+
 async def generate(
     request: GenerationRequest,
     client: AsyncOpenAI,
@@ -55,9 +73,7 @@ async def generate(
     max_tokens: int,
     temperature: float,
 ) -> GenerationResult:
-    messages = build_messages(
-        request.query, request.chunks, request.conversation_history, request.prompt_overrides
-    )
+    messages = _messages_for(request)
     response = await client.chat.completions.create(
         model=model,
         messages=messages,
@@ -83,9 +99,7 @@ async def generate_stream(
     temperature: float,
 ) -> AsyncGenerator[str, None]:
     """Yields SSE-formatted strings. Final event contains citations JSON."""
-    messages = build_messages(
-        request.query, request.chunks, request.conversation_history, request.prompt_overrides
-    )
+    messages = _messages_for(request)
     full_answer: list[str] = []
 
     stream = await client.chat.completions.create(
@@ -171,6 +185,121 @@ async def detect_conflict(
     result.input_tokens = usage.prompt_tokens if usage else 0
     result.output_tokens = usage.completion_tokens if usage else 0
     return result
+
+
+async def extract_finding(
+    request: ExtractRequest,
+    client: instructor.AsyncInstructor,
+    model: str,
+) -> ExtractResult:
+    """One hop of a sequential retrieval chain: summarise evidence, refine the next hop."""
+    has_next = bool(request.next_question_draft)
+    system = render(
+        "extract_system.j2",
+        override=request.prompt_overrides.get("extract_system"),
+        has_next=has_next,
+    )
+    parts = [f"Overall question: {request.query}", f"Current sub-question: {request.sub_question}"]
+    if request.prior_findings:
+        established = "\n".join(f"- {f}" for f in request.prior_findings)
+        parts.append(f"Findings established so far:\n{established}")
+    if has_next:
+        parts.append(f"Draft of the next sub-question: {request.next_question_draft}")
+    parts.append(f"Retrieved passages:\n{_format_context(request.chunks)}")
+
+    result, completion = await client.chat.completions.create_with_completion(
+        model=model,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": "\n\n".join(parts)},
+        ],
+        response_model=ExtractResult,
+        max_retries=_MAX_RETRIES,
+    )
+    if not has_next:
+        result.next_question = ""
+    usage = completion.usage
+    result.input_tokens = usage.prompt_tokens if usage else 0
+    result.output_tokens = usage.completion_tokens if usage else 0
+    return result
+
+
+class _ClaimList(BaseModel):
+    claims: list[str] = Field(description="Atomic, self-contained factual claims.")
+
+    model_config = {"json_schema_extra": {"required": ["claims"]}}
+
+
+class _ClaimVerdicts(BaseModel):
+    verdicts: list[ClaimVerdict] = Field(description="One verdict per claim, in the given order.")
+
+    model_config = {"json_schema_extra": {"required": ["verdicts"]}}
+
+
+async def verify_claims(
+    request: VerifyClaimsRequest,
+    client: instructor.AsyncInstructor,
+    model: str,
+) -> VerifyClaimsResult:
+    """Claim-level grounding check: extract atomic claims, then verify each against context."""
+    extract_system = render(
+        "claim_extract_system.j2",
+        override=request.prompt_overrides.get("claim_extract_system"),
+        max_claims=_MAX_CLAIMS,
+    )
+    claim_list, claim_completion = await client.chat.completions.create_with_completion(
+        model=model,
+        messages=[
+            {"role": "system", "content": extract_system},
+            {"role": "user", "content": f"Answer:\n{request.answer}"},
+        ],
+        response_model=_ClaimList,
+        max_retries=_MAX_RETRIES,
+    )
+    usage = claim_completion.usage
+    input_tokens = usage.prompt_tokens if usage else 0
+    output_tokens = usage.completion_tokens if usage else 0
+
+    claims = [c.strip() for c in claim_list.claims[:_MAX_CLAIMS] if c.strip()]
+    if not claims:
+        # No factual content to audit (e.g. an explicit "I don't know"): treat as grounded.
+        return VerifyClaimsResult(
+            claims=[],
+            grounding_score=1.0,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+
+    verify_system = render(
+        "claim_verify_system.j2",
+        override=request.prompt_overrides.get("claim_verify_system"),
+    )
+    numbered = "\n".join(f"{i}. {c}" for i, c in enumerate(claims, start=1))
+    verdicts_result, verify_completion = await client.chat.completions.create_with_completion(
+        model=model,
+        messages=[
+            {"role": "system", "content": verify_system},
+            {
+                "role": "user",
+                "content": (f"Passages:\n{_format_context(request.chunks)}\n\nClaims:\n{numbered}"),
+            },
+        ],
+        response_model=_ClaimVerdicts,
+        max_retries=_MAX_RETRIES,
+    )
+    usage = verify_completion.usage
+    input_tokens += usage.prompt_tokens if usage else 0
+    output_tokens += usage.completion_tokens if usage else 0
+
+    # The model may return fewer verdicts than claims; unmatched claims count as unsupported.
+    verdicts = verdicts_result.verdicts[: len(claims)]
+    supported = sum(1 for v in verdicts if v.supported)
+    return VerifyClaimsResult(
+        claims=verdicts,
+        grounding_score=supported / len(claims),
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
 
 
 async def assess_correctness(

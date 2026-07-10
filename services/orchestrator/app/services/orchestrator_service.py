@@ -43,6 +43,7 @@ async def handle_query(
     overrides = dict(project_settings.prompt_overrides)
     pipeline = get_pipeline(rag_mode, http_client, settings, overrides)
     pipeline.llm_model = project_settings.llm_model or None
+    pipeline.max_hops = project_settings.max_hops
 
     t0 = time.monotonic()
     result = await pipeline.run(
@@ -106,6 +107,7 @@ async def handle_query_stream(
     overrides = dict(project_settings.prompt_overrides)
     pipeline = get_pipeline(rag_mode, http_client, settings, overrides)
     pipeline.llm_model = project_settings.llm_model or None
+    pipeline.max_hops = project_settings.max_hops
 
     answer_parts: list[str] = []
     captured_citations: list[dict] = []
