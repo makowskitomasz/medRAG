@@ -8,55 +8,39 @@ import matplotlib.pyplot as plt
 fig, ax = plt.subplots(figsize=(9, 7))
 
 # ── data ──────────────────────────────────────────────────────────────────────
-# (name, x, y, size, color, bold_outline)
+# Qualitative positioning map: coordinates are conceptual, not measured.
+# All markers are the same size (size carries no data); rare-rag is highlighted
+# only by a bold green outline to mark it as this thesis's architecture.
+# (name, x, y, color, bold_outline)
+_SZ = 650
 points = [
-    ("Vanilla RAG", 0.12, 0.08, 900, "#8080cc", False),
-    ("HyDE", 0.30, 0.11, 500, "#80b0e0", False),
-    ("Self-RAG", 0.50, 0.43, 700, "#e0a060", False),
-    ("Graph RAG", 0.27, 0.58, 700, "#e07090", False),
-    ("Corr. RAG", 0.53, 0.28, 400, "#80cccc", False),
-    ("Iter. Multi-hop", 0.64, 0.57, 650, "#60aaaa", False),
-    ("MADAM-RAG", 0.68, 0.82, 700, "#e08080", False),
-    ("rare-rag", 0.85, 0.70, 1400, "#60c060", True),
+    ("Vanilla RAG", 0.12, 0.08, "#8080cc", False),
+    ("HyDE", 0.30, 0.11, "#80b0e0", False),
+    ("Self-RAG", 0.50, 0.43, "#e0a060", False),
+    ("Graph RAG", 0.27, 0.58, "#e07090", False),
+    ("Corr. RAG", 0.53, 0.28, "#80cccc", False),
+    ("Iter. Multi-hop", 0.64, 0.57, "#60aaaa", False),
+    ("MADAM-RAG", 0.68, 0.82, "#e08080", False),
+    ("rare-rag", 0.85, 0.70, "#60c060", True),
 ]
 
-# Pareto frontier: Vanilla → Self-RAG → rare-rag
-pareto_x = [0.12, 0.50, 0.85]
-pareto_y = [0.08, 0.43, 0.70]
-ax.plot(pareto_x, pareto_y, "g--", lw=1.8, zorder=1)
-# place label right beside the line (at x=0.33, y_line≈0.27), just above it
-ax.text(
-    0.30,
-    0.285,
-    "Pareto frontier",
-    ha="left",
-    va="bottom",
-    fontsize=9,
-    color="#448844",
-    style="italic",
-    rotation=33,
-)
-
 # Per-label offsets: (dx, dy, ha)
-# Dots ON the Pareto line get labels placed to side/below so they don't sit on the line.
-# Dots off the line get labels toward the clear space.
 LABEL_OFFSETS = {
-    # (dx, dy, ha)  — offsets ≈ circle radius + 2pt margin in data coords
-    "Vanilla RAG": (0.02, -0.052, "left"),  # below-right
-    "HyDE": (0.00, 0.040, "center"),  # above
-    "Self-RAG": (-0.034, 0.008, "right"),  # left (on Pareto line)
-    "Graph RAG": (0.028, 0.036, "left"),  # above-right
-    "Corr. RAG": (0.022, 0.010, "left"),  # right
-    "Iter. Multi-hop": (0.028, -0.008, "left"),  # right (on Pareto line)
-    "MADAM-RAG": (-0.028, 0.036, "right"),  # above-left
-    "rare-rag": (0.00, 0.050, "center"),  # above
+    "Vanilla RAG": (0.02, -0.052, "left"),
+    "HyDE": (0.00, 0.040, "center"),
+    "Self-RAG": (-0.034, 0.008, "right"),
+    "Graph RAG": (0.028, 0.036, "left"),
+    "Corr. RAG": (0.022, 0.010, "left"),
+    "Iter. Multi-hop": (0.028, -0.008, "left"),
+    "MADAM-RAG": (-0.028, 0.036, "right"),
+    "rare-rag": (0.00, 0.050, "center"),
 }
 
 # Scatter
-for name, x, y, sz, color, bold in points:
+for name, x, y, color, bold in points:
     lw = 2.5 if bold else 0.8
     ec = "#228822" if bold else "#888888"
-    ax.scatter(x, y, s=sz, color=color, edgecolors=ec, linewidths=lw, zorder=3)
+    ax.scatter(x, y, s=_SZ, color=color, edgecolors=ec, linewidths=lw, zorder=3)
     dx, dy, ha = LABEL_OFFSETS.get(name, (0.04, 0.05, "left"))
     is_rare = name == "rare-rag"
     ax.text(

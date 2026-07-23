@@ -106,6 +106,7 @@
 
 % ---- Custom commands ---------------------------------------
 \newcommand{\rarerag}{RARE-RAG}
+\newcommand{\sig}[1]{\textsuperscript{#1}}
 \newcommand{\medrag}{\textit{medRAG}}
 \newcommand{\eg}{\textit{e.g.},\ }
 \newcommand{\ie}{\textit{i.e.},\ }
@@ -227,16 +228,26 @@ complementary set of passages rather than just the top-ranked ones, and verifies
 grounding before returning a response --- or explicitly declines to answer when the
 evidence is too thin.
 
-Experiments on two benchmarks --- HotpotQA ($9 \times 1{,}000$ question--answer
-pairs) and a purpose-built DDI benchmark ($9 \times 100$ queries across five
-clinical difficulty levels) --- show that RARE-RAG achieves the highest faithfulness
-(0.976) on HotpotQA and the best answer correctness on the hardest DDI questions
-(L5, expert pharmacokinetic/pharmacodynamic reasoning: 0.470).
-For the medical domain specifically, Query Rewriting turns out to offer the best
-overall quality--latency balance (faithfulness 0.795, answer correctness 0.539).
-All nine architectures were evaluated on the same open-source microservice platform,
-comprising 14 independently deployable services with configurable RAG strategies
-and RAGAS-based automated evaluation.
+The nine architectures were evaluated on two benchmarks --- HotpotQA
+($9 \times 1{,}000$ question--answer pairs) and a purpose-built DDI benchmark
+($9 \times 100$ queries across five clinical difficulty levels) --- with every
+comparison made as a paired, per-question contrast against a vanilla baseline and
+tested for statistical significance.
+The central finding is that the benefit of architectural complexity scales with
+how hard the question is, and that it shows up in grounding rather than in
+accuracy: the elaborate agentic pipelines are significantly \emph{worse} than a
+plain retrieve-then-generate pass on the easy HotpotQA questions, yet significantly
+better on the hardest clinical questions, where Multi-Agent and Query Rewriting
+each improve faithfulness by roughly 18 points over the baseline.
+No architecture, however, made the system measurably more likely to be
+\emph{correct}.
+RARE-RAG is reported as a partial negative result: its complexity router is
+supported by the difficulty-scaling finding, but its set-wise selection prunes
+evidence too aggressively on multi-drug questions, and it does not beat the vanilla
+baseline on either benchmark.
+All nine architectures ran on the same open-source microservice platform, named
+\emph{medRAG}, comprising 14 independently deployable services with configurable
+RAG strategies and RAGAS-based automated evaluation.
 
 \bigskip
 \noindent\textbf{Keywords:} Retrieval-Augmented Generation, Large Language Models,

@@ -4,37 +4,36 @@
 \chapter{Experimental Evaluation}
 \label{cha:evaluation}
 
-This chapter reports the results of comparing nine RAG architectures on the
-HotpotQA benchmark.
-Seven metrics are evaluated: three overlap-based accuracy measures,
-three RAGAS-based RAG-quality indicators, and wall-clock query latency.
-The central question is whether \rarerag{} achieves higher faithfulness than
-competing architectures while remaining competitive on answer accuracy
-(\cref{hyp:faithfulness,hyp:accuracy} in \cref{cha:rare_rag}).
+This chapter reports the results of comparing nine RAG architectures on two
+benchmarks: HotpotQA, a large encyclopedic multi-hop dataset, and a purpose-built
+Drug--Drug Interaction (DDI) benchmark in the target medical domain.
+Eight metrics are evaluated: three overlap-based accuracy measures, four
+RAGAS-based RAG-quality indicators, and wall-clock query latency.
 
-% ------------------------------------------------------------
+The central question is whether the additional machinery of the more elaborate
+architectures --- query transformation, agentic decomposition, debate, set-wise
+evidence selection, grounding verification --- buys anything over a plain
+retrieve-then-generate pass, and if so, where.
+The short answer, developed over the rest of this chapter, is that it depends
+almost entirely on how hard the questions are: the same architecture that hurts
+on HotpotQA helps on the hardest DDI questions.
+
 \section{Experimental Setup}
 \label{sec:exp_setup}
 
-\subsection{Benchmark Dataset}
+\subsection{Benchmark Datasets}
 
+\paragraph{HotpotQA.}
 HotpotQA~\cite{yang2018hotpotqa} is a multi-hop question answering dataset
 built from Wikipedia.
 Each question requires reasoning over two or more documents to produce a short
 factoid answer; the dataset was chosen specifically to stress the retrieval layer,
 since a system that retrieves only one relevant document typically cannot answer
 correctly.
-The full dataset contains approximately 113{,}000 training questions and
-7{,}405 distractor-setting validation questions.
-For this evaluation, 1{,}000 questions were drawn uniformly at random from
-the validation split --- large enough to yield stable metric estimates while
-remaining computationally tractable across nine RAG configurations.
-Each mode was evaluated on the same 1{,}000 questions, except for Iterative
-Multi-hop and MADAM-RAG which completed 999 questions due to one timeout
-per run; this difference is not material to any reported result.
-In total, 8{,}998 question--answer pairs were evaluated, corresponding to
-approximately \$8 in OpenAI API charges and roughly 45{,}000 seconds of
-wall-clock time.
+For this evaluation, 1{,}000 questions were drawn uniformly at random from the
+7{,}405-question distractor-setting validation split --- large enough to yield
+stable metric estimates while remaining computationally tractable across nine
+RAG configurations.
 
 Two representative questions illustrate the multi-hop structure:
 
@@ -56,20 +55,30 @@ Two representative questions illustrate the multi-hop structure:
     Both documents are required; neither alone is sufficient.
 \end{itemize}
 
-HotpotQA is not a drug-interaction benchmark; it was chosen as a neutral,
-widely-used multi-hop reasoning benchmark that stresses retrieval without
-domain-specific knowledge requirements.
-The applicability of these results to the medical advisory domain is discussed
-in \cref{sec:limitations_eval}.
+HotpotQA is not a drug-interaction benchmark.
+It was chosen as a neutral, widely-used multi-hop reasoning benchmark that
+stresses retrieval without requiring domain-specific knowledge, and it serves
+here as the high-power arm of the evaluation: with 1{,}000 questions per mode,
+differences of a few points are statistically resolvable.
+
+\paragraph{DDI benchmark.}
+The second benchmark targets the actual application domain and is described in
+detail in \cref{subsec:ddi_dataset}: 100 drug-interaction questions, 20 at each
+of five difficulty levels, built from OpenFDA drug labelling and DrugBank
+interaction records.
+It is far smaller than HotpotQA, and therefore far weaker statistically, but it
+is the benchmark that actually resembles the workload the system is designed for.
+The contrast between the two datasets turns out to carry most of this chapter's
+findings.
 
 \subsection{Evaluation Metrics}
 
-Seven metrics are reported, grouped by what they measure.
+Eight metrics are reported, grouped by what they measure.
 
 \paragraph{Overlap-based accuracy.}
 \emph{Token F1} measures the token-level overlap between the predicted and gold
 answer after lowercasing and punctuation removal, and is the primary accuracy
-metric used throughout this chapter.
+metric on HotpotQA.
 \emph{Exact Match (EM)} is stricter: it assigns 1 only when the prediction matches
 the gold answer exactly after normalisation, and 0 otherwise.
 \emph{ROUGE-L} uses the longest common subsequence between prediction and gold
@@ -82,6 +91,10 @@ answer that are supported by the retrieved context, as assessed by an LLM
 judge~\cite{es2023ragas}.
 A score of 1.0 indicates that every claim in the answer is grounded in the
 retrieved passages; a score below 1.0 indicates at least some hallucination.
+\emph{Answer Correctness} measures agreement with the gold answer on the level of
+meaning rather than string overlap, and is the primary accuracy metric on the DDI
+benchmark, where clinical explanations are semantically correct but lexically
+nothing like the reference text.
 \emph{Answer Relevance} is estimated by generating reverse questions from the
 answer and measuring the cosine similarity of their embeddings to the original
 query; it captures whether the answer is on-topic rather than merely factually
@@ -91,19 +104,54 @@ attributed to the retrieved context, indicating whether the retrieval stage
 surfaced all necessary evidence.
 
 \paragraph{Latency.}
-Wall-clock latency per query (in seconds) is measured as the mean and 95th-percentile
-(p95) of per-query durations including all pipeline stages and LLM calls, but
-excluding network overhead to the OpenAI API which was assumed constant.
+Wall-clock latency per query is measured as the mean and 95th-percentile
+of per-query durations including all pipeline stages and LLM calls.
+
+\subsection{Statistical Method}
+\label{subsec:stat_method}
+
+Two of the reported metrics --- faithfulness and answer correctness --- are
+produced by an LLM judge, whose scores carry noise, and all metrics are averaged
+over question samples that are themselves finite.
+Reporting mode-level means alone would therefore invite over-reading of
+differences that are indistinguishable from sampling error.
+
+Every comparison in this chapter is instead expressed as a \emph{paired contrast
+against the Vanilla control}, computed question by question within a benchmark.
+For each mode $M$ and each question $q$, the quantity of interest is
+$\Delta_q = \text{score}_M(q) - \text{score}_{\text{Vanilla}}(q)$.
+Because both modes answer the same question under the same retrieval backend and
+the same judge, question difficulty and any quirk of the judge affect both terms
+and largely cancel in the difference.
+Significance is assessed with a Wilcoxon signed-rank test over the paired scores.
+This is a non-parametric test: rather than assuming the differences follow a normal
+distribution, it ranks the paired differences by magnitude and asks whether the
+positive and negative ranks are balanced, which makes it appropriate for bounded,
+non-normally distributed metrics such as these.
+The mean of $\Delta$ is reported with a bootstrap 95\,\% confidence interval
+(10{,}000 resamples): the paired differences are resampled with replacement
+10{,}000 times, the mean is recomputed for each resample, and the interval spans
+the 2.5th to 97.5th percentiles of that distribution of means --- an interval that
+contains the true mean advantage with 95\,\% confidence and requires no
+distributional assumption.
+Throughout, \sig{***} denotes $p < 0.001$, \sig{**} denotes $p < 0.01$, and
+\sig{*} denotes $p < 0.05$; \emph{n.s.} (not significant) marks a difference at
+$p \geq 0.05$, i.e.\ one that cannot be distinguished from sampling noise.
+
+The full analysis is reproducible from \texttt{scripts/thesis\_final\_analysis.py},
+which reads per-question metrics from the \texttt{eval\_results} collection in
+MongoDB and regenerates every number in this chapter.
 
 \subsection{Systems Under Evaluation}
 
-Nine RAG configurations were evaluated using the same \medrag{} platform
-with only the \texttt{rag\_mode} setting changed per run.
+Nine RAG configurations were evaluated on the same \medrag{} platform with only
+the \texttt{rag\_mode} setting changed per run.
 \cref{tab:mode_descriptions} summarises each mode.
-All modes share the same retrieval backend (Weaviate 1.27, hybrid search
+All modes share the same retrieval backend (Weaviate~1.27, hybrid search
 $\alpha = 0.5$, top-$k = 20$ before reranking, top-$5$ after cross-encoder
-reranking), the same embedding model (BGE-M3, sentence-transformers, CPU
-inference), and the same LLM (gpt-5-nano via the OpenAI API).
+reranking), the same embedding model (OpenAI \texttt{text-embedding-3-large},
+served through OpenRouter), and the same generator LLM (\texttt{gpt-5-nano}, also
+through OpenRouter).
 No special prompts or chain-of-thought instructions were added beyond what each
 architecture requires.
 
@@ -120,11 +168,18 @@ architecture requires.
     Query Rewriting & Rewrites the query to improve retrieval recall before retrieving. \\
     Self-Reflection & Drafts an answer, self-scores its sufficiency, and re-drafts
                       once if the score is below threshold.\footnotemark \\
-    Multi-Agent     & Multiple specialist agents vote on the final answer. \\
     Corrective RAG  & Validates retrieved passages and triggers a corrective retrieval
                       step if relevance is below threshold. \\
-    Iter.\ Multi-hop & Iteratively decomposes the query and retrieves for each sub-question. \\
-    MADAM-RAG       & Multi-agent debate: agents argue for different answers before consensus. \\
+    Multi-Agent     & A planner decomposes the query into sub-tasks; executor agents
+                      retrieve independently for each sub-task and return focused
+                      findings; a QA agent synthesises the final answer. No voting
+                      is involved. \\
+    Iter.\ Multi-hop & A sequential chain of retrieval hops: each hop is formulated
+                      using what the previous hops established, so evidence accumulates
+                      along the chain rather than being gathered in parallel. \\
+    MADAM-RAG       & Multi-agent debate: two agents argue from opposing angles, revise
+                      once after seeing each other's answer, and a judge agent
+                      synthesises the consensus. \\
     \rarerag{}      & Complexity routing, hybrid retrieval, set-wise evidence selection,
                       grounding verifier with abstention. \\
     \bottomrule
@@ -134,402 +189,240 @@ architecture requires.
 on the whole answer, not the per-segment reflection-token mechanism of the
 original method~\cite{asai2024selfrag}; see \cref{sec:query_pipeline}.}
 
+\paragraph{Fidelity to the source methods.}
+Four of the nine modes are prompt-based approximations rather than complete
+re-implementations of the papers they are named after, and since this chapter
+compares them against each other, the gaps have to be on the record.
+
+\begin{itemize}
+  \item \textbf{Self-Reflection} approximates Self-RAG~\cite{asai2024selfrag}.
+    The original emits per-segment reflection tokens from a fine-tuned decoder;
+    this implementation scores the whole drafted answer with an ordinary LLM call
+    and re-drafts once if the score is below 0.7.
+  \item \textbf{Corrective RAG} approximates CRAG~\cite{yan2024crag} and omits its
+    two defining components.
+    There is no fine-tuned retrieval evaluator --- relevance is judged by
+    thresholding the raw hybrid retrieval score at 0.3 --- and, more importantly,
+    there is no web-search fallback.
+    When the corrective step fires, this implementation re-queries \emph{the same
+    corpus} with a broadened search (lower $\alpha$, doubled top-$k$), whereas
+    CRAG's central claim is that it can recover from corpus gaps by reaching
+    outside the corpus entirely.
+    A closed-corpus CRAG cannot express that claim, and its results here should be
+    read as measuring a relevance-gated re-retrieval strategy, not CRAG proper.
+  \item \textbf{Query Rewriting} follows the Rewrite--Retrieve--Read
+    pattern~\cite{ma2023rewrite} but uses a prompted rewriter, not the small
+    reinforcement-learning-trained rewriter of the original.
+  \item \textbf{HyDE} concatenates the hypothetical document with the original
+    query before embedding, rather than embedding the hypothetical document
+    alone~\cite{gao2022hyde}; in preliminary testing the concatenation was more
+    robust when the generated document drifted off-topic.
+\end{itemize}
+
+This caveat is worth keeping in view because it cuts against the chapter's own
+recommendations: Corrective RAG is recommended in \cref{subsec:when_rarerag} as
+the safest default, and Query Rewriting is the best buy on hard clinical questions,
+and \emph{both} are approximated modes.
+Whether a faithful CRAG with a web-search fallback would do better still is untested
+here, and it is a live possibility rather than a rhetorical hedge: a corpus-gap
+recovery mechanism is exactly what the DDI benchmark's hardest questions would
+reward.
+
 \subsection{Hardware and Software Environment}
 \label{subsec:hw_env}
 
 All experiments were run on a single Apple MacBook Pro with an Apple M1 Pro
 system-on-chip and 16\,GB of unified memory.
-No discrete GPU was available: the embedding model (BGE-M3 via
-\texttt{sentence-transformers}) and the cross-encoder reranker
-(BGE-reranker-v2-m3) ran entirely on CPU, as Apple Silicon is not supported
-by CUDA or ROCm.
-The LLM component (gpt-5-nano) was accessed through the OpenAI API and therefore
-executed on OpenAI's remote infrastructure.
+No discrete GPU was available.
+The one component that ran locally was the cross-encoder reranker
+(BGE-reranker-v2-m3), which executed on the integrated GPU via Metal, as Apple
+Silicon is not supported by CUDA or ROCm.
+Both the embedding model (OpenAI \texttt{text-embedding-3-large}) and the generator
+LLM (\texttt{gpt-5-nano}) were served through OpenRouter and therefore executed on
+remote infrastructure; the local machine's role for those two components was only
+to issue API calls and collect results.
+Although the platform also supports a fully local embedding model (BGE-M3 via
+\texttt{sentence-transformers}), the reported experiments used the API-served
+model.
 
 The software stack ran inside Docker Compose: Weaviate~1.27 (vector store),
 MongoDB~7 (document and conversation storage), and RabbitMQ~3.13 (message
 broker) each in a dedicated container, with all \medrag{} microservices built
 on Python~3.12 and managed with \texttt{uv}.
-Benchmark queries were dispatched through a Python runner with a concurrency of
-two parallel requests.
 
-\paragraph{Total compute time.}
-The HotpotQA run ($9 \times 1{,}000$ queries) required approximately
-45{,}000 seconds of wall-clock time ($\approx$12.5 hours), dominated by
-cross-encoder reranking and LLM generation.
-The DDI run ($9 \times 100$ queries, median latency $\approx$50\,s per query)
-required a further $\approx$45{,}000 seconds.
+\paragraph{The LLM judge is not the generator.}
+Faithfulness, Answer Correctness and Answer Relevance are scored by
+\texttt{gpt-oss-120b} --- a 120-billion-parameter model, and thus a different and
+considerably larger one than the \texttt{gpt-5-nano} used for generation.
+When the judge and the generator are the same model, the judge tends to reward
+answers that match its own parametric knowledge and phrasing --- a
+self-preference bias that inflates scores for the very system under
+test~\cite{wataoka2024llmjudge}.
+Pinning the judge to a separate model removes that particular failure mode.
+The same judge scored every mode in both benchmarks, so judge behaviour is a
+constant across all comparisons reported here.
 
-\paragraph{GPU note.}
-A dedicated GPU accelerator (e.g.\ NVIDIA A100 or H100) would reduce embedding
-and reranking inference time by a factor of 10--20$\times$, making such
-experiments feasible in a single afternoon rather than overnight.
-For comparisons involving larger corpora or more retrieval-intensive architectures,
-GPU infrastructure is strongly recommended.
+\paragraph{Load conditions.}
+Every benchmark run dispatched queries through a Python runner with two requests
+in flight concurrently.
+Concurrent queries contend for the local cross-encoder reranker, which inflates
+absolute latency relative to an idle system, but it does so identically for all
+nine modes, so the latency figures are comparable with each other.
+They should not be compared against latency reported elsewhere in the literature
+for the same architectures.
 
 % ------------------------------------------------------------
-\section{Answer Quality Results}
+\section{HotpotQA Results}
 \label{sec:results_quality}
 
-\cref{tab:results_full} presents all seven metrics for all nine modes.
-\cref{fig:results_quality} shows Token~F1, Faithfulness, and Answer Correctness
-side by side, sorted by faithfulness.
+\cref{tab:results_full} reports all seven metrics for the nine modes, and
+\cref{tab:hotpot_advantage} gives the paired contrast against Vanilla that the
+discussion relies on.
+
+Before turning to the differences between modes, it is worth stating what the
+absolute numbers say about the platform itself, because they are strong.
+On HotpotQA every mode retrieves nearly all of the evidence each question needs
+--- context recall ranges from 0.913 to 0.986, and five of the nine modes exceed
+0.96 --- which confirms that the hybrid retrieval and cross-encoder reranking
+stages do their job well.
+Grounding is correspondingly high: the best modes reach 0.973 faithfulness, and
+even the plain Vanilla baseline is faithful at 0.939, meaning that on a
+well-indexed corpus the system hallucinates in fewer than one answer in fifteen.
+The differences examined below are therefore movements at the top of the scale,
+on a system that already retrieves and grounds well; they are not a search for a
+mode that merely works.
 
 \begin{table}[p]
   \centering
-  \caption[Full benchmark results on HotpotQA across nine RAG modes.]{HotpotQA results ($n=1{,}000$; $n=999$ for Iter. Multi-hop and MADAM-RAG). Best value per metric in \textbf{bold}; Lat.\ = mean latency (s).}
+  \caption[Full benchmark results on HotpotQA across nine RAG modes.]{%
+    HotpotQA results ($n = 1{,}000$ questions per mode).
+    Best value per metric in \textbf{bold}; Lat.\ = mean latency, all modes
+    measured under the same load (\cref{subsec:hw_env}).}
   \label{tab:results_full}
   \resizebox{\textwidth}{!}{%
-  \begin{tabular}{@{}lrrrrrrrrr@{}}
+  \begin{tabular}{@{}lrrrrrrrr@{}}
     \toprule
     \textbf{Mode} & \textbf{F1} & \textbf{EM} & \textbf{ROUGE-L}
       & \textbf{Faith.} & \textbf{Ans.Corr.} & \textbf{Ans.Rel.}
-      & \textbf{Ctx.Rec.} & \textbf{Lat.~(s)} & \textbf{p95~(s)} \\
+      & \textbf{Ctx.Rec.} & \textbf{Lat.~(s)} \\
     \midrule
-    Vanilla           & 0.5368 & 0.316 & 0.5356 & 0.9391 & 0.8492 & 0.5256 & 0.9710 &  9.1 & 16.1 \\
-    HyDE              & 0.5411 & 0.315 & 0.5412 & 0.9709 & 0.8438 & 0.5162 & 0.9750 & 22.7 & 36.8 \\
-    Query Rewriting   & 0.5373 & 0.312 & 0.5374 & 0.9640 & 0.8342 & 0.5235 & 0.9575 & 22.7 & 31.7 \\
-    Self-Reflection   & \textbf{0.5454} & \textbf{0.329} & \textbf{0.5454}
-                                         & 0.9740 & 0.8457 & 0.5146 & 0.9715 & 20.0 & 34.8 \\
-    Multi-Agent       & 0.5251 & 0.309 & 0.5250 & 0.9672 & 0.8379 & 0.5248 & 0.9695 & 10.2 & 17.6 \\
-    Corrective RAG    & 0.5392 & 0.323 & 0.5399 & 0.9730 & 0.8497 & 0.5239 & 0.9680 & 11.8 & 19.1 \\
-    Iter.\ Multi-hop  & 0.5329 & 0.314 & 0.5324 & 0.9686 & 0.8391 & 0.5147 & 0.9530 & 26.0 & 37.8 \\
-    MADAM-RAG         & 0.4873 & 0.282 & 0.4868 & 0.9498 & 0.8050 & 0.5319 & 0.9259 & 29.0 & 80.5 \\
-    \rarerag{} (ours) & 0.5432 & 0.320 & 0.5432 & \textbf{0.9764} & \textbf{0.8567}
-                                         & 0.5212 & 0.9690 & 30.8 & 48.6 \\
+    Vanilla           & 0.539 & 0.322 & 0.538 & 0.939 & 0.850 & 0.525 & 0.971 & \textbf{9.1} \\
+    HyDE              & 0.541 & 0.318 & 0.541 & 0.971 & 0.844 & 0.517 & 0.975 & 22.5 \\
+    Query Rewriting   & 0.540 & 0.319 & 0.540 & 0.967 & 0.838 & 0.522 & 0.959 & 22.6 \\
+    Self-Reflection   & \textbf{0.547} & \textbf{0.336} & \textbf{0.547}
+                                      & 0.973 & 0.845 & 0.515 & 0.972 & 20.1 \\
+    Corrective RAG    & 0.541 & 0.326 & 0.542 & \textbf{0.973} & \textbf{0.852}
+                                      & 0.522 & 0.969 & 11.8 \\
+    Multi-Agent       & 0.507 & 0.309 & 0.505 & 0.908 & 0.792 & 0.532 & 0.928 & 38.4 \\
+    Iter.\ Multi-hop  & 0.540 & 0.317 & 0.540 & 0.907 & 0.852 & 0.520 & \textbf{0.986} & 83.7 \\
+    MADAM-RAG         & 0.480 & 0.281 & 0.478 & 0.895 & 0.726 & \textbf{0.543} & 0.920 & 25.2 \\
+    \rarerag{}        & 0.485 & 0.299 & 0.484 & 0.885 & 0.755 & 0.538 & 0.913 & 51.8 \\
     \bottomrule
   \end{tabular}}
+\end{table}
+
+\begin{table}[htbp]
+  \centering
+  \caption[Paired advantage over Vanilla on HotpotQA.]{%
+    HotpotQA: advantage over the Vanilla control, paired per question
+    (Wilcoxon signed-rank; bootstrap 95\,\% CI, 10{,}000 resamples).
+    Vanilla means: faithfulness 0.939, answer correctness 0.850.
+    The four lightweight modes gain faithfulness at no cost in correctness;
+    the four agentic modes all lose faithfulness, and three of the four
+    also lose correctness.}
+  \label{tab:hotpot_advantage}
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    & \multicolumn{1}{c}{\textbf{Faithfulness}} & \multicolumn{2}{c}{\textbf{Answer correctness}} \\
+    \cmidrule(lr){2-2}\cmidrule(lr){3-4}
+    \textbf{Mode} & $\Delta$ vs Vanilla & $\Delta$ vs Vanilla & $p$ \\
+    \midrule
+    HyDE              & $+0.031$~\sig{***} & $-0.006$ & 0.516 \\
+    Query Rewriting   & $+0.028$~\sig{***} & $-0.013$ & 0.153 \\
+    Self-Reflection   & $+0.034$~\sig{***} & $-0.006$ & 0.459 \\
+    Corrective RAG    & $+0.034$~\sig{***} & $+0.002$ & 0.767 \\
+    \midrule
+    Multi-Agent       & $-0.031$~\sig{**}  & $-0.059$~\sig{***} & $<0.001$ \\
+    Iter.\ Multi-hop  & $-0.032$~\sig{**}  & $+0.002$ & 0.939 \\
+    MADAM-RAG         & $-0.044$~\sig{***} & $-0.124$~\sig{***} & $<0.001$ \\
+    \rarerag{}        & $-0.054$~\sig{***} & $-0.095$~\sig{***} & $<0.001$ \\
+    \bottomrule
+  \end{tabular}
 \end{table}
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{figures/fig_bar_quality.png}
-  \caption[Quality metrics for all nine evaluated RAG modes.]{Token~F1, Faithfulness, and Answer Correctness across nine modes (sorted by faithfulness).}
+  \caption[Quality metrics for all nine evaluated RAG modes.]{Faithfulness and Answer Correctness across nine modes on HotpotQA (sorted by faithfulness).}
   \label{fig:results_quality}
 \end{figure}
 
-\paragraph{Token F1 and Exact Match.}
-The span of Token F1 scores across all modes is narrow: from 0.487
-(MADAM-RAG) to 0.545 (Self-Reflection), a difference of 0.058.
-If MADAM-RAG is excluded as an outlier (discussed below), the range
-among the remaining eight modes collapses to 0.020 (0.525 to 0.545).
-This compression indicates that the dominant factor limiting answer accuracy
-is not the RAG architecture but the underlying difficulty of HotpotQA
-multi-hop questions for a fixed LLM.
+\paragraph{Accuracy is architecture-insensitive; the LLM is the bottleneck.}
+Among the five lightweight modes, Token~F1 spans 0.539 to 0.547 --- a range of
+0.008 across architectures that differ substantially in how they retrieve.
+None of the four lightweight modes moves answer correctness away from Vanilla by
+a statistically detectable margin (all $p > 0.15$).
+Whatever limits accuracy on HotpotQA, it is not the retrieval strategy: it is the
+capacity of a small generator model to extract the right short span from evidence
+it has already been given.
 
-Self-Reflection achieves the highest Token~F1 (0.545) and Exact Match (0.329).
-The reflection mechanism --- re-retrieving when the first set of passages is
-judged insufficient --- produces marginally better evidence coverage for multi-hop
-questions, contributing a 1.4-point F1 advantage over vanilla.
-\rarerag{} ranks second on F1 (0.543) and Answer Correctness (0.857), within
-0.002 of Self-Reflection; this difference is within the variability expected
-across evaluation runs and should not be over-interpreted.
+\paragraph{Lightweight query transformation buys grounding, and it is real.}
+HyDE, Query Rewriting, Self-Reflection and Corrective RAG each improve
+faithfulness over Vanilla by roughly three points, and every one of those gains is
+significant at $p < 0.001$ on 1{,}000 paired questions.
+The effect is small but consistent and mechanistically sensible: all four modes
+give the retriever a second, better-formed shot at the corpus --- an expanded
+query, a hypothetical document, a validation-and-retry step --- and answers
+generated from better evidence have less need to improvise.
+Vanilla's 0.939 already leaves little headroom, which is precisely why a
+three-point gain matters: it closes about half of the remaining gap.
 
-Query Rewriting (0.312 EM) and HyDE (0.315 EM) produce slightly lower Exact
-Match than vanilla (0.316) despite higher faithfulness.
-This counterintuitive pattern is consistent with prior findings~\cite{gao2022hyde}:
-query transformation helps retrieve \emph{grounded} content but does not
-necessarily retrieve the exact short factoid span that HotpotQA gold answers require.
+\paragraph{The agentic modes are actively harmful here.}
+All four agentic architectures land \emph{below} Vanilla on faithfulness, and
+three of the four also lose on correctness, with MADAM-RAG shedding 12 points of
+answer correctness ($p < 0.001$).
+This is the single most counterintuitive result in this work, and it is not
+noise: it rests on roughly 1{,}000 paired questions with $p < 0.001$.
 
-\paragraph{MADAM-RAG failure.}
-MADAM-RAG is the clear underperformer, with Token~F1 of 0.487, Exact Match of 0.282,
-and context recall of 0.926 --- the lowest figures on all three metrics.
-The multi-agent debate architecture was designed for queries where different
-perspectives are plausible; for factoid HotpotQA questions with a single correct
-answer, the debate mechanism introduces confusion rather than disambiguation.
-Agents that argue for different partial answers prevent consensus on the correct
-short span.
-This failure mode is consistent with the architecture's design intent:
-MADAM-RAG was proposed for subjective or conflicting-evidence scenarios, not
-for closed-domain factoid retrieval.
-The 80.5-second p95 latency also makes it impractical for real-time advisory use.
+The explanation is that every additional LLM call is another opportunity to drift
+from the sources.
+A HotpotQA question needs one or two Wikipedia passages and a short span lifted
+out of them.
+A planner that decomposes such a question into sub-tasks, executors that
+summarise passages into ``findings'', and a synthesiser that writes the final
+answer from those findings, has passed the evidence through three layers of
+paraphrase before anything is committed to the answer --- and paraphrase is where
+grounding leaks away.
+MADAM-RAG compounds this: two agents write competing answers and a judge
+reconciles them, which on a question with exactly one correct short answer
+manufactures a disagreement that did not exist and resolves it into something
+vaguer than either agent started with.
+Context recall tells the same story from the retrieval side: MADAM-RAG (0.920) and
+\rarerag{} (0.913) retrieve the least of the needed evidence, while Iterative
+Multi-hop --- whose sequential chain is genuinely aimed at multi-hop questions ---
+retrieves the most (0.986) and is the only agentic mode that holds its correctness
+level with Vanilla ($+0.002$, n.s.).
 
-% ------------------------------------------------------------
-\section{Faithfulness and Grounding}
-\label{sec:results_faithfulness}
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=\linewidth]{figures/fig_heatmap.png}
-  \caption[Z-scored heatmap of evaluation metrics across nine RAG modes.]{Z-scored heatmap of all seven metrics across nine modes (sorted by faithfulness). Green = above average; red = below average.}
-  \label{fig:heatmap}
-\end{figure}
-
-Faithfulness deserves particular attention because it directly addresses the risk
-profile of a medical advisory system: a response grounded in retrieved evidence
-can be verified and corrected; a hallucinated response cannot.
-
-\rarerag{} achieves the highest faithfulness (0.976), confirming
-\cref{hyp:faithfulness}.
-The second-best faithfulness score belongs to Self-Reflection (0.974),
-followed by HyDE (0.971) and Corrective RAG (0.973).
-The differences among these top-four modes are small (within 0.005),
-but the ordering is consistent with their architectural properties:
-each of these modes either imposes an explicit grounding check
-(\rarerag{}'s grounding verifier, Corrective RAG's relevance validator)
-or generates evidence-constrained prompts (HyDE's hypothetical document,
-Self-Reflection's re-retrieval on weak evidence).
-
-Vanilla RAG scores lowest on faithfulness (0.939) among non-MADAM modes.
-The 3.7 percentage-point gap between vanilla and \rarerag{} may seem modest,
-but in a medical context it translates to roughly 37 additional unsupported
-claims per 1{,}000 answers --- a meaningful patient safety consideration.
-
-MADAM-RAG's faithfulness (0.950) is above vanilla despite its substantially
-worse accuracy.
-This reflects a systematic pattern visible in the heatmap (\cref{fig:heatmap}):
-faithfulness and accuracy are not linearly correlated.
-A system can be highly faithful to retrieved context while still failing to
-answer correctly, either because the retrieved context is incomplete or because
-it retrieves the correct passage but fails to extract the precise answer span.
-The correlation between faithfulness and Token~F1 across these nine modes is
-weak (Pearson $r \approx 0.15$, computed across mode-level means), confirming
-that grounding quality and answer accuracy are largely orthogonal objectives
-on this benchmark.
-
-Context recall follows a similar independence pattern.
-HyDE achieves the highest context recall (0.975), suggesting that hypothetical
-document generation expands the semantic coverage of the query and retrieves more
-of the necessary evidence.
-Iterative Multi-hop has the lowest context recall among non-MADAM modes (0.953),
-perhaps because its sequential sub-question decomposition can fail to recover
-from an early retrieval error.
+\rarerag{}'s position deserves a direct statement, since it is the architecture
+this thesis proposes.
+On HotpotQA it is the \emph{worst} of the nine on faithfulness ($-0.054$ vs
+Vanilla, $p < 0.001$).
+The culprit is set-wise selection.
+Instead of passing the top reranked passages straight to the generator, \rarerag{}
+keeps only three passages chosen to be maximally \emph{complementary} --- it
+deliberately favours passages that cover different ground and drops ones that
+overlap.
+That is a sensible strategy only when the evidence a question needs is spread
+across many passages, so that diversity buys coverage.
+A HotpotQA question is the opposite case: its answer usually sits in just two short
+passages, and pruning for diversity discards one of exactly the two the generator
+needed.
+The mechanism that is supposed to help is the mechanism that hurts, because
+HotpotQA violates the assumption it is built on --- that relevant evidence is
+scattered rather than concentrated.
 
 % ------------------------------------------------------------
-\section{Latency and Cost Trade-off}
-\label{sec:results_latency}
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=\linewidth]{figures/fig_latency.png}
-  \caption[Mean query latency for all nine RAG modes.]{Mean latency with p95 error bars for all nine modes (vanilla: 9.1\,s; RARE-RAG: 30.8\,s).}
-  \label{fig:results_latency}
-\end{figure}
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=\linewidth]{figures/fig_pareto.png}
-  \caption[Faithfulness vs.\ Token~F1 scatter plot for all nine modes.]{Faithfulness vs.\ Token~F1 for nine modes; bubble size proportional to mean latency.}
-  \label{fig:pareto}
-\end{figure}
-
-\cref{fig:results_latency} shows mean and p95 latency for all modes.
-The spread is large: from 9.1 seconds (Vanilla) to 30.8 seconds (\rarerag{}).
-
-\paragraph{Fast tier (under 12 seconds).}
-Vanilla RAG (9.1\,s) and Multi-Agent (10.2\,s) occupy this tier.
-The surprisingly competitive latency of Multi-Agent comes from parallelisation:
-the medRAG implementation dispatches sub-queries to multiple agents concurrently,
-so the wall-clock time is governed by the slowest agent rather than the sum.
-Corrective RAG (11.8\,s) also falls in this tier when the first retrieval pass
-is judged sufficient and no corrective step is triggered; the 19.1-second p95
-reflects queries that require the full correction cycle.
-
-\paragraph{Mid tier (18--26 seconds).}
-Self-Reflection (20.0\,s), HyDE (22.7\,s), and Query Rewriting (22.7\,s)
-all require at least one additional LLM call before or after the main retrieval.
-The near-identical mean latency of HyDE and Query Rewriting reflects that both
-architectures pay roughly the same cost for a single prefix LLM call.
-
-\paragraph{Slow tier (above 25 seconds).}
-Iterative Multi-hop (26.0\,s), MADAM-RAG (29.0\,s), and \rarerag{} (30.8\,s)
-require the most pipeline stages.
-\rarerag{}'s latency is driven by four sequential LLM-dependent steps:
-the complexity router, hybrid retrieval with cross-encoder reranking, set-wise
-evidence selection, and the grounding verifier --- each adding approximately
-6--8 seconds.
-Unlike MADAM-RAG (p95 80.5\,s), \rarerag{}'s latency variance is lower:
-the p95/mean ratio is 1.58, compared to 2.78 for MADAM-RAG.
-In practice, predictable latency is more useful for an advisory system than
-responses that are sometimes fast but occasionally very slow.
-
-\paragraph{Pareto efficiency.}
-\cref{fig:pareto} plots faithfulness against Token~F1, with bubble size
-encoding mean latency.
-Two modes stand out.
-Vanilla RAG combines a reasonable F1 of 0.537 with the fastest response time,
-making it the natural baseline for latency-sensitive deployments.
-Corrective RAG offers a better F1 (0.539) and faithfulness (0.973) at only 11.8\,s,
-representing perhaps the best practical trade-off among the nine architectures:
-near-\rarerag{} faithfulness at one-third of the latency.
-
-\rarerag{} occupies the highest-faithfulness position at the cost of latency.
-For a drug-interaction advisory system where a hallucinated contraindication
-could have clinical consequences, this trade-off is acceptable: a pharmacist
-consulting the system can wait 30 seconds for a response that cites specific
-evidence, whereas a fast but potentially fabricated answer is of limited
-clinical value.
-
-% ------------------------------------------------------------
-\section{Hypothesis Evaluation}
-\label{sec:hypothesis_eval}
-
-\paragraph{H1 --- Faithfulness.}
-\emph{\rarerag{} achieves higher faithfulness than all single-path RAG architectures
-as measured by the RAGAS faithfulness metric.}
-\textbf{Confirmed.} \rarerag{} scores 0.976, the highest among all nine modes.
-The margin over the second-ranked mode (Self-Reflection, 0.974) is 0.002; the margin
-over vanilla (0.939) is 0.037. The grounding verifier, which explicitly suppresses
-claims not supported by the retrieved context, is the most plausible mechanism for
-this gain.
-
-\paragraph{H2 --- Competitive accuracy.}
-\emph{\rarerag{} maintains competitive Token~F1 despite the additional pipeline stages.}
-\textbf{Confirmed.} At Token~F1 = 0.543, \rarerag{} ranks second among nine modes and
-is within 0.002 of the best-performing mode (Self-Reflection, 0.545). The grounding
-verifier's occasional abstentions --- where the system declines to answer rather than
-hallucinate --- are not penalised in Token~F1 because abstained questions constitute
-fewer than 3\% of the evaluation set.
-
-% ------------------------------------------------------------
-\section{Discussion}
-\label{sec:discussion}
-
-\subsection{Faithfulness and Accuracy Are Orthogonal on This Benchmark}
-\label{subsec:faithfulness_orthogonality}
-
-The weak correlation between faithfulness and Token~F1 deserves a closer look.
-RAGAS faithfulness measures whether the generated text is supported by
-\emph{retrieved} context, not whether the retrieved context is itself correct.
-A system that retrieves a plausible but incorrect Wikipedia passage, and then
-generates a response faithfully grounded in that passage, will score high on
-faithfulness but low on accuracy.
-Conversely, a system that occasionally draws on background knowledge not present
-in the retrieved passages may score lower on faithfulness while producing more
-accurate responses on questions where retrieval missed important evidence.
-
-This independence is not a pathology of the evaluation setup; it reflects a
-genuine tension in RAG design.
-For the medical advisory domain, where fabricated drug interactions can cause
-patient harm, faithfulness is arguably more important than raw accuracy: a
-response that admits uncertainty or cites specific evidence is preferable to
-a fluent but unverifiable answer.
-The choice to prioritise faithfulness in \rarerag{}'s design is thus consistent
-with the domain requirements established in \cref{cha:introduction}.
-
-\subsection{Why MADAM-RAG Underperforms}
-
-MADAM-RAG's poor accuracy on HotpotQA is not evidence that debate-based
-architectures are generally inferior.
-The architecture was designed for queries where multiple valid or conflicting
-answers exist --- a setting common in open-ended reasoning but rare in
-closed-domain factoid QA.
-On HotpotQA, where ground truth answers are short Wikipedia spans,
-the debate process tends to fragment the answer: agents advocating for different
-partial answers produce a consensus that is vaguer than any individual agent's
-initial response.
-The high p95 latency (80.5\,s) reflects variance in convergence time when
-agents do not quickly agree.
-In a setting with more contested drug information --- for instance, off-label
-interactions where evidence is genuinely mixed --- MADAM-RAG might perform
-competitively.
-
-\subsection{Limitations of This Evaluation}
-\label{sec:limitations_eval}
-
-Several limitations constrain how far these results generalise.
-
-\emph{HotpotQA is a factoid benchmark.}
-The questions require multi-hop reasoning but ultimately demand short spans as
-answers.
-Drug-interaction advisory queries tend to be longer, more contextual, and
-sometimes do not have a single correct answer.
-A benchmark specifically designed for drug interaction advisory tasks --- with
-gold answers verified by pharmacists --- would be a more direct measure of
-system utility.
-The DDI benchmark evaluation in \cref{sec:ddi_eval} partially addresses this,
-though pharmacist-validated ground truth would provide stronger clinical relevance.
-
-\emph{RAGAS uses an LLM as a judge.}
-Faithfulness, Answer Relevance, and Answer Correctness are assessed by
-gpt-5-nano, the same model used for generation.
-This introduces a form of self-consistency bias: the judge may rate responses
-highly if they are stylistically or factually consistent with its own parametric
-knowledge, independent of the retrieved context~\cite{wataoka2024llmjudge}.
-Using a different judge model would reduce this risk at the cost of judge
-reliability.
-
-\emph{Single hardware configuration.}
-Latency measurements were obtained on the hardware described in
-\cref{subsec:hw_env} under specific network conditions to the OpenAI API.
-Absolute values are therefore not directly comparable to measurements from other
-studies; only relative rankings within this study should be interpreted.
-
-\emph{No statistical significance testing.}
-The evaluation does not include significance tests (e.g., paired bootstrap
-resampling) to determine whether metric differences are statistically reliable.
-Given 1{,}000 questions per mode and the narrow F1 spread among the top-performing
-architectures, many pairwise differences in Token~F1 are likely within sampling
-error.
-Faithfulness differences of more than 0.01 are more likely to be genuine, given
-the larger scale of that metric's values.
-
-\subsection{When to Use RARE-RAG vs.\ Simpler Architectures}
-\label{subsec:when_rarerag}
-
-\rarerag{} does not win everywhere.
-On the DDI benchmark, Query Rewriting actually delivers better overall
-quality--latency balance (faithfulness 0.795, answer correctness 0.539,
-median latency 4.2\,s).
-\rarerag{} pulls ahead only on the hardest questions (L5 correctness 0.470),
-and that comes at nearly double the latency (median 6.8\,s).
-So when does the extra complexity pay off?
-
-The architecture makes sense under four conditions:
-\begin{enumerate}
-  \item \textbf{Mixed query difficulty.}
-    If the workload ranges from trivial lookups to expert-level reasoning,
-    the complexity router saves compute on easy queries while still running
-    the full pipeline when needed.
-    A corpus where every question is equally hard gains little from routing.
-  \item \textbf{``I don't know'' beats a wrong answer.}
-    Drug interactions are a good example: saying ``insufficient evidence''
-    is safer than a plausible-sounding but unverified claim.
-    The grounding verifier with abstention exists precisely for this.
-  \item \textbf{Sparse or conflicting evidence.}
-    Set-wise selection helps when passages contain partial, complementary
-    information that must be stitched together.
-    If the corpus has many near-duplicate passages, top-$k$ works fine.
-  \item \textbf{Users can wait 5--10 seconds.}
-    Chat applications with sub-second latency budgets should stick with
-    Vanilla RAG or Query Rewriting.
-    Clinical decision support, where a short wait for a well-sourced answer
-    is acceptable, can absorb \rarerag{}'s overhead.
-\end{enumerate}
-
-Query Rewriting remains the better default for well-indexed corpora,
-moderately complex queries, and throughput-sensitive deployments.
-In practice, a hybrid makes sense: route to \rarerag{} when the classifier
-flags high complexity, fall back to Query Rewriting otherwise.
-
-\subsection{Abstention Threshold Selection}
-\label{subsec:threshold_selection}
-
-The grounding verifier abstains when the support score drops below~$\tau$.
-All experiments used $\tau = 0.5$, a rough midpoint: if fewer than half the
-claims in a response are backed by retrieved evidence, the system declines
-to answer.
-That value was not tuned --- it was picked as a sensible starting point,
-which is a gap in the current work.
-
-Choosing $\tau$ is a classic precision--recall trade-off:
-\begin{itemize}
-  \item Lower values (say, 0.3) let more answers through, but some will be
-    weakly grounded.
-  \item Higher values (say, 0.7) mean fewer answers, but the ones that do
-    get through are better supported.
-\end{itemize}
-
-For drug interactions, erring on the side of caution makes sense.
-A missed interaction because the system abstained is less dangerous than a
-hallucinated interaction that misleads treatment.
-A proper calibration study --- sweeping $\tau$ from 0.3 to 0.8, measuring
-abstention rate and faithfulness, ideally with pharmacist review of edge
-cases --- would pin down the right operating point.
-That work remains to be done.
-
-% ------------------------------------------------------------
-\section{Drug Interaction Benchmark Evaluation}
+\section{Drug Interaction Benchmark Results}
 \label{sec:ddi_eval}
 
 \subsection{Dataset and Evaluation Protocol}
@@ -540,8 +433,13 @@ dedicated five-level Drug--Drug Interaction (DDI) benchmark was constructed
 from two open-access corpora: FDA drug labelling data obtained via the
 OpenFDA API and DrugBank interaction records from the Therapeutic Data Commons
 (TDC) corpus~\cite{huang2021tdc}.
-The benchmark contains 100 question--answer pairs (20 per level), stratified
-by reasoning complexity:
+The retrieval corpus indexed for this benchmark comprises 4{,}688 documents ---
+652 single-drug profile documents and 4{,}036 unique drug--drug interaction
+records --- each ingested through the full pipeline (parse, fixed-size chunking,
+embedding, and vector indexing in Weaviate) that
+\cref{cha:implementation} describes.
+The benchmark itself contains 100 question--answer pairs (20 per level),
+stratified by reasoning complexity:
 
 \begin{itemize}
   \item \textbf{L1 --- Single drug profile.}
@@ -616,72 +514,73 @@ to make the difficulty gradient concrete.
   \end{tabularx}
 \end{table}
 
-Each question was generated by prompting gpt-5-nano to produce a
-clinically plausible scenario from the source documents; the gold answer was
-derived from the same passages and validated for factual consistency.
-Three RAGAS metrics were used for evaluation: Faithfulness, Answer Correctness,
-and Answer Relevance.
-Exact Match and Token~F1 are not reported here because open-ended clinical
-explanations never match the gold string exactly; the earlier HotpotQA
-evaluation (\cref{sec:results_quality}) demonstrates their behaviour on
-factoid answers.
-Each mode processed the same 100 questions; concurrency was set to 2 parallel
-requests throughout.
+Each question was generated by prompting gpt-5-nano to produce a clinically
+plausible scenario from the source documents, with the gold answer derived from
+the same passages under a mandatory citation pattern that ties every claim back to
+a specific source file.
+All 100 question--answer pairs were then manually reviewed against their source
+passages, and each was checked for factual consistency with the cited documents
+before being admitted to the benchmark.
+Token~F1 and Exact Match are reported but carry little meaning here: open-ended
+clinical explanations never match a gold string exactly, which is why answer
+correctness is the accuracy metric of record on this benchmark.
+Every mode processed the same 100 questions.
 
 \subsection{Aggregate Results}
 \label{subsec:ddi_aggregate}
 
-\cref{tab:ddi_results} reports the three quality metrics and median latency
-for all nine modes; \cref{fig:ddi_quality_bar} shows the same data as paired
-bars sorted by faithfulness, and \cref{fig:ddi_scatter} plots faithfulness
-against answer correctness with bubble size encoding latency.
-
-Query Rewriting achieves the highest faithfulness (0.795) and the second-highest
-answer correctness (0.539), making it the best overall mode on this benchmark.
-MADAM-RAG leads on faithfulness (0.816) but falls to mid-table on correctness
-(0.468), suggesting that its multi-agent debate improves grounding without
-proportionally improving factual accuracy.
-Iterative Multi-hop achieves the highest answer correctness (0.544) at the
-cost of moderately higher latency (47.4\,s median).
-\rarerag{} has the highest latency (82.7\,s) while remaining mid-table on both
-quality metrics, making it cost-inefficient on average; its advantages emerge
-at higher difficulty levels (see \cref{subsec:ddi_difficulty}).
-
-The scatter plot (\cref{fig:ddi_scatter}) makes the faithfulness--correctness
-trade-off explicit.
-Three architectures sit on the Pareto frontier: Query Rewriting (highest
-faithfulness among Pareto-optimal modes, 0.795) and Iterative Multi-hop
-(highest correctness, 0.544), with MADAM-RAG dominating on the faithfulness
-axis alone (0.816) at the cost of correctness.
-Everything else --- Vanilla, Self-Reflection, Corrective RAG, Multi-Agent,
-and \rarerag{} --- lies below the frontier: these modes give up something on
-at least one dimension without gaining on the other.
-This orthogonality between faithfulness and correctness is a recurring theme
-across both benchmarks (see also \cref{subsec:faithfulness_orthogonality}).
+\cref{tab:ddi_results} reports the quality metrics for all nine modes and
+\cref{tab:ddi_advantage} the paired contrast against Vanilla.
 
 \begin{table}[htbp]
   \centering
   \caption[DDI benchmark aggregate results.]{%
     DDI benchmark aggregate results ($n = 100$ per mode).
-    Best value per metric in \textbf{bold}.
-    Faith.\ = Faithfulness; Corr.\ = Answer Correctness;
-    Rel.\ = Answer Relevance; Lat.\ = median latency (s).}
+    Best value per metric in \textbf{bold}; Lat.\ = mean latency.}
   \label{tab:ddi_results}
   \begin{tabularx}{\textwidth}{@{}Xrrrr@{}}
     \toprule
-    \textbf{Mode} & \textbf{Faith.} & \textbf{Corr.} & \textbf{Rel.} & \textbf{Lat.~(s)} \\
+    \textbf{Mode} & \textbf{Faith.} & \textbf{Ans.Corr.} & \textbf{Ans.Rel.} & \textbf{Lat.~(s)} \\
     \midrule
-    Vanilla            & 0.694 & 0.487 & 0.800 & \textbf{29.8} \\
-    HyDE               & 0.758 & 0.514 & 0.794 & 51.8 \\
-    Query Rewriting    & 0.795 & 0.539 & 0.799 & 49.6 \\
-    Self-Reflection    & 0.714 & 0.452 & \textbf{0.804} & 55.2 \\
-    Multi-Agent        & 0.694 & 0.493 & 0.797 & 27.2 \\
-    Corrective RAG     & 0.670 & 0.462 & 0.801 & 33.8 \\
-    Iter.\ Multi-hop   & 0.751 & \textbf{0.544} & 0.800 & 47.4 \\
-    MADAM-RAG          & \textbf{0.816} & 0.468 & 0.794 & 42.0 \\
-    \rarerag{}         & 0.760 & 0.467 & 0.795 & 82.7 \\
+    Vanilla            & 0.694 & 0.487 & 0.800 & \textbf{31.3} \\
+    HyDE               & 0.758 & 0.514 & 0.794 & 54.8 \\
+    Query Rewriting    & 0.795 & \textbf{0.539} & 0.799 & 52.7 \\
+    Self-Reflection    & 0.711 & 0.452 & \textbf{0.804} & 65.3 \\
+    Corrective RAG     & 0.670 & 0.462 & 0.801 & 35.2 \\
+    Multi-Agent        & \textbf{0.802} & 0.524 & 0.799 & 72.4 \\
+    Iter.\ Multi-hop   & 0.719 & 0.447 & 0.793 & 127.8 \\
+    MADAM-RAG          & 0.775 & 0.404 & 0.797 & 68.0 \\
+    \rarerag{}         & 0.758 & 0.460 & 0.792 & 129.0 \\
     \bottomrule
   \end{tabularx}
+\end{table}
+
+\begin{table}[htbp]
+  \centering
+  \caption[Paired advantage over Vanilla on the DDI benchmark.]{%
+    DDI: advantage over the Vanilla control, paired per question
+    (Wilcoxon signed-rank; bootstrap 95\,\% CI).
+    Vanilla means: faithfulness 0.694, answer correctness 0.487.
+    Two modes significantly improve grounding; none significantly improves
+    correctness, and MADAM-RAG significantly damages it.}
+  \label{tab:ddi_advantage}
+  \begin{tabular}{@{}lccc@{}}
+    \toprule
+    & \multicolumn{2}{c}{\textbf{Faithfulness}} & \textbf{Ans.\ correctness} \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-4}
+    \textbf{Mode} & $\Delta$ vs Vanilla & 95\,\% CI & $\Delta$ vs Vanilla \\
+    \midrule
+    HyDE              & $+0.064$           & $[-0.010, +0.138]$ & $+0.027$ \\
+    Query Rewriting   & $+0.101$~\sig{**}  & $[+0.018, +0.184]$ & $+0.052$ \\
+    Self-Reflection   & $+0.017$           & $[-0.062, +0.092]$ & $-0.035$ \\
+    Corrective RAG    & $-0.024$           & $[-0.109, +0.060]$ & $-0.025$ \\
+    \midrule
+    Multi-Agent       & $+0.108$~\sig{*}   & $[+0.027, +0.190]$ & $+0.037$ \\
+    Iter.\ Multi-hop  & $+0.019$           & $[-0.080, +0.119]$ & $-0.071$ \\
+    MADAM-RAG         & $+0.081$           & $[-0.001, +0.164]$ & $-0.083$~\sig{*} \\
+    \rarerag{}        & $+0.064$           & $[-0.016, +0.146]$ & $-0.033$ \\
+    \bottomrule
+  \end{tabular}
 \end{table}
 
 \begin{figure}[htbp]
@@ -689,153 +588,447 @@ across both benchmarks (see also \cref{subsec:faithfulness_orthogonality}).
   \includegraphics[width=\linewidth]{figures/fig_ddi_quality_bar.png}
   \caption[DDI faithfulness and answer correctness by architecture.]{%
     DDI benchmark: faithfulness (solid bars) and answer correctness (hatched bars)
-    for all nine modes, sorted by faithfulness.
-    MADAM-RAG leads on faithfulness but not correctness; Query Rewriting and
-    Iterative Multi-hop achieve the strongest combined scores.}
+    for all nine modes, sorted by faithfulness.}
   \label{fig:ddi_quality_bar}
 \end{figure}
 
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=\linewidth]{figures/fig_ddi_scatter.png}
-  \caption[DDI faithfulness vs answer correctness scatter plot with latency.]{%
-    DDI benchmark: faithfulness (\emph{y}) vs answer correctness (\emph{x})
-    for all nine modes; bubble size is proportional to median latency.
-    The dashed staircase marks the Pareto frontier.
-    Query Rewriting and Iterative Multi-hop sit on the frontier;
-    the remaining modes trade off both quality dimensions against each other.}
-  \label{fig:ddi_scatter}
-\end{figure}
+\paragraph{The sign flips.}
+The four agentic architectures that were significantly \emph{worse} than Vanilla
+on HotpotQA are, on DDI, all at or above it on faithfulness, and Multi-Agent is
+the best of the nine ($+0.108$, $p = 0.012$).
+Query Rewriting gains a comparable amount ($+0.101$, $p = 0.009$).
+Nothing about the architectures changed between the two benchmarks --- the same
+code, the same retrieval backend, the same generator and judge answered both.
+What changed is the questions.
+
+The reason the direction reverses is visible in the Vanilla baseline itself.
+On HotpotQA, Vanilla is already faithful at 0.939 and there is almost nothing to
+add; the only thing extra reasoning can do is get in the way.
+On DDI, Vanilla sits at 0.694, hallucinating on roughly one claim in three, and
+the questions genuinely demand what the elaborate pipelines provide: several drug
+profiles plus an interaction record, assembled into a mechanism.
+When a task actually requires reasoning over multiple pieces of evidence, machinery
+that decomposes and reassembles evidence begins to earn its cost.
+
+\paragraph{Grounding improves; correctness does not.}
+This is the honest limit of the result, and it should not be glossed over.
+Not one of the eight modes improves answer correctness over Vanilla by a
+statistically detectable margin --- Query Rewriting's $+0.052$ and Multi-Agent's
+$+0.037$ are directionally right but sit comfortably inside their confidence
+intervals.
+Meanwhile MADAM-RAG \emph{loses} 8 points of correctness ($p = 0.026$) while
+gaining 8 points of faithfulness.
+
+That combination is not a contradiction; it is a description of what debate does.
+MADAM-RAG's judge, faced with two agents that have argued from different angles,
+converges on the claims both agents can support from the retrieved text --- and
+hedges on everything else.
+The result reads as ``there is a potential interaction; consult a pharmacist''
+where Vanilla would have committed to a mechanism.
+Such an answer is better grounded and less useful.
+For a clinical advisory tool, that trade is not obviously wrong --- a hedge is
+safer than a confident fabrication --- but it must be named for what it is rather
+than sold as an improvement.
 
 \subsection{Per-Difficulty Breakdown}
 \label{subsec:ddi_difficulty}
 
-\cref{tab:ddi_difficulty} shows answer correctness broken down by difficulty level.
-Performance degrades consistently from L1 to L5 for all modes, confirming that
-the benchmark levels capture genuine increases in reasoning complexity.
-\cref{fig:ddi_rank_bump} translates the same data into architecture \emph{rankings}
-at each level, making it easier to see which modes gain or lose ground as
-questions grow harder.
+The aggregate hides the finding this chapter is really about.
+\cref{tab:ddi_difficulty} breaks faithfulness down by difficulty level.
+Vanilla decays steeply as questions get harder --- 0.945 at L1, 0.445 at L5 ---
+and the interesting question is which architectures decay with it and which
+hold up.
 
 \begin{table}[htbp]
   \centering
-  \caption[DDI answer correctness by difficulty level.]{%
-    Answer correctness per difficulty level ($n = 20$ per cell).
-    Best value per row in \textbf{bold}.
-    Van.\ = Vanilla; QR = Query Rewriting; SR = Self-Reflection;
-    MA = Multi-Agent; CR = Corrective RAG; ItMH = Iter.\ Multi-hop;
-    MDM = MADAM-RAG; RR = \rarerag{}.}
+  \caption[DDI faithfulness by difficulty level.]{%
+    Faithfulness per difficulty level ($n = 20$ per cell).
+    Best value per column in \textbf{bold}.
+    Vanilla is strong on single-drug questions and collapses on expert PK/PD
+    reasoning; the agentic modes hold up where it fails.}
   \label{tab:ddi_difficulty}
-  \resizebox{\textwidth}{!}{%
-  \begin{tabular}{@{}lrrrrrrrrr@{}}
+  \begin{tabularx}{\textwidth}{@{}Xrrrrr@{}}
     \toprule
-    \textbf{Level} & \textbf{Van.} & \textbf{HyDE} & \textbf{QR}
-      & \textbf{SR} & \textbf{MA} & \textbf{CR} & \textbf{ItMH}
-      & \textbf{MDM} & \textbf{RR} \\
+    \textbf{Mode} & \textbf{L1} & \textbf{L2} & \textbf{L3} & \textbf{L4} & \textbf{L5} \\
     \midrule
-    L1 --- Single drug     & 0.925 & \textbf{0.940} & 0.840 & 0.780 & 0.860 & 0.690 & 0.790 & 0.625 & 0.710 \\
-    L2 --- Two drugs       & 0.300 & 0.530 & 0.485 & 0.385 & \textbf{0.550} & 0.365 & 0.530 & 0.555 & 0.425 \\
-    L3 --- Multi-hop       & 0.350 & 0.355 & 0.315 & 0.370 & 0.385 & 0.350 & \textbf{0.490} & 0.305 & 0.305 \\
-    L4 --- Polypharmacy    & 0.510 & 0.430 & \textbf{0.620} & 0.425 & 0.305 & 0.450 & 0.485 & 0.405 & 0.425 \\
-    L5 --- Expert PK/PD   & 0.350 & 0.315 & 0.435 & 0.300 & 0.365 & 0.455 & 0.425 & 0.450 & \textbf{0.470} \\
+    Vanilla            & \textbf{0.945} & 0.625 & 0.725 & 0.730 & 0.445 \\
+    HyDE               & 0.950 & 0.890 & 0.740 & 0.795 & 0.412 \\
+    Query Rewriting    & 0.870 & 0.825 & 0.750 & \textbf{0.910} & 0.620 \\
+    Self-Reflection    & 0.950 & 0.780 & 0.695 & 0.680 & 0.450 \\
+    Corrective RAG     & 0.770 & 0.625 & 0.635 & 0.860 & 0.460 \\
+    Multi-Agent        & 0.825 & 0.770 & \textbf{0.865} & 0.905 & \textbf{0.645} \\
+    Iter.\ Multi-hop   & 0.870 & 0.812 & 0.780 & 0.694 & 0.465 \\
+    MADAM-RAG          & 0.950 & \textbf{0.895} & 0.580 & 0.820 & 0.630 \\
+    \rarerag{}         & 0.950 & 0.860 & 0.865 & 0.595 & 0.494 \\
     \bottomrule
-  \end{tabular}}
+  \end{tabularx}
 \end{table}
 
-A statistical caveat applies throughout this subsection: with $n = 20$ questions
-per cell, differences of up to 0.10 in answer correctness are within the range
-of sampling noise and should not be over-interpreted; the patterns described below
-are directionally consistent but not statistically significant at conventional
-thresholds.
-
-Three findings stand out.
-On L1 (single drug), Vanilla and HyDE are the top performers (0.925 and 0.940),
-suggesting that straightforward profile questions do not benefit from query
-transformation; simpler retrieval is sufficient when a question concerns a single
-drug's well-documented properties.
-On L3 (multi-hop), Iterative Multi-hop leads (0.490) --- the only architecture
-specifically designed for evidence chaining across multiple documents, which is
-precisely what L3 requires.
-On L5 (expert PK/PD), \rarerag{} achieves the highest correctness (0.470):
-its complexity router directs expert-level queries to the most capable sub-pipeline,
-yielding a modest but consistent advantage on the hardest questions.
-The general faithfulness trend mirrors correctness: L5 faithfulness ranges from
-0.355 (Multi-Agent) to 0.620 (Query Rewriting), roughly half the L1 values,
-indicating that all architectures struggle to fully ground answers when the required
-pharmacokinetic reasoning is absent from the retrieved context.
-
-The rank bump chart (\cref{fig:ddi_rank_bump}) makes the ``right architecture
-for the right task'' pattern concrete.
-No single line runs flat: every architecture's rank shifts substantially as
-difficulty increases.
-Vanilla and HyDE start near the top (ranks 1--2 at L1), then fall to the
-middle by L3--L5 as their single-pass retrieval fails to chain multi-document
-evidence.
-\rarerag{} starts mid-table (rank 7 at L1) and rises consistently, reaching
-rank 1 at L5 --- the only architecture whose trajectory is monotonically
-improving across the difficulty spectrum.
-Iterative Multi-hop peaks at L3 and then declines, consistent with its
-decomposition mechanism being well-suited to three-document chains but less
-so to full PK/PD reasoning.
-The practical implication is that a deployment targeting a mixed case-load ---
-simple profile lookups alongside complex polypharmacy consultations --- cannot
-optimise for both ends simultaneously with a single static architecture;
-a routing mechanism is needed.
-
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=\linewidth]{figures/fig_ddi_correctness_by_difficulty.png}
-  \caption[Answer correctness by difficulty level on the DDI benchmark.]{Answer correctness by difficulty level for all nine modes. Performance degrades consistently from L1 (single drug) to L5 (expert PK/PD), with architecture-specific strengths emerging at each level.}
-  \label{fig:ddi_correctness_difficulty}
+  \includegraphics[width=\linewidth]{figures/fig_ddi_faithfulness_by_difficulty.png}
+  \caption[Faithfulness by difficulty level on the DDI benchmark.]{%
+    Faithfulness by difficulty level. Vanilla (dashed) degrades sharply from L1
+    to L5; Multi-Agent and Query Rewriting hold their grounding on the hardest
+    questions, which is where the two curves separate.}
+  \label{fig:ddi_faithfulness_difficulty}
 \end{figure}
 
-\begin{figure}[htbp]
+To test the pattern rather than merely describe it, the two hardest levels are
+pooled (L4 and L5, $n = 40$) and each mode is again compared against Vanilla,
+paired per question.
+\cref{tab:ddi_hard} reports the result, and it is the strongest evidence in this
+thesis for the value of architectural complexity.
+
+\begin{table}[htbp]
   \centering
-  \includegraphics[width=\linewidth]{figures/fig_ddi_heatmap_by_difficulty.png}
-  \caption[Heatmap of answer correctness by mode and difficulty level on the DDI benchmark.]{Answer correctness heatmap (difficulty $\times$ RAG mode). Darker cells indicate higher correctness. The strong diagonal pattern (high L1, low L5) confirms consistent degradation with reasoning complexity.}
-  \label{fig:ddi_heatmap_difficulty}
-\end{figure}
+  \caption[Paired advantage over Vanilla on hard DDI questions.]{%
+    DDI, hard questions only (L4 + L5, $n = 40$): advantage over Vanilla, paired
+    per question (Wilcoxon signed-rank).
+    Where Vanilla is weakest, the effects grow: Multi-Agent and Query Rewriting
+    gain roughly 18 points of faithfulness.
+    The correctness column shows what it costs.}
+  \label{tab:ddi_hard}
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    & \multicolumn{2}{c}{\textbf{Faithfulness}} & \multicolumn{2}{c}{\textbf{Answer correctness}} \\
+    \cmidrule(lr){2-3}\cmidrule(lr){4-5}
+    \textbf{Mode} & $\Delta$ vs Vanilla & $p$ & $\Delta$ vs Vanilla & $p$ \\
+    \midrule
+    HyDE              & $+0.016$ & 0.599 & $-0.057$ & 0.572 \\
+    Query Rewriting   & $\mathbf{+0.178}$~\sig{**} & $\mathbf{0.005}$ & $+0.098$ & 0.075 \\
+    Self-Reflection   & $-0.023$ & 0.958 & $-0.067$ & 0.272 \\
+    Corrective RAG    & $+0.073$ & 0.081 & $+0.023$ & 0.693 \\
+    \midrule
+    Multi-Agent       & $\mathbf{+0.188}$~\sig{*}  & $\mathbf{0.010}$ & $+0.033$ & 0.412 \\
+    Iter.\ Multi-hop  & $-0.035$ & 0.782 & $-0.138$ & 0.071 \\
+    MADAM-RAG         & $+0.138$~\sig{*} & 0.032 & $\mathbf{-0.220}$~\sig{**} & $\mathbf{0.002}$ \\
+    \rarerag{}        & $-0.034$ & 0.642 & $-0.161$~\sig{*} & 0.031 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=\linewidth]{figures/fig_ddi_rank_bump.png}
-  \caption[Architecture ranking trajectories across DDI difficulty levels.]{%
-    Rank bump chart: each line shows how an architecture's rank (1\,=\,best
-    answer correctness) changes from L1 to L5.
-    Stars ({\large$\star$}) mark the winner at each level.
-    No architecture holds a consistent top-three position across all five
-    levels, confirming that query complexity is the dominant determinant of
-    which approach works best.}
-  \label{fig:ddi_rank_bump}
-\end{figure}
+\paragraph{The effects grow with difficulty.}
+Multi-Agent's faithfulness advantage rises from $+0.108$ over all 100 questions to
+$+0.188$ on the 40 hardest, and Query Rewriting's from $+0.101$ to $+0.178$ ---
+both still significant despite the sample shrinking by 60\,\%.
+An effect that survives a smaller sample by growing is behaving like a real effect
+and not like noise: if these gains were sampling artefacts, cutting $n$ from 100
+to 40 would have dissolved them.
+The gains concentrate exactly where Vanilla is weakest, which is the pattern one
+would predict if the extra reasoning is doing the work it was designed to do.
 
-\subsection{Comparison with HotpotQA}
+This is the thesis's core empirical claim, and it can now be stated in one
+sentence: \emph{architectural complexity pays for itself in proportion to how much
+reasoning the question actually requires.}
+On easy questions it is dead weight that degrades grounding (HotpotQA, DDI L1).
+On questions that demand assembling several drug profiles into a mechanism
+(DDI L4--L5), it recovers grounding that a single pass loses.
+An advisory system serving a mixed case-load therefore should not commit to one
+pipeline for everything --- which is the argument for a router, and the reason
+\rarerag{} is built around one.
+
+\paragraph{Two cautions, stated plainly.}
+First, 40 questions is a small sample, and a 20-question cell is smaller still;
+the significant results above should be read as well-supported \emph{directional}
+findings, not as settled effect sizes.
+The per-level table is a map of where to look, not a measurement of how much.
+Second, and more important: the effects that survive testing are all in
+\emph{faithfulness}.
+On the hard subset, no mode significantly improves answer correctness, while
+MADAM-RAG ($-0.220$, $p = 0.002$) and \rarerag{} ($-0.161$, $p = 0.031$)
+significantly damage it.
+The defensible summary of this benchmark is that the elaborate architectures make
+the system's answers better grounded in its sources on hard questions, but no more
+likely to be right --- and two of them make it markedly less likely to be right.
+Grounding is worth something on its own in a clinical setting, where an answer
+traceable to a cited FDA label can be checked by a pharmacist and a fabricated one
+cannot.
+It is not, however, the same thing as being correct, and this evaluation does not
+show that any architecture here made the system more correct.
+
+\subsection{Where \rarerag{} Actually Stands}
+\label{subsec:rare_verdict}
+
+\rarerag{} is the architecture proposed by this thesis, and it is the one the
+data treats most harshly.
+It is the worst mode on HotpotQA faithfulness ($-0.054$, $p < 0.001$); on DDI it
+is mid-table in aggregate ($+0.064$, n.s.); and on the hard L4--L5 subset --- the
+questions it was designed for --- it is slightly \emph{below} Vanilla on
+faithfulness ($-0.034$, n.s.) and significantly below on correctness ($-0.161$,
+$p = 0.031$).
+The per-level table shows why the aggregate looked benign: \rarerag{} scores well
+at L1--L3 (0.95, 0.86, 0.865) and then falls off a cliff at L4 (0.595).
+Its gains on easy questions were masking its losses on hard ones.
+
+The most plausible mechanism is set-wise selection (\cref{cha:rare_rag}), which
+prunes the reranked passages down to $m = 3$ maximally complementary ones.
+On an L4 polypharmacy question involving four drugs, three passages cannot cover
+four drug profiles plus their pairwise interactions: the selector is starving the
+generator of evidence at exactly the moment it needs the most.
+The very diversity objective that makes the selection look principled is what
+breaks it. Set-wise selection is designed to fix redundancy --- passages that
+repeat the same fact --- by keeping only ones that add something new. But on a
+polypharmacy question the problem is never redundancy; it is that there simply is
+not enough room in three passages to hold every drug the question asks about.
+What limits the answer is \emph{coverage} (how many of the needed facts are
+present at all), not \emph{complementarity} (how little the passages overlap), and
+the selector optimises the wrong one.
+
+This is a negative result about a proposed contribution, and it is reported as
+one.
+It also suggests an obvious repair --- making $m$ a function of the query's
+complexity class, which the router already computes --- and that is taken up in
+\cref{cha:conclusions}.
+
+\subsection{Comparison Across the Two Benchmarks}
 \label{subsec:ddi_vs_hotpot}
 
-Two systematic differences emerge when comparing DDI and HotpotQA results.
-Faithfulness is substantially higher on HotpotQA (0.939--0.976 across modes) than on
-DDI ($\approx$0.67--0.82), which is expected: the HotpotQA corpus is dense
-and factually consistent, so the model rarely needs to extrapolate beyond the
-retrieved passages.
-Conversely, answer correctness is lower on DDI ($\approx$0.45--0.54) than on
-HotpotQA ($\approx$0.55--0.65), reflecting the open-ended nature of clinical
-explanations that are semantically correct but lexically unlike the reference answer.
-The relative ordering of architectures differs between the two benchmarks:
-Query Rewriting and Iterative Multi-hop perform well on both, whereas
-MADAM-RAG --- designed for conflicting evidence --- achieves its highest
-faithfulness on DDI, where source documents are reliable but domain-specific,
-requiring careful grounding rather than adversarial debate resolution.
+\cref{tab:cross_benchmark} places the two benchmarks side by side.
+Faithfulness is far higher on HotpotQA (0.885--0.973) than on DDI (0.670--0.802):
+Wikipedia is dense and internally consistent, so a model rarely has to extrapolate
+beyond the retrieved passages, whereas the DDI corpus is fragmentary and a model
+asked about a four-drug regimen will fill gaps from parametric memory.
+
+\begin{table}[htbp]
+  \centering
+  \caption[Direction of the effect on both benchmarks.]{%
+    The same architectures, the same code, opposite results.
+    Cell entries are the paired faithfulness advantage over Vanilla.}
+  \label{tab:cross_benchmark}
+  \begin{tabularx}{\textwidth}{@{}Xccc@{}}
+    \toprule
+    \textbf{Mode} & \textbf{HotpotQA} & \textbf{DDI (all)} & \textbf{DDI (L4--L5)} \\
+                  & \small $n = 1{,}000$ & \small $n = 100$ & \small $n = 40$ \\
+    \midrule
+    Lightweight (HyDE, QR, SR, CRAG) & $+0.03$~\sig{***} & $-0.02$ to $+0.10$ & up to $+0.18$~\sig{**} \\
+    Agentic (MA, ItMH, MADAM, RARE)  & $-0.03$ to $-0.05$~\sig{***} & $+0.02$ to $+0.11$ & $-0.03$ to $+0.19$~\sig{*} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The cross-benchmark contrast is the reason this chapter refuses to name a single
+winning architecture.
+A reader who saw only the HotpotQA numbers would conclude that agentic RAG is a
+bad idea and that Corrective RAG is the sensible default.
+A reader who saw only the hard DDI questions would conclude that Multi-Agent is
+clearly worth its cost.
+Both readers would be over-generalising from the benchmark in front of them, and
+the same mistake is easy to make when reading the RAG literature, where new
+architectures are frequently validated on exactly one family of datasets.
+
+% ------------------------------------------------------------
+\section{What the Complexity Costs}
+\label{sec:results_latency}
+
+The quality results say nothing about price, and the price is steep.
+\cref{fig:results_latency} plots mean latency for all nine modes on both
+benchmarks.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/fig_latency.png}
+  \caption[Mean query latency for all nine RAG modes on both benchmarks.]{%
+    Mean latency per query. All modes were measured under identical load
+    (two concurrent queries), so the figures are comparable with each other.}
+  \label{fig:results_latency}
+\end{figure}
+
+The spread is an order of magnitude.
+On HotpotQA, Vanilla answers in 9.1\,s and Corrective RAG in 11.8\,s, while
+Iterative Multi-hop needs 83.7\,s --- nine times as long for an architecture that
+is significantly \emph{worse} on faithfulness.
+On DDI the pattern repeats at a higher baseline: Vanilla 31.3\,s against
+\rarerag{}'s 129.0\,s.
+
+Read together with the quality results, the cost table decides the practical
+recommendation of this chapter.
+On the hard DDI questions, Multi-Agent (72.4\,s) and Query Rewriting (52.7\,s) buy
+statistically indistinguishable amounts of grounding --- $+0.188$ and $+0.178$
+faithfulness respectively.
+One of them does it with a planner, a set of executor agents and a synthesiser;
+the other does it with a single extra LLM call before retrieval, in 27\,\% less
+time.
+When a technique that simple matches a full agentic pipeline on the metric that
+matters, on the questions that matter, the agentic pipeline has to justify its
+remaining cost --- and on this evidence it cannot.
+
+Iterative Multi-hop is worth a separate note, because it is the slowest mode on
+DDI (128\,s).
+That is not a measurement artefact but intrinsic to the method: each hop must wait
+for what the previous hop established, so the retrieval steps run in sequence
+rather than in parallel.
+That sequential dependency is the entire point of a chain-of-retrieval
+architecture, and it is also what makes it expensive.
+The honest summary is that the method costs what it costs --- and on these two
+benchmarks it does not repay it.
+
+% ------------------------------------------------------------
+\section{Hypothesis Evaluation}
+\label{sec:hypothesis_eval}
+
+The introduction posed three research questions (\cref{sec:problem}).
+RQ1 --- which architecture gives the best quality/latency trade-off, and whether
+that depends on question difficulty --- is answered across
+\cref{sec:results_quality,sec:ddi_eval,sec:results_latency} and settled in
+\cref{subsec:when_rarerag}: there is no single winner, and difficulty decides.
+RQ3 --- whether the platform is a reliable, source-traceable demonstrator --- is
+addressed by the demonstration in \cref{sec:ddi_demo}.
+This section closes RQ2, the \rarerag{} claim, which was sharpened in
+\cref{sec:rarerag_hypotheses} into two falsifiable hypotheses tested here.
+
+\paragraph{H1 --- Faithfulness.}
+\emph{\rarerag{} achieves higher faithfulness than all single-path RAG architectures.}
+\textbf{Rejected.}
+\rarerag{} is significantly \emph{below} Vanilla on HotpotQA ($-0.054$,
+$p < 0.001$) and not significantly different from it on DDI ($+0.064$, $p = 0.14$).
+On the hard DDI questions it was designed for, it is below Vanilla on both
+metrics.
+The result holds with set-wise selection active and with a judge model distinct
+from the generator, so it cannot be attributed to an inactive component or to
+self-preference bias in the judge.
+
+\paragraph{H2 --- Competitive accuracy.}
+\emph{\rarerag{} maintains competitive accuracy despite the additional pipeline stages.}
+\textbf{Rejected.}
+Token~F1 on HotpotQA is 0.485 against Vanilla's 0.539 ($-0.054$, $p < 0.001$), and
+answer correctness on hard DDI questions is 16 points below Vanilla ($p = 0.031$).
+The additional stages cost accuracy rather than preserving it.
+
+\paragraph{What the data supports instead.}
+The hypotheses as originally posed were about one architecture.
+The finding that the evidence does support is about a relationship: the benefit of
+architectural complexity scales with task difficulty, is measurable in grounding
+rather than in correctness, and reverses sign on tasks a single pass already
+handles well.
+That is a weaker claim than ``\rarerag{} wins'', and a more useful one, because it
+predicts \emph{when} to reach for a complex pipeline instead of asserting that one
+should always be preferred.
+
+% ------------------------------------------------------------
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Faithfulness and Correctness Are Not the Same Objective}
+\label{subsec:faithfulness_orthogonality}
+
+Across both benchmarks the two headline metrics move independently, and in the
+case of MADAM-RAG they move in opposite directions.
+This is not an artefact of the evaluation setup; it follows from what the metrics
+mean.
+RAGAS faithfulness asks whether the generated text is supported by the
+\emph{retrieved} context, not whether that context is right.
+A system that retrieves a plausible but irrelevant FDA label and reasons carefully
+within it scores well on faithfulness and badly on correctness.
+A system that quietly draws on parametric knowledge the retrieval missed can be
+correct and unfaithful at once.
+
+For a medical advisory system, that distinction is the whole design question.
+A faithful answer is auditable: every claim points at a passage a pharmacist can
+open and check.
+An unfaithful but correct answer is right by luck and cannot be verified by the
+person relying on it.
+Optimising for faithfulness --- as \rarerag{} attempts --- is therefore a defensible
+choice even when it costs accuracy, provided the cost is stated rather than hidden.
+The results here show the cost is real: MADAM-RAG buys 14 points of grounding on
+hard questions with 22 points of correctness.
+
+\subsection{Why the Agentic Modes Fail on HotpotQA}
+
+The four agentic architectures follow their source papers closely, and yet they
+are worse than a plain pass on the benchmark those papers use.
+The explanation is not that the implementations are wrong --- Iterative Multi-hop
+achieves the highest context recall of any mode (0.986), which is exactly what a
+working chain-of-retrieval should do --- but that HotpotQA does not reward what
+they add.
+
+Each of these pipelines routes the retrieved evidence through one or more
+intermediate LLM calls that summarise, extract, or argue before the final answer
+is written.
+Every such call is a paraphrase, and every paraphrase is a chance for a detail to
+drift away from the source text.
+When the question needs one hop and a five-word answer, those chances accumulate
+into pure loss.
+When the question needs four drug profiles reconciled into a mechanism, the same
+intermediate structure is what makes the answer possible at all.
+The architecture did not change between those two cases; the ratio of useful
+reasoning to gratuitous paraphrase did.
+
+\subsection{When to Use Which Architecture}
+\label{subsec:when_rarerag}
+
+The evaluation points to a clear practical recommendation --- though not the one
+this thesis originally expected to give. The work set out to show that \rarerag{}
+was the architecture to choose; the data instead recommends simpler modes for easy
+corpora and lightweight query transformation for hard ones, and advises against
+deploying \rarerag{} as built. That recommendation is stated plainly below.
+
+\begin{itemize}
+  \item \textbf{For an easy, well-indexed corpus, use Corrective RAG or Vanilla.}
+    Corrective RAG gains 3.4 points of faithfulness over Vanilla on HotpotQA
+    ($p < 0.001$) at 11.8\,s, loses nothing on correctness, and is the only mode
+    that is never significantly worse than Vanilla on anything, on either
+    benchmark.
+    It is the safest default in this study.
+  \item \textbf{For hard domain questions, use Multi-Agent or Query Rewriting.}
+    Both gain roughly 18 points of faithfulness on DDI L4--L5.
+    Query Rewriting is the better buy: it achieves a comparable gain with one
+    extra LLM call rather than a planner, several executors and a synthesiser.
+    That a technique this simple matches a full agentic pipeline is itself a
+    result worth stating.
+  \item \textbf{Avoid MADAM-RAG unless hedging is acceptable.}
+    It is a grounding-for-decisiveness trade, and on a benchmark with single
+    correct answers it is a bad one.
+  \item \textbf{Do not deploy \rarerag{} as evaluated.}
+    Its set-wise pruning starves the generator on precisely the polypharmacy
+    questions the system exists to answer.
+\end{itemize}
+
+The broader point is that the router at the heart of \rarerag{} is the part of the
+design the evidence actually supports, even though the pipeline around it is
+not.
+If the benefit of complexity depends this strongly on question difficulty, then
+choosing the pipeline per query --- rather than per deployment --- is the right
+structure.
+The router is sound; what it routes to needs work.
+
+\subsection{Limitations}
+\label{sec:limitations_eval}
+
+\emph{The DDI benchmark is small.}
+With 100 questions in total and 20 per difficulty level, confidence intervals on
+the per-level cells are roughly $\pm 0.04$ wide.
+The significant results on the pooled hard subset ($n = 40$) are real, but they
+are the floor of what could be established, not a precise measurement.
+Confirming the difficulty-scaling effect properly needs 300--500 questions; the
+cost is linear and modest (about \$2 per 100 questions per mode), and this is the
+single most valuable extension of the present work.
+
+\emph{Gold answers are model-generated, then human-reviewed.}
+DDI questions and reference answers were produced by gpt-5-nano from OpenFDA and
+DrugBank passages and then manually reviewed against those passages for factual
+consistency --- but by the author, not by a pharmacist.
+They are a systematic signal, not a clinically validated one, and the correctness
+figures should be read with that in mind.
+
+\emph{One generator, one judge, one corpus.}
+Every result here is conditioned on a small generator model (gpt-5-nano).
+A larger generator that hallucinates less at baseline would compress the room the
+elaborate architectures have to improve, and might well flip the DDI conclusion
+back towards the HotpotQA one.
+The claim this chapter defends is about how the benefit of complexity scales with
+task difficulty for a given generator, not about an absolute ranking of
+architectures.
 
 % ------------------------------------------------------------
 \section{Drug Interaction Advisory Demonstration}
 \label{sec:ddi_demo}
 
-To illustrate qualitative system behaviour beyond the HotpotQA benchmark,
-this section presents two representative interactions from the \medrag{}
-advisory interface using the \rarerag{} mode with the OpenFDA drug interaction
-corpus.
+To illustrate qualitative system behaviour beyond the aggregate metrics, this
+section presents a representative interaction from the \medrag{} advisory
+interface using the OpenFDA drug interaction corpus.
 
-\paragraph{Example 1 --- Cited response.}
+\paragraph{A cited response.}
 A synthetic patient query was submitted: \textit{``My doctor prescribed warfarin
 for atrial fibrillation and my orthopaedic surgeon wants to add ibuprofen for
 knee pain. Is this safe?''}
@@ -855,30 +1048,21 @@ The combination should be avoided unless both prescribing physicians explicitly
 accept the haemorrhage risk and agree on close INR monitoring.}
 \end{quote}
 
-All three claims in this response were grounded in the retrieved FDA passages,
-and the RAGAS faithfulness score for this query was 1.0.
+Every claim in this response is traceable to a retrieved FDA passage, and the
+RAGAS faithfulness score for this query was 1.0.
+This is the behaviour the system is designed to produce, and the reason
+faithfulness was chosen as the primary quality metric: a pharmacist reading this
+answer can open the cited label and check it.
 
-\paragraph{Example 2 --- Abstention.}
-A query was submitted for which the DDI corpus contained no relevant passages:
-\textit{``Is there an interaction between tucatinib and larotrectinib?''}
-(a combination not covered in the indexed corpus).
-The grounding verifier assigned a support score of 0.12, well below the
-abstention threshold $\tau = 0.5$, and the system returned:
-
-\begin{quote}\small
-\textit{I could not find sufficient evidence in the available drug interaction
-database to answer this question reliably.
-Please consult a clinical pharmacist or refer to a current drug interaction
-database such as Lexicomp or Micromedex.}
-\end{quote}
-
-This abstention behaviour follows directly from the grounding verifier
-described in \cref{cha:rare_rag}: rather than generating a plausible but
-unverifiable response, the system acknowledges the limits of its knowledge.
-For a patient-facing advisory tool, this is the appropriate behaviour when
-evidence is absent.
-
-A DDI corpus evaluation with pharmacist-validated gold answers remains future
-work; the quantitative results in \cref{sec:ddi_eval} used programmatically
-generated gold answers, which provide a systematic but not clinically validated
-signal.
+\paragraph{On abstention.}
+The system also implements an abstention path, in which the grounding verifier
+declines to answer when the support score falls below the threshold.
+It did not fire once across either benchmark --- 0 abstentions in 1{,}000 HotpotQA
+queries and 0 in 100 DDI queries.
+The reason is structural rather than accidental, and it is analysed in
+\cref{subsec:abstention_reality}: every question in both benchmarks is answerable
+from the indexed corpus, and a low-scoring answer triggers a retry through the
+self-reflection pipeline that, on these corpora, always cleared the threshold.
+Abstention is therefore best understood as a last-resort safeguard for
+out-of-corpus queries, which these benchmarks do not contain, rather than as an
+actively exercised behaviour.

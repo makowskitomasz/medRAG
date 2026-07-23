@@ -8,12 +8,12 @@ This chapter describes the concrete engineering decisions made while building
 the \medrag{} prototype.  Rather than walking through the code exhaustively,
 the focus is on the non-trivial choices --- ones that required a genuine trade-off
 or that differ from a textbook solution.  Six topics are covered: the technology
-stack and its rationale~(\S\ref{sec:tech_stack}), the provider abstraction for
-dense embeddings~(\S\ref{sec:embedding_abstraction}), the hybrid retrieval
-mechanism and its empirical tuning~(\S\ref{sec:hybrid_search}), the Server-Sent
-Events streaming architecture~(\S\ref{sec:sse_streaming}), the asynchronous
-integration of the RAGAS evaluation framework~(\S\ref{sec:ragas_integration}),
-and the continuous-integration and deployment pipeline~(\S\ref{sec:cicd}).
+stack and its rationale~(\cref{sec:tech_stack}), the provider abstraction for
+dense embeddings~(\cref{sec:embedding_abstraction}), the hybrid retrieval
+mechanism and its empirical tuning~(\cref{sec:hybrid_search}), the Server-Sent
+Events streaming architecture~(\cref{sec:sse_streaming}), the asynchronous
+integration of the RAGAS evaluation framework~(\cref{sec:ragas_integration}),
+and the continuous-integration and deployment pipeline~(\cref{sec:cicd}).
 
 % ------------------------------------------------------------
 \section{Technology Stack}
@@ -62,7 +62,7 @@ UI components are drawn from the \textbf{shadcn/ui} library --- a collection of
 accessible, unstyled primitives built on top of Radix UI --- styled with
 \textbf{Tailwind CSS}.  The App Router is used throughout; streaming responses
 from the generation service are consumed via the browser's native
-\texttt{EventSource} API (see \S\ref{sec:sse_streaming}).
+\texttt{EventSource} API (see \cref{sec:sse_streaming}).
 
 \paragraph{Machine-learning dependencies.}
 Dense vector embeddings are produced via the \textbf{OpenAI Embeddings API};
@@ -112,11 +112,9 @@ method, \texttt{embed\_texts}, which accepts a list of strings and returns a lis
 of floating-point vectors.  Accepting batches rather than single strings allows
 providers to exploit vectorised inference efficiently.
 
-\begin{figure}[htbp]
-  \centering
 \begin{lstlisting}[language=Python,
-  caption={Embedding provider strategy: abstract interface and concrete class
-    signatures (simplified).},
+  caption={Embedding provider strategy: abstract interface with three concrete
+    implementations --- local BGE-M3, Cohere, and OpenAI (signatures simplified).},
   label={lst:embedding_abc}]
 from abc import ABC, abstractmethod
 
@@ -142,9 +140,6 @@ class OpenAIProvider(EmbeddingProvider):
     """text-embedding-3-small via the OpenAI Python SDK (API call)."""
     async def embed_texts(self, texts: list[str]) -> list[list[float]]: ...
 \end{lstlisting}
-  \caption[Embedding provider strategy pattern.]{Embedding provider strategy: abstract interface with three concrete implementations (local BGE-M3, Cohere, OpenAI).}
-  \label{fig:embedding_strategy}
-\end{figure}
 
 \subsection{Provider Selection and Injection}
 
@@ -159,36 +154,49 @@ business-logic code imports a concrete provider class --- only the abstract base
 class --- so changing the provider is an environment variable change,
 nothing more.
 
+This is the one axis of the strategy pattern (\cref{cha:system_design}) that is
+bound per service deployment rather than per project.  The reason is practical:
+an embedding model must be the same for indexing a corpus and for querying it ---
+mixing a 1{,}024-dimensional and a 1{,}536-dimensional space in one Weaviate
+collection is not meaningful --- so the provider is fixed for the whole
+service and its indexed data, not switched per query the way \texttt{rag\_mode}
+is.  Comparing embedding providers therefore means re-indexing under each, which
+is exactly how the provider table below was produced.
+
 \subsection{Provider Trade-offs}
 
-\cref{tab:embedding_providers} compares the three providers across the
-dimensions most relevant for research experimentation: monetary cost,
-inference latency, embedding dimensionality, and operational complexity.
+\cref{tab:embedding_providers} compares the three implemented providers on the
+axes most relevant for research experimentation: embedding dimensionality and
+monetary cost.
 
 \begin{table}[htbp]
   \centering
-  \caption[Comparison of embedding providers supported by \medrag{}.]{Embedding provider comparison: model, dimensions, cost per 1,000 tokens, and indicative batch latency on CPU.}
+  \caption[Comparison of embedding providers supported by \medrag{}.]{Embedding
+    providers wired in the embedding service, with model, output dimensionality,
+    and list price. Cost is given per one million input tokens for readability.}
   \label{tab:embedding_providers}
-  \begin{tabularx}{\textwidth}{lXXXX}
+  \begin{tabular}{@{}llrr@{}}
     \toprule
-    \textbf{Provider} & \textbf{Model} & \textbf{Dimensions} &
-    \textbf{Cost (per 1\,000 tokens)} & \textbf{Latency (batch)} \\
+    \textbf{Provider} & \textbf{Model} & \textbf{Dimensions} & \textbf{Cost / 1M tokens} \\
     \midrule
-    \texttt{local\_bge} & \texttt{BAAI/bge-m3}
-      & 1\,024 & Free (compute only) & $\sim$50\,ms (CPU) \\
-    \texttt{cohere}     & Embed v3 English
-      & 1\,024 & \$0.0001 & API-bound ($\sim$200\,ms) \\
-    \texttt{openai}     & text-embedding-3-small
-      & 1\,536 & \$0.00002 & API-bound ($\sim$150\,ms) \\
+    \texttt{local\_bge}  & \texttt{BAAI/bge-m3}            & 1\,024 & Free (local compute) \\
+    \texttt{openai}      & \texttt{text-embedding-3-small} & 1\,536 & \$0.02 \\
+    \texttt{openrouter}  & \texttt{text-embedding-3-large} & 3\,072 & \$0.13 \\
     \bottomrule
-  \end{tabularx}
+  \end{tabular}
 \end{table}
 
-The default provider is \texttt{local\_bge}.  BGE-M3 supports multilingual
-text, produces competitive retrieval quality on the BEIR benchmark, and incurs
-no per-token monetary cost --- which matters when embedding tens of thousands
-of document chunks.  The Cohere and OpenAI providers are there for ablation
-studies and for deployments where a GPU is not available.
+The experiments in \cref{cha:evaluation} used the \texttt{openrouter} provider
+with OpenAI's \texttt{text-embedding-3-large}, the same gateway that served the
+generator model, so that no local embedding weights had to be loaded during
+benchmarking.
+The \texttt{local\_bge} provider is the zero-cost default: BGE-M3 is multilingual,
+scores competitively on the BEIR benchmark, and runs entirely offline, which
+matters for a deployment without external API access or with data that cannot
+leave the machine.
+(The project's settings schema also lists a \texttt{cohere} value, but the Cohere
+back-end was never wired into the embedding service and is not used anywhere in
+this thesis.)
 
 % ------------------------------------------------------------
 \section{Hybrid Search and Alpha Tuning}
@@ -223,19 +231,30 @@ response = collection.query.hybrid(
 \end{lstlisting}
 
 Internally, Weaviate computes a BM25 ranking score and a cosine-similarity
-vector score independently for each candidate document, then fuses them via
-\emph{Reciprocal Rank Fusion} (RRF)~\cite{cormack2009rrf} with \(k = 60\):
+vector score independently for each candidate document, then fuses them with the
+\emph{relative-score} strategy (\texttt{HybridFusion.RELATIVE\_SCORE}), which the
+retrieval service selects explicitly rather than taking the driver default.
+Each engine's scores are min--max normalised over its own candidate list and
+combined by the weighted sum of \cref{eq:fusion}:
 
 \begin{equation}
-  \mathrm{RRF}(d) \;=\;
-    \alpha \cdot \frac{1}{k + r_{\text{vec}}(d)} \;+\;
-    (1 - \alpha) \cdot \frac{1}{k + r_{\text{BM25}}(d)},
-  \label{eq:rrf_ch5}
+  \mathrm{score}(d) \;=\;
+    \alpha \cdot \frac{s_{\text{vec}}(d) - \min s_{\text{vec}}}
+                      {\max s_{\text{vec}} - \min s_{\text{vec}}}
+    \;+\; (1 - \alpha) \cdot
+    \frac{s_{\text{BM25}}(d) - \min s_{\text{BM25}}}
+         {\max s_{\text{BM25}} - \min s_{\text{BM25}}},
+  \label{eq:relative_score}
 \end{equation}
 
-\noindent where \(r_{\text{vec}}(d)\) and \(r_{\text{BM25}}(d)\) are the
-rank positions of document \(d\) in the vector and BM25 rankings respectively.
-Documents are returned in decreasing order of the combined RRF score.
+\noindent where \(s_{\text{vec}}(d)\) and \(s_{\text{BM25}}(d)\) are the raw
+vector and BM25 scores of document \(d\).
+Normalisation is what makes the sum meaningful: without it, \(\alpha\) would
+weight two quantities on incompatible scales.
+Documents are returned in decreasing order of the combined score.
+The rank-based alternative, Reciprocal Rank Fusion~\cite{cormack2009rrf}, is
+available in Weaviate as \texttt{HybridFusion.RANKED} and is not used here; the
+trade-off is discussed in \cref{sec:rare_retrieval}.
 
 \subsection{Empirical Alpha Tuning}
 
@@ -264,13 +283,14 @@ drug-interaction domain.  \cref{tab:alpha_grid} reports the results.
 \end{table}
 
 The equal-weight blend (\(\alpha = 0.5\)) produced the highest scores on both
-metrics.  This makes sense: HotpotQA questions frequently contain named entities
-such as drug names, gene symbols, and numeric dosages, for which BM25's exact-match
-signal is particularly valuable.  Pure vector retrieval captures semantic paraphrases
-but tends to retrieve thematically related documents that omit the specific entity
-needed to answer the question.  Pure BM25, on the other hand, fails when the question
-is phrased differently from the target passage.  The hybrid approach benefits from
-both signals simultaneously.
+metrics.  This makes sense given the mix of question types.  HotpotQA questions
+frequently hinge on named entities --- people, places, titles, dates --- for which
+BM25's exact-match signal is valuable, since pure vector retrieval tends to surface
+thematically related passages that omit the specific entity the question turns on.
+At the same time, many questions are paraphrased rather than quoting the source
+text, where pure BM25 fails and dense retrieval recovers the match.
+The hybrid blend benefits from both signals at once, and the equal weight avoids
+committing to either failure mode.
 
 The default \(\alpha = 0.5\) is used in all experiments reported in
 \cref{cha:evaluation}.  Per-project overrides are supported: the
@@ -281,9 +301,15 @@ reads this value at query time.
 \subsection{Retrieval Top-k and Re-ranking}
 
 The retrieval service returns \(k = 20\) candidates to the re-ranker by
-default (configurable per project).  This value balances recall coverage
-and re-ranking latency: the BGE-reranker-v2-m3 cross-encoder processes 20
-pairs in approximately 180\,ms on CPU, which is acceptable for interactive use.
+default (configurable per project).  This value balances recall coverage against
+re-ranking cost: scoring 20 query--passage pairs with the BGE-reranker-v2-m3
+cross-encoder takes on the order of a few hundred milliseconds on the experiment
+hardware, small relative to the multi-second LLM generation that follows and
+therefore acceptable for interactive use.
+The reranker selects its compute device at start-up --- Apple Metal (MPS) where
+available, CUDA on an NVIDIA host, CPU otherwise --- so on the Apple Silicon
+machine used for the experiments it runs on the integrated GPU rather than on the
+CPU.
 The re-ranker produces a calibrated relevance score for each (query, passage)
 pair; the top \(k' = 5\) passages are forwarded to the generation service.
 All retrieval results are filtered by \texttt{project\_id} at the Weaviate
@@ -302,40 +328,37 @@ full response in memory at any intermediate service.
 
 \subsection{Generation Service Streaming}
 
-The generation service wraps the OpenAI Python SDK's streaming context
-manager in an \texttt{AsyncGenerator}, yielding SSE-formatted byte strings.
+The generation service wraps the OpenAI SDK's streaming response in an
+\texttt{AsyncGenerator}, yielding SSE-formatted strings.
+Token events are forwarded to the client as they arrive; the citations event is
+emitted once, after the stream completes.
 \cref{lst:sse_generator} shows the core implementation.
 
-\begin{figure}[htbp]
-  \centering
 \begin{lstlisting}[language=Python,
-  caption={Core SSE streaming generator in the generation service.
-    Token events are emitted as they arrive from the OpenAI SDK;
-    the citations event is emitted once, after the stream completes.},
+  caption={Core SSE streaming generator in the generation service. Token events
+    are forwarded as they arrive from the OpenAI-compatible endpoint; a single
+    citations event follows once the stream completes.},
   label={lst:sse_generator}]
 async def stream_response(
     prompt: str,
     model: str,
 ) -> AsyncGenerator[str, None]:
-    async with client.messages.stream(
+    stream = await client.chat.completions.create(
         model=model,
-        max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
-    ) as stream:
-        async for text in stream.text_stream:
-            yield (
-                f"data: {json.dumps({'type': 'token', 'text': text})}\n\n"
-            )
-        final_msg = await stream.get_final_message()
-        citations = extract_citations(final_msg)
-        yield (
-            f"data: {json.dumps({'type': 'citations', 'data': citations})}\n\n"
-        )
+        stream=True,
+    )
+    buffer = ""
+    async for chunk in stream:
+        text = chunk.choices[0].delta.content or ""
+        buffer += text
+        event = {"type": "token", "text": text}
+        yield f"data: {json.dumps(event)}\n\n"
+    citations = extract_citations(buffer)
+    event = {"type": "citations", "data": citations}
+    yield f"data: {json.dumps(event)}\n\n"
     yield "data: [DONE]\n\n"
 \end{lstlisting}
-  \caption[Server-Sent Events streaming in the generation service.]{SSE streaming: token events are forwarded directly to the client; a \texttt{citations} event is emitted once after stream completion.}
-  \label{fig:sse_streaming}
-\end{figure}
 
 The generator is wrapped in a FastAPI \texttt{StreamingResponse} with
 \texttt{media\_type="text/event-stream"} and the required
@@ -426,9 +449,9 @@ lost due to a transient error.  Failed evaluations are requeued with a fixed bac
       least one retrieved chunk (LLM-as-judge) &
       Yes & 1 \\
     Answer Correctness &
-      Token-level F1 between the generated answer and the ground-truth
-      answer (string matching; no LLM call) &
-      Yes & 0 \\
+      Semantic agreement between the generated answer and the ground-truth
+      answer, scored by a separate judge model (LLM-as-judge) &
+      Yes & 1 \\
     \bottomrule
   \end{tabularx}
   \caption[Evaluation pipeline and RAGAS metrics.]{RAGAS metrics computed by the eval service: computation method, ground-truth dependency, and approximate LLM call count per query.}
@@ -444,19 +467,23 @@ data is available.
 \subsection{Cost and Throughput}
 
 RAGAS metrics that use the LLM-as-judge approach issue multiple LLM API calls
-per question.  Based on observed token usage during benchmark runs on the
-HotpotQA dataset, the combined cost of computing Faithfulness and Answer
-Relevance is approximately \$0.006 per question.  For the full evaluation runs
-reported in \cref{cha:evaluation} (500 questions), this corresponds to
-roughly \$3 in API costs.  The asynchronous design means that evaluation
+per question.  Based on observed token usage during benchmark runs, the two
+reference-free metrics (Faithfulness and Answer Relevance) cost approximately
+\$0.006 per question, and the two reference-based metrics (Context Recall and
+Answer Correctness) add a comparable amount, for roughly \$0.012 per fully scored
+question.  A full HotpotQA run of 1{,}000 questions therefore costs on the order
+of \$12 in judge-model API calls per mode, and the smaller DDI run (100 questions)
+about a tenth of that.  The asynchronous design means that evaluation
 does not compete with query latency for API capacity: the eval service has its
 own rate-limit headroom and processes questions at a pace independent of the
 interactive query load.
 
 Results are stored as documents in the MongoDB \texttt{eval\_results} collection.
-Each document records the metric scores, the RAGAS library version, the timestamp,
-and the identifiers required to join back to the conversation and the project settings,
-enabling post-hoc analysis across experimental conditions.
+Each document records the metric scores, the per-query input and output token
+counts and measured latency, the timestamp, and the identifiers required to join
+back to the conversation and the project settings, enabling post-hoc analysis ---
+including the token-usage figures the cost estimate above is based on --- across
+experimental conditions.
 
 % ------------------------------------------------------------
 \section{CI/CD Pipeline}
@@ -485,7 +512,7 @@ in the pull request, reducing feedback time on small changes; services without a
 \texttt{tests/} directory are skipped without failure.
 \textbf{Front-end validation} runs \texttt{tsc --noEmit}, \texttt{eslint}, and
 \texttt{vitest run}, but only when files under \texttt{frontend/} have been modified.
-The \texttt{ANTHROPIC\_API\_KEY} secret is stored in the GitHub repository's encrypted
+The \texttt{OPENROUTER\_API\_KEY} secret is stored in the GitHub repository's encrypted
 secret store and injected into the environment for any integration tests that issue
 real API calls.
 
@@ -510,13 +537,3 @@ provides a fast check that the containerised system starts and that all services
 are reachable.  In practice, the most common failures caught at this stage are
 missing environment variables and Weaviate schema migration errors that only manifest
 at container start-up.
-
-\subsection{Branch and Merge Strategy}
-
-The repository follows a structured branching model.  Feature work is conducted on
-branches named \texttt{feature/phase-X.Y-description} and merged into
-\texttt{develop} via pull request; the CI workflow must be green before merge is
-permitted.  The \texttt{main} branch receives merges from \texttt{develop} only when
-a full phase is demo-ready, and is tagged with a version identifier such as
-\texttt{v0.7-phase-7-done}.  Both protected branches require at least one approving
-review and passing status checks, enforced by GitHub's branch protection rules.

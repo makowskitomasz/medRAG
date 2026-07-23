@@ -344,6 +344,11 @@ Query rewriting pursues a related idea without the hypothetical document: a smal
 or cheaper model rewrites the user's query into one better suited for retrieval,
 for instance by expanding acronyms, resolving coreferences, or decomposing complex
 questions into simpler sub-questions.
+In the Rewrite--Retrieve--Read formulation~\cite{ma2023rewrite} the rewriter is a
+small language model trained with reinforcement learning against downstream answer
+quality; in practice the rewriting step is often delegated to a prompted
+general-purpose LLM instead, which is the variant implemented in this work
+(\cref{sec:exp_setup}).
 Query rewriting is widely used in production RAG systems and can be combined with
 any retrieval backend.
 
@@ -382,6 +387,11 @@ The explicit reasoning about evidence quality improves factual accuracy, but at 
 cost of higher latency from interleaved retrieval calls and the requirement for a
 fine-tuned model --- vanilla decoder models do not produce the reflection tokens
 needed for the mechanism to operate.
+That fine-tuning requirement is the reason the \texttt{self\_reflection} mode
+evaluated in this thesis is a simplified, prompt-based approximation rather than a
+faithful reproduction: it scores and re-drafts the whole answer with ordinary LLM
+calls instead of emitting per-token reflection tokens from a fine-tuned decoder
+(\cref{sec:query_pipeline,cha:evaluation}).
 
 \subsection{Corrective RAG}
 \label{subsec:corrective_rag}
@@ -398,6 +408,15 @@ if incorrect, fall back to a web search for fresh evidence.
 
 The web-search fallback is the distinctive feature: CRAG can recover from corpus
 gaps that would silently mislead other architectures.
+
+It is also the feature this work does not implement.
+The \texttt{corrective\_rag} mode evaluated in \cref{cha:evaluation} replaces the
+fine-tuned evaluator with a threshold on the raw hybrid retrieval score, and
+replaces the web-search fallback with a broadened re-query of the same corpus.
+A closed-corpus advisory system cannot responsibly cite the open web on a
+drug-safety question, so the omission is deliberate --- but it means the mode as
+evaluated here tests a relevance-gated re-retrieval strategy rather than CRAG's
+central claim.
 This makes it particularly useful for questions about recent events or narrow
 sub-domains not well represented in the static corpus.
 
@@ -678,7 +697,7 @@ than providing a plausible-sounding but unverified response.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.75\linewidth]{figures/arch_comparison.png}
-\caption[RAG families positioned by retrieval adaptivity and generation complexity.]{Eight surveyed RAG families along two axes: retrieval adaptivity (x) and generation complexity (y). The dashed curve approximates the Pareto frontier; RARE-RAG occupies the high-adaptivity end.}
+\caption[RAG families positioned by retrieval adaptivity and generation complexity.]{Qualitative positioning of the surveyed RAG families along two conceptual axes: retrieval adaptivity (x) and generation complexity (y). Coordinates are illustrative rather than measured, and marker size carries no meaning; RARE-RAG (highlighted) sits at the high-adaptivity end.}
 \label{fig:arch_comparison}
 \end{figure}
 

@@ -24,16 +24,18 @@ the emphasis lies on \emph{reproducibility}, \emph{configurability}, and
 \emph{separation of concerns} rather than on operational hardening.
 
 \paragraph{Strategy pattern for runtime configurability.}
-The central challenge of this thesis is comparing four RAG architectures
+The central challenge of this thesis is comparing nine RAG architectures
 on the same retrieval corpus without redeploying the system.  This requirement
 is satisfied by encoding all variable behaviour as named strategies stored in
 MongoDB's \texttt{projects} collection.  Each project document carries a
-\texttt{settings} sub-document that specifies three orthogonal axes of variation:
+\texttt{settings} sub-document that specifies three axes of variation:
 \texttt{chunking\_strategy} (one of \texttt{fixed\_512}, \texttt{recursive}, or
 \texttt{semantic}), \texttt{embedding\_provider} (one of \texttt{local\_bge},
-\texttt{cohere}, or \texttt{openai}), and \texttt{rag\_mode} (one of
-\texttt{vanilla}, \texttt{hyde}, \texttt{self\_reflection}, or
-\texttt{multi\_agent}).  The orchestrator reads \texttt{rag\_mode} on each
+\texttt{cohere}, or \texttt{openai}), and \texttt{rag\_mode} (one of the nine
+modes: \texttt{vanilla}, \texttt{hyde}, \texttt{query\_rewriting},
+\texttt{self\_reflection}, \texttt{corrective\_rag}, \texttt{multi\_agent},
+\texttt{iterative\_multihop}, \texttt{madam\_rag}, or \texttt{rare\_rag}).
+The orchestrator reads \texttt{rag\_mode} on each
 incoming request and instantiates the appropriate pipeline variant.  Adding a
 new strategy requires no changes to the caller: only the new implementation
 module and a mapping entry in the orchestrator's factory are needed.  In
@@ -75,7 +77,7 @@ eliminates module-level side effects and makes unit testing straightforward:
 tests substitute lightweight fakes for the injected dependencies without
 patching global state.  Settings are loaded exclusively through
 \texttt{pydantic-settings}, which reads values from environment variables
-and \texttt{.env} files, ensuring that no secrets are hard-coded and that
+and \texttt{.env} files, ensuring that no secrets are hardcoded and that
 all configuration is visible in a single place.
 
 \paragraph{Observability from the ground up.}
@@ -230,18 +232,26 @@ and triggering re-indexation when a project's chunking or embedding settings
 change.  The \texttt{eval} service operates entirely asynchronously: it
 subscribes to the \texttt{query.completed} exchange on RabbitMQ and, for
 every completed user query, computes RAGAS metrics (faithfulness, answer
-relevance, context recall, and answer correctness) by comparing the generated
-answer against the retrieved context.  Results are persisted in MongoDB's
+relevance, context recall, and answer correctness) plus a citation-precision
+score, by comparing the generated answer against the retrieved context.
+Faithfulness and citation precision need no gold answer and so can also run in
+production mode as a live quality signal; the remaining metrics require the
+benchmark gold answers and are reported in \cref{cha:evaluation}.  Results are persisted in MongoDB's
 \texttt{eval\_results} collection and exposed through a REST endpoint so
 that the evaluation scripts described in \cref{cha:evaluation} can
 retrieve them in bulk.
 
-The two persistent stores --- MongoDB and Weaviate --- are shared across clusters
-but accessed only through the services responsible for them.  No service
-issues direct Weaviate queries except \texttt{retrieval} and \texttt{indexing};
-no service writes to MongoDB collections that belong to another service's domain.
-This informal ownership rule keeps the data layer from becoming a coupling point
-between services.
+The two persistent stores --- MongoDB and Weaviate --- are physically shared, but
+each collection has a single owning service that is the only one allowed to write
+to it.  Weaviate is written only by \texttt{indexing} and queried only by
+\texttt{retrieval}.  In MongoDB, \texttt{admin} owns the \texttt{projects}
+collection, \texttt{orchestrator} owns \texttt{conversations}, and \texttt{eval}
+owns \texttt{eval\_results}.  Other services may \emph{read} these collections
+--- the orchestrator reads a project's settings, for instance --- but never write
+outside their own.  So when the orchestrator persists a conversation it is writing
+to its own collection, not reaching into another service's.  This ownership rule
+keeps the shared database from silently becoming a coupling point through which
+one service's schema change breaks another.
 
 % ------------------------------------------------------------
 \section{Query Pipeline}
@@ -286,29 +296,41 @@ again, for at most two iterations.  This is a deliberately simplified,
 prompt-based approximation of Self-RAG~\cite{asai2024selfrag}: it operates on the
 whole answer rather than emitting the per-segment reflection tokens
 (\cref{fig:selfrag}) that the original method requires, since those tokens
-depend on a fine-tuned decoder that is not used here.  In \texttt{multi\_agent} mode
-multiple parallel retrieval sub-queries are issued and their results are
-merged before reranking.  Because each mode is encapsulated behind the same
-\texttt{/process} endpoint of \texttt{query-processor}, the orchestrator's
-branching logic reduces to a single factory call, keeping the orchestrator
-itself independent of mode-specific implementation details.
+depend on a fine-tuned decoder that is not used here.
+
+The three agentic modes each run a multi-stage exchange rather than a single
+retrieval pass.  In \texttt{multi\_agent} mode a planner agent decomposes the
+question into sub-tasks; one executor agent per sub-task retrieves
+independently and returns a focused finding; and a QA agent synthesises those
+findings into the final answer.  No voting takes place --- the agents divide the
+work, they do not compete on it.  In \texttt{iterative\_multihop} mode the
+orchestrator runs a sequential chain of retrieval hops (two by default, three on
+the DDI corpus), each hop formulated from what the previous hops established, so
+that evidence accumulates along the chain; this is what distinguishes it from
+\texttt{multi\_agent}, whose sub-tasks are independent and could in principle run
+in parallel.  In \texttt{madam\_rag} mode two agents answer from deliberately
+opposing angles, each revises once after seeing the other's answer, and a judge
+agent synthesises the consensus, for a budget of roughly five LLM calls per query.
+Finally, \texttt{rare\_rag} does not implement a pipeline of its own: it triages
+the query and delegates to one of the eight modes above, wrapping the result in
+set-wise evidence selection and a grounding check (\cref{cha:rare_rag}).
+
+Because each mode is encapsulated behind the same pipeline interface, the
+orchestrator's branching logic reduces to a single factory call, keeping the
+orchestrator itself independent of mode-specific implementation details.
+A mode can therefore be modified or added without touching the surrounding
+services.
 
 \paragraph{Retrieval.}
 The \texttt{retrieval} service accepts the (possibly rewritten) query text
-and executes a \emph{hybrid search} against Weaviate.  Hybrid search
-combines a sparse BM25 term-matching score with a dense vector similarity
-score using a weighted sum:
-\begin{equation}
-  \text{score}(d, q) = \alpha \cdot \text{score}_{\text{vector}}(d, q)
-                     + (1 - \alpha) \cdot \text{score}_{\text{BM25}}(d, q),
-\end{equation}
-where $\alpha$ is read from the project settings (default $\alpha = 0.5$,
-giving equal weight to both modalities).  The top-$k$ results (default
-$k = 20$) are filtered by \texttt{project\_id} using a Weaviate
-\texttt{where} filter, ensuring that a user can never retrieve chunks that
-belong to a different project.  Weaviate's native hybrid search endpoint
-handles the fusion internally, so the retrieval service does not need to
-implement the BM25 index separately.
+and executes a \emph{hybrid search} against Weaviate, combining a sparse BM25
+term-matching score with a dense vector similarity score, weighted by the
+project's $\alpha$ parameter (default $0.5$).  The fusion is performed by
+Weaviate's native hybrid endpoint, so the service does not maintain a separate
+BM25 index; the exact fusion formula and the choice of $\alpha$ are covered in
+\cref{cha:implementation}.  The top-$k$ results (default $k = 20$) are filtered
+by \texttt{project\_id} using a Weaviate \texttt{where} filter, ensuring that a
+user can never retrieve chunks that belong to a different project.
 
 The query text is first converted to a dense vector by calling the
 \texttt{embedding} service using the same provider and model that was used
@@ -677,7 +699,7 @@ any one service that incorrectly assembles a Weaviate filter would not
 leak metadata through the MongoDB layer.
 
 \paragraph{Secrets management.}
-All secrets --- \texttt{JWT\_SECRET}, \texttt{ANTHROPIC\_API\_KEY},
+All secrets --- \texttt{JWT\_SECRET}, \texttt{OPENROUTER\_API\_KEY},
 \texttt{COHERE\_API\_KEY}, database passwords --- are supplied exclusively
 through environment variables read at startup by \texttt{pydantic-settings}.
 No secret appears in source code, Docker images, or version control.
@@ -702,7 +724,7 @@ on the internal network.
 The central design choice in \medrag{} is the \emph{strategy pattern} applied uniformly
 to chunking, embedding, and RAG mode selection: because all variant behaviour
 is expressed as a named string in a MongoDB document, the same running system
-can participate in ablation experiments across all four RAG architectures
+can participate in ablation experiments across all nine RAG architectures
 without any code deployment.  This property is central to the controlled
 evaluation in \cref{cha:evaluation}, where each RAG mode is benchmarked on
 the same document corpus and the same set of drug-interaction queries.

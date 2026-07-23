@@ -39,16 +39,26 @@ advisory system.
 Three research questions guide this work:
 
 \begin{description}
-  \item[RQ1] Which RAG architecture achieves the best trade-off between answer quality
-    (Token~F1, Exact Match) and latency on a multi-hop reasoning benchmark?
+  \item[RQ1] \label{rq:tradeoff}
+    Which RAG architecture achieves the best trade-off between answer quality
+    and latency, and does the answer depend on how hard the questions are?
 
-  \item[RQ2] Does a routing-aware, set-wise evidence selection approach with a grounding
+  \item[RQ2] \label{rq:rare}
+    Does a routing-aware, set-wise evidence selection approach with a grounding
     verifier (\rarerag{}) achieve higher faithfulness than single-path RAG architectures?
 
-  \item[RQ3] Can a configurable microservice RAG platform serve as a reliable technology
+  \item[RQ3] \label{rq:platform}
+    Can a configurable microservice RAG platform serve as a reliable technology
     demonstrator for drug interaction advisory, with results that are traceable to source
     documents?
 \end{description}
+
+RQ1 is posed with the difficulty clause deliberately.
+An early version of this work asked simply which architecture is best, and the
+evaluation in \cref{cha:evaluation} shows that the question has no
+benchmark-independent answer: the architectures that lose on an encyclopedic
+benchmark are the ones that win on hard clinical questions, using the same code.
+The dependence on task difficulty is the finding, not a complication of it.
 
 % ------------------------------------------------------------
 \section{Scope and Limitations}
@@ -74,14 +84,31 @@ The main contributions of this thesis are:
 
 A \textbf{comparative empirical study} of nine RAG pipeline variants on two benchmarks:
 HotpotQA ($9 \times 1{,}000$ questions) and a purpose-built DDI benchmark
-($9 \times 100$ questions at five difficulty levels), using lexical metrics
-(Token~F1, EM, ROUGE-L) and RAGAS-based indicators (faithfulness, answer correctness,
-answer relevance), together with latency analysis.
+($9 \times 100$ questions at five clinical difficulty levels), using lexical metrics
+(Token~F1, EM, ROUGE-L), RAGAS-based indicators (faithfulness, answer correctness,
+answer relevance) and latency.
+Every comparison is a paired, per-question contrast against a vanilla control,
+tested for significance --- which turns out to matter, because several differences
+that look decisive in the mode-level averages do not survive the test.
 
-The \textbf{\rarerag{} architecture} --- a new RAG pipeline combining query complexity
+The central empirical finding: \textbf{the benefit of architectural complexity scales
+with task difficulty, and it is paid in grounding rather than in accuracy}.
+The four agentic architectures are significantly \emph{worse} than a plain
+retrieve-then-generate pass on HotpotQA, yet significantly better on the hardest
+clinical questions, where a single pass hallucinates on roughly one claim in two.
+Crucially, this gain shows up in faithfulness and not in answer correctness:
+across both benchmarks, no architecture makes the system measurably more likely to
+be \emph{right}, only measurably more likely to be traceable to its sources.
+
+The \textbf{\rarerag{} architecture} --- a RAG pipeline combining query complexity
 routing, hybrid BM25+vector retrieval, set-wise evidence selection, and a grounding
-verifier with abstention; \rarerag{} achieves the highest faithfulness (0.976) on
-HotpotQA and the highest answer correctness on expert-level DDI questions (L5: 0.470).
+verifier with abstention.
+It is reported here as a partially negative result: the complexity router is
+supported by the difficulty-scaling finding above, but set-wise selection prunes
+evidence too aggressively on multi-drug questions, and \rarerag{} does not beat a
+vanilla baseline on either benchmark (\cref{cha:evaluation}).
+Reporting that honestly, with the mechanism that explains it, is a more useful
+contribution than an unqualified claim of superiority would have been.
 
 The \textbf{open-source \medrag{} platform} --- a microservice system comprising
 14 services with configurable chunking strategies, embedding providers, and RAG modes,

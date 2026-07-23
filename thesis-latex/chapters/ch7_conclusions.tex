@@ -11,93 +11,142 @@
 This thesis set out to compare RAG architectures for medical advisory applications
 and to determine whether a routing-aware, evidence-verified architecture could
 achieve meaningfully higher faithfulness without sacrificing accuracy.
+The comparison succeeded; the proposed architecture did not.
 
-\paragraph{RQ1: Which RAG architecture achieves the best trade-off between answer
-quality and latency?}
-The answer depends on both the deployment's priorities and the \emph{type} of
-question it will face.
-On HotpotQA, Corrective RAG is the practical sweet spot: Token~F1 = 0.539,
-faithfulness = 0.973, and only 11.8\,s median latency --- near-\rarerag{}
-grounding at one-third of the cost.
-Vanilla RAG is the right choice when latency is the hard constraint (9.1\,s,
-F1 = 0.537).
+\paragraph{RQ1: Which architecture achieves the best quality--latency trade-off,
+and does the answer depend on how hard the questions are?}
+It depends on the difficulty, and that dependence is the finding.
 
-On the DDI benchmark the picture is more nuanced.
-\textbf{No single architecture wins at every difficulty level.}
-HyDE leads at L1 (simple drug profiles, answer correctness 0.940); Multi-Agent
-at L2 (two-drug interactions, 0.550); Iterative Multi-hop at L3 (multi-hop
-chains, 0.490); Query Rewriting at L4 (polypharmacy, 0.620); and \rarerag{}
-at L5 (expert PK/PD, 0.470).
-Taken together, Query Rewriting offers the strongest \emph{average} performance
-(faithfulness 0.795, correctness 0.539), sitting on the Pareto frontier of
-faithfulness--correctness on DDI, but a deployment that serves a mixed
-case-load cannot optimise for all five levels with a single static architecture.
-This is the central practical finding of the DDI evaluation: \textbf{query
-complexity is the dominant determinant of which architecture performs best},
-not any intrinsic quality of the architecture itself.
+On HotpotQA, the lightweight modes are the clear choice.
+HyDE, Query Rewriting, Self-Reflection and Corrective RAG each improve
+faithfulness over a vanilla baseline by about three points ($p < 0.001$, paired
+over 1{,}000 questions) while leaving accuracy untouched; Corrective RAG does it in
+11.8\,s and is the safest default in the whole study.
+The four agentic architectures are all significantly \emph{worse} than vanilla on
+faithfulness, and cost between three and nine times as much latency to be so.
 
-\paragraph{RQ2: Does a routing-aware, evidence-selection approach (\rarerag{})
-outperform single-path architectures on faithfulness?}
-Partially yes.
-On HotpotQA, \rarerag{} achieves the highest faithfulness (0.976), confirming
-Hypothesis~H1 (\cref{cha:rare_rag}); the grounding verifier and abstention
-path demonstrably suppress unsupported claims.
-On the DDI benchmark, the picture is more qualified: \rarerag{} ranks fourth
-on aggregate faithfulness (0.760) and does not beat Query Rewriting or MADAM-RAG
-overall.
-It \emph{does} lead on answer correctness at L5 (0.470), confirming
-Hypothesis~H2 --- routing to the most capable sub-pipeline is beneficial
-precisely where multi-step pharmacokinetic reasoning is required.
-The honest interpretation is that \rarerag{}'s routing advantage materialises
-at the difficult end of the complexity spectrum; for routine queries, simpler
-and faster architectures are both cheaper and more accurate.
-This nuance is important: \rarerag{} is not a universally superior architecture,
-but it is the right choice when the query load is skewed toward high-complexity
-clinical questions.
+On the hardest DDI questions the ordering inverts.
+Multi-Agent gains 18.8 points of faithfulness over vanilla ($p = 0.010$) and
+Query Rewriting 17.8 ($p = 0.005$) --- on the same code that lost on HotpotQA.
+The effects are larger on the hard subset ($n = 40$) than over the full DDI set
+($n = 100$), which is the signature of a real effect rather than a sampling
+artefact: shrinking the sample did not dissolve the gains, it sharpened them.
 
-\paragraph{RQ3: Can a RAG-based system serve as a reliable technology
-demonstrator for drug interaction advisory?}
-The qualitative and quantitative evidence is encouraging.
-The system successfully retrieves, reranks, and grounds answers against
-OpenFDA and DrugBank corpora; the abstention mechanism correctly declines to
-answer when retrieved evidence is insufficient (grounding score $< \tau = 0.5$),
-which is a critical safety property for any clinical decision-support tool.
-Faithfulness across all nine modes on the DDI benchmark ranges from 0.67 to
-0.82, indicating that the system rarely fabricates drug interactions outright.
-These results position \medrag{} as a credible proof-of-concept demonstrator,
-though clinical deployment would require pharmacist validation and regulatory
-compliance work beyond the scope of this thesis.
+The unifying claim, and the central result of this thesis, is that
+\textbf{architectural complexity pays in proportion to how much reasoning the
+question actually requires}.
+Where a single retrieve-then-generate pass already grounds well (HotpotQA, DDI
+L1), extra LLM calls only add opportunities to drift from the sources.
+Where it collapses (DDI L4--L5, vanilla faithfulness 0.445 at expert level), the
+machinery that decomposes and reassembles evidence recovers what the single pass
+loses.
+Query Rewriting deserves particular emphasis: it matches a full agentic pipeline
+on the hard questions using one extra LLM call, and a practitioner reading only
+the recent agentic-RAG literature would not expect that.
+
+\paragraph{RQ2: Does \rarerag{} achieve higher faithfulness than single-path
+architectures?}
+\textbf{No.}
+With set-wise selection active and a judge model distinct from the generator,
+\rarerag{} is the \emph{worst} of the nine modes on HotpotQA
+faithfulness ($-0.054$ vs vanilla, $p < 0.001$), is statistically
+indistinguishable from vanilla on DDI overall, and on the hard clinical questions
+it was designed for it falls below vanilla on both faithfulness and correctness
+($-0.161$ answer correctness, $p = 0.031$).
+Both hypotheses of \cref{cha:rare_rag} are rejected.
+
+The failure has an identifiable mechanism rather than being a mystery, which is
+what makes it worth reporting.
+Set-wise selection prunes the evidence to $m = 3$ maximally complementary
+passages.
+On a polypharmacy question involving four drugs, three passages cannot cover four
+drug profiles plus their pairwise interactions: the selector optimises for
+diversity when the binding constraint is coverage, and starves the generator
+exactly when it needs the most evidence.
+The diagnosis points straight at the repair --- make $m$ a function of the
+complexity class the router already computes --- which is the first item of future
+work below.
+
+One component of \rarerag{} does survive, and it is the one the whole design rests
+on.  If the best architecture depends this strongly on question difficulty, then
+selecting the pipeline per query is the right structure, and the complexity router
+is precisely that mechanism.  The design premise holds up even though the
+pipeline built on it does not.
+
+\paragraph{RQ3: Can the system serve as a reliable technology demonstrator?}
+Yes, with the emphasis on \emph{demonstrator}.
+The platform retrieves, reranks, and grounds answers against OpenFDA and DrugBank
+corpora, and every claim in a generated answer is traceable to a cited passage ---
+which is the property that makes the output checkable by a pharmacist and is why
+faithfulness, not fluency, was the metric of record throughout.
+
+Two honest qualifications belong here.
+First, the abstention safeguard never fired --- zero abstentions across 1{,}100
+benchmark queries --- because a self-reflection retry rescued every weakly
+grounded answer before the abstention branch was reached
+(\cref{subsec:abstention_reality}).
+The safety property exists in the code; these benchmarks never exercised it, and
+this thesis cannot claim it works in the field.
+Second, and more fundamentally: \emph{no architecture evaluated here made the
+system measurably more likely to be right.}
+The gains that survive significance testing are all in grounding.
+Answer correctness on DDI sits near 0.5 for every mode, and two of the elaborate
+architectures actively degrade it.
+A system that is well-grounded but only half-correct is a credible research
+demonstrator and is not a clinical tool, and no amount of architectural
+sophistication in this study closed that gap.
+That gap, however, is not intrinsic to the approach.
+The correctness ceiling here is set by the deliberately small generator
+(gpt-5-nano) and a fragmentary, model-generated DDI corpus; both are the cheapest
+possible versions of their component.
+A stronger generator that hallucinates less at baseline, and a richer,
+professionally curated interaction corpus, address the correctness gap directly,
+where more pipeline machinery did not --- and closing it is a matter of better
+resources rather than a different architecture.
 
 % ------------------------------------------------------------
 \section{Main Contributions}
 \label{sec:contributions_summary}
 
-The thesis makes three contributions:
+The thesis makes four contributions:
 
 \begin{enumerate}
-  \item \textbf{Comparative RAG benchmark.}
+  \item \textbf{Comparative RAG benchmark, with significance testing.}
     A systematic empirical comparison of nine RAG architecture families
     on two benchmarks: HotpotQA ($9 \times 1{,}000$ queries, multi-hop general
     knowledge) and a purpose-built DDI benchmark ($9 \times 100$ queries,
     five clinical difficulty levels).
-    The study provides quantitative latency--quality trade-off data across
-    architectures that is absent from prior single-architecture evaluations.
-    The DDI per-level analysis yields a concrete practical finding:
-    no single architecture dominates across all difficulty levels;
-    the optimal choice depends on the complexity distribution of the expected
-    query load, which motivates the routing approach in \rarerag{}.
+    Every comparison is a paired, per-question contrast against a vanilla control
+    with a Wilcoxon signed-rank test and bootstrap confidence intervals --- which
+    matters, because several differences that dominate the mode-level averages do
+    not survive testing, and reading the averages alone would have drawn
+    conclusions from exactly those.
 
-  \item \textbf{RARE-RAG architecture.}
-    A novel routing-aware RAG meta-pipeline that classifies query complexity,
-    selects the appropriate sub-pipeline, applies set-wise evidence selection,
-    and verifies grounding before responding or abstaining.
-    \rarerag{} achieves the highest faithfulness on HotpotQA (0.976) and the
-    highest answer correctness on expert-level DDI questions (0.470).
+  \item \textbf{The difficulty-scaling result.}
+    The benefit of architectural complexity scales with task difficulty and
+    reverses sign on easy tasks: the same four agentic architectures that are
+    significantly worse than a vanilla baseline on HotpotQA are significantly
+    better on the hardest clinical questions.
+    The gain appears in grounding, not in accuracy.
+    This is a claim about \emph{when} to reach for a complex pipeline, and it is
+    more useful than a ranking of architectures precisely because it does not
+    generalise across benchmarks --- which the ranking, presented alone, would have
+    silently implied.
+
+  \item \textbf{RARE-RAG architecture, reported as a partial negative result.}
+    A routing-aware RAG meta-pipeline that classifies query complexity, selects
+    the appropriate sub-pipeline, applies set-wise evidence selection, and
+    verifies grounding before responding or abstaining.
+    Its routing premise is supported by the difficulty-scaling result; its
+    set-wise selection is not, pruning evidence too aggressively on multi-drug
+    questions, and \rarerag{} does not beat a vanilla baseline on either benchmark.
+    The negative result is reported together with the mechanism that produced it,
+    which is a more solid contribution than an unqualified claim of superiority.
 
   \item \textbf{Open-source medical RAG platform.}
     \medrag{}: a fully containerised, microservice-based system comprising
     14 independent services (auth, ingestion, retrieval, reranking, generation,
-    evaluation, and seven RAG pipeline variants) that supports configurable
+    evaluation, and nine RAG pipeline variants) that supports configurable
     strategies per project without code changes.
     All evaluation scripts, the DDI benchmark dataset, and the system source
     code are included in the repository.
@@ -109,63 +158,79 @@ The thesis makes three contributions:
 
 Several limitations constrain how broadly these findings can be generalised.
 
-\emph{Single general-knowledge benchmark for primary evaluation.}
-HotpotQA is an English Wikipedia dataset; results on factoid multi-hop
-questions may not transfer to other domains, languages, or longer documents.
-The DDI benchmark partially addresses this, but with only 100 questions per
-mode it has limited statistical power.
+\emph{The DDI benchmark is small.}
+The central difficulty-scaling result rests on a pooled hard subset of 40
+questions, with 20 questions per difficulty level.
+The significant effects are real, but they are the floor of what the data can
+establish rather than precise effect sizes, and the per-level table should be read
+as a map of where to look rather than a measurement of how much.
+Confirming the effect properly requires 300--500 DDI questions; the cost is linear
+and small (roughly \$2 per 100 questions per mode), and this is the single most
+valuable extension of the present work.
 
-\emph{LLM-as-judge circularity.}
-RAGAS faithfulness and answer correctness are assessed by an LLM
-(gpt-5-nano) that is the same model family used for generation.
-A judge model that prefers its own outputs could inflate scores for modes that
-rely on that model more heavily.
-A human evaluation study or a heterogeneous judge would mitigate this risk.
-
-\emph{CPU-only local inference.}
-Embedding and reranking ran on an Apple M1 Pro CPU without GPU acceleration.
-This inflates absolute latency figures by an estimated factor of 10--20 compared
-to a GPU-equipped server; relative latency rankings between modes are unaffected
-but absolute values should not be compared to other studies.
+\emph{One generator model.}
+Every result is conditioned on a small generator (gpt-5-nano) that hallucinates
+often enough on hard clinical questions to leave the elaborate architectures room
+to help.
+A stronger generator with a higher baseline faithfulness would compress that room
+and might well pull the DDI conclusion back towards the HotpotQA one.
+The claim defended here is about how the benefit of complexity scales with
+difficulty \emph{for a given generator}, not an absolute ranking of architectures.
 
 \emph{No pharmacist validation.}
 The DDI ground-truth answers were generated and validated programmatically from
 source documents.
 Clinical experts were not involved in assessing the quality or safety of
-generated responses; the system cannot therefore be considered clinically validated.
+generated responses; the system cannot therefore be considered clinically validated,
+and the answer-correctness figures inherit whatever biases the generating model
+brought to the gold answers.
 
 \emph{No ablation study of \rarerag{} components.}
-The evaluation treats \rarerag{} as a monolithic system and does not isolate
-the contribution of each component.
-It is therefore not possible to determine from the reported results alone
-whether the faithfulness gain over vanilla RAG is attributable to the grounding
-verifier, to the set-wise evidence selection, to the complexity router, or
-to some interaction among the three.
-An ablation study removing one component at a time would be needed to make that
-attribution; this is identified as future work in \cref{subsec:future_ablation}.
+The evaluation treats \rarerag{} as a whole and cannot attribute its failure to
+one component with certainty.
+Set-wise selection is the prime suspect --- the per-level collapse at L4 is exactly
+what over-pruning would produce --- but the router and grounding verifier were
+active in the same runs, and only an ablation can separate them
+(\cref{subsec:future_ablation}).
 
-\emph{Greedy set-wise selection.}
-\rarerag{}'s evidence selection is a greedy approximate algorithm rather than
-an optimal set-cover solution.
-For large corpora or high top-$k$ values, a combinatorial optimisation approach
-could improve evidence diversity.
+\emph{Latency is measured under load.}
+All modes were benchmarked with two queries in flight and share a local
+cross-encoder reranker, so absolute latencies are inflated relative to an idle
+system.
+The figures are internally comparable, since every mode ran under identical
+conditions, but they should not be compared against latencies reported elsewhere
+for the same architectures.
 
 % ------------------------------------------------------------
 \section{Future Work}
 \label{sec:future_work}
 
+\subsection{Complexity-Adaptive Evidence Budget}
+\label{subsec:future_budget}
+The most direct repair suggested by the results is to stop pruning the evidence to
+a fixed $m = 3$ passages.
+The diagnosis in \cref{subsec:rare_verdict} is that set-wise selection starves the
+generator on polypharmacy questions, where four drug profiles and their pairwise
+interactions cannot fit into three passages however complementary they are.
+The router already computes a complexity class for every query, so the fix is
+nearly free: let $m$ be a function of that class --- three passages for a
+single-drug lookup, eight or more for an L4--L5 regimen question --- and re-run the
+DDI benchmark.
+This is a single-parameter change to a component whose failure mode is understood,
+and it is the first experiment worth running.
+
 \subsection{Ablation Study of \rarerag{} Components}
 \label{subsec:future_ablation}
-The most direct extension of the empirical work is a controlled ablation that
-removes one \rarerag{} component at a time: (1) \rarerag{} without the
-grounding verifier, (2) without set-wise evidence selection (replacing it with
-top-$m$ selection), and (3) without the complexity router (always applying the
-full pipeline).
-Comparing each ablated variant against the full system on both benchmarks would
-quantify the marginal contribution of each component, transforming the current
-integration result into a mechanistic explanation.
-This is the single most important piece of missing evidence for the claims in
-\cref{cha:rare_rag}.
+Independently, a controlled ablation should remove one \rarerag{} component at a
+time: (1) without the grounding verifier, (2) without set-wise evidence selection
+(replacing it with plain top-$m$), and (3) without the complexity router (always
+running one fixed pipeline).
+The second variant directly tests the diagnosis above.
+The third is the more interesting one scientifically, since the difficulty-scaling
+result implies routing should help: comparing the router against both a fixed
+pipeline and an \emph{oracle} that always picks the best mode per query would
+quantify how much of the available benefit the router actually captures, and
+whether the gap is in the routing policy or in the pipelines being routed to.
 
 \subsection{Pharmacist-Validated DDI Evaluation}
 The most clinically meaningful immediate extension is a DDI evaluation with
@@ -184,7 +249,7 @@ could improve multi-hop reasoning on L3--L5 questions by surfacing mechanistical
 related evidence that keyword or vector search misses.
 
 \subsection{Latency Optimisation}
-The 82.7\,s median latency of \rarerag{} on DDI is too high for real-time advisory.
+The 129\,s mean latency of \rarerag{} on DDI is far too high for real-time advisory.
 Three complementary approaches are promising: router pre-caching for
 recurrent query patterns, speculative retrieval that starts the fast-path
 (Vanilla) in parallel with the routing decision and discards the fast result
