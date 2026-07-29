@@ -212,7 +212,10 @@ class RareRagPipeline(RagPipeline):
         )
 
         final_mode = routed_mode
+        # Step 2 is only spent when the recheck runs, so the final step shifts with it.
+        final_step = 2
         if not grounded:
+            final_step = 3
             yield self._sse_think(
                 step=2,
                 label="Grounding recheck",
@@ -244,7 +247,7 @@ class RareRagPipeline(RagPipeline):
         if score < _ABSTENTION_RETRY_SCORE:
             logger.info("rare_rag abstaining", final_score=score)
             yield self._sse_think(
-                step=3,
+                step=final_step,
                 label="Abstention",
                 text="No sufficiently grounded answer could be produced — abstaining.",
                 duration_ms=0,
@@ -263,7 +266,7 @@ class RareRagPipeline(RagPipeline):
         # The answer is already generated and grounded; replay it rather than
         # re-generating, which is what made this mode cost two full pipeline runs.
         yield self._sse_think(
-            step=3,
+            step=final_step,
             label="Answer accepted",
             text=f"Replaying the grounded '{final_mode}' answer.",
             duration_ms=0,
