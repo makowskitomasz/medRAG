@@ -83,8 +83,10 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [focusedCiteId, setFocusedCiteId] = useState<string | null>(null);
   const toggleCite = (id: string) => setFocusedCiteId((prev) => prev === id ? null : id);
-  const [thinkOpen, setThinkOpen] = useState(true);
-  const [citesOpen, setCitesOpen] = useState(true);
+  // Panel expansion is per message — a single shared flag toggled every message
+  // in the conversation at once. Missing entry = use the phase-based default.
+  const [thinkOpenIds, setThinkOpenIds] = useState<Record<string, boolean>>({});
+  const [citesOpenIds, setCitesOpenIds] = useState<Record<string, boolean>>({});
   const [convOwnerId, setConvOwnerId] = useState<string | null>(null);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -112,17 +114,6 @@ export default function ChatPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, lastAi?.streamedText]);
-
-  // auto-collapse thinking panel when done
-  useEffect(() => {
-    if (phase === "done") {
-      setThinkOpen(false);
-      setCitesOpen(false);
-    } else if (phase === "searching" || phase === "thinking") {
-      setThinkOpen(true);
-      setCitesOpen(true);
-    }
-  }, [phase]);
 
   // auto-grow textarea
   useEffect(() => {
@@ -217,10 +208,10 @@ export default function ChatPage() {
                       <AiMessage
                         msg={msg}
                         phase={phase}
-                        thinkOpen={thinkOpen}
-                        setThinkOpen={setThinkOpen}
-                        citesOpen={citesOpen}
-                        setCitesOpen={setCitesOpen}
+                        thinkOpen={thinkOpenIds[msg.id]}
+                        setThinkOpen={(v) => setThinkOpenIds((prev) => ({ ...prev, [msg.id]: v }))}
+                        citesOpen={citesOpenIds[msg.id]}
+                        setCitesOpen={(v) => setCitesOpenIds((prev) => ({ ...prev, [msg.id]: v }))}
                         focusedCiteId={focusedCiteId}
                         setFocusedCiteId={setFocusedCiteId}
                         toggleCite={toggleCite}
@@ -318,9 +309,10 @@ export default function ChatPage() {
 interface AiMsgProps {
   msg: ChatMessage;
   phase: Phase;
-  thinkOpen: boolean;
+  /** undefined = not toggled by the user yet, fall back to the phase default. */
+  thinkOpen: boolean | undefined;
   setThinkOpen: (v: boolean) => void;
-  citesOpen: boolean;
+  citesOpen: boolean | undefined;
   setCitesOpen: (v: boolean) => void;
   focusedCiteId: string | null;
   setFocusedCiteId: (id: string | null) => void;
@@ -341,6 +333,9 @@ function AiMessage({
   const citations = msg.citations ?? [];
   const revealed = msgPhase === "done" ? citations.length : (msg.citationsRevealed ?? 0);
   const ModeIcon = MODE_ICONS[msg.ragMode ?? "vanilla"] ?? Zap;
+  // Expanded while this message is still being produced, collapsed once finished —
+  // unless the user has explicitly toggled this particular message.
+  const thinkExpanded = thinkOpen ?? isGenerating;
 
   return (
     <div className="msg-ai">
@@ -357,8 +352,10 @@ function AiMessage({
             {msgPhase === "searching" && <><span className="msg-live-dot" /> {t("searching")}</>}
             {msgPhase === "thinking"  && <><span className="msg-live-dot" /> {t("thinking")}</>}
             {msgPhase === "streaming" && <><span className="msg-live-dot" /> {t("streaming")}</>}
-            {!isGenerating && !isLast && "5.4s"}
-            {!isGenerating && isLast && msgPhase === "done" && t("done")}
+            {!isGenerating && !isLast && msg.elapsedMs != null && `${(msg.elapsedMs / 1000).toFixed(1)}s`}
+            {!isGenerating && isLast && msgPhase === "done" && (
+              msg.elapsedMs != null ? `${t("done")} · ${(msg.elapsedMs / 1000).toFixed(1)}s` : t("done")
+            )}
           </span>
         </div>
 
@@ -380,18 +377,19 @@ function AiMessage({
 
         {/* Thinking panel — ReflectPanel or MultiAgentPanel depending on mode */}
         {(msgPhase === "thinking" || (msgPhase !== "idle" && (msg.thinkSteps?.length ?? 0) > 0)) && (
-          msg.ragMode === "multi_agent"
+          msg.ragMode === "multi_agent" || msg.ragMode === "madam_rag"
             ? <MultiAgentPanel
                 steps={msg.thinkSteps ?? []}
                 live={msgPhase === "thinking"}
-                expanded={thinkOpen}
-                onToggle={() => setThinkOpen(!thinkOpen)}
+                expanded={thinkExpanded}
+                onToggle={() => setThinkOpen(!thinkExpanded)}
+                ragMode={msg.ragMode}
               />
             : <ThinkPanel
                 steps={msg.thinkSteps ?? []}
                 live={msgPhase === "thinking"}
-                expanded={thinkOpen}
-                onToggle={() => setThinkOpen(!thinkOpen)}
+                expanded={thinkExpanded}
+                onToggle={() => setThinkOpen(!thinkExpanded)}
                 ragMode={msg.ragMode ?? "vanilla"}
               />
         )}

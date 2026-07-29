@@ -13,95 +13,62 @@ type RagModeId =
 
 interface ModeConfig {
   id: RagModeId;
+  /** Fallback label — the rendered text comes from next-intl (`modes.*`). */
   label: string;
-  tag: string;
   Icon: React.ComponentType<{ size: number }>;
-  desc: string;
-  avgTime: string;
-  quality: string;
 }
 
+/**
+ * Copy (label, tag, description, avg time, quality) lives in `messages/{pl,en}.json`
+ * under `modes.*`. The `*_time` values are measured end-to-end wall times on the DDI
+ * corpus with LLM_MODEL=openai/gpt-oss-120b; `*_quality` buckets follow the measured
+ * faithfulness in results/thesis_final/ddi.csv. Re-measure after changing the model.
+ */
 const MODES: ModeConfig[] = [
   {
     id: "vanilla",
     label: "Vanilla",
-    tag: "PODSTAWOWY",
     Icon: Zap,
-    desc: "Bezpośrednie wyszukiwanie i generacja. Najszybszy tryb, idealny do prostych pytań.",
-    avgTime: "~3s",
-    quality: "Dobra",
   },
   {
     id: "hyde",
     label: "HyDE",
-    tag: "ZAAWANSOWANY",
     Icon: Sparkles,
-    desc: "Generuje hipotetyczną odpowiedź, by wyszukać podobne fragmenty. Lepszy przy złożonych pytaniach.",
-    avgTime: "~5s",
-    quality: "Lepsza",
   },
   {
     id: "query_rewriting",
     label: "Rewriting",
-    tag: "KONTEKST",
     Icon: RefreshCw,
-    desc: "Przepisuje pytanie uwzględniając historię rozmowy. Polecany w wieloturowych dialogach.",
-    avgTime: "~4s",
-    quality: "Dobra+",
   },
   {
     id: "self_reflection",
     label: "Reflect",
-    tag: "ITERACYJNY",
     Icon: Brain,
-    desc: "Generuje odpowiedź, ocenia jej jakość i iteruje. Wyższe koszty, wysoka precyzja.",
-    avgTime: "~8s",
-    quality: "Wysoka",
   },
   {
     id: "multi_agent",
     label: "Multi",
-    tag: "AGENTY",
     Icon: Users,
-    desc: "Trzy agenty (Badacz, Krytyk, Redaktor) współpracują. Dobry przy skomplikowanych przypadkach.",
-    avgTime: "~10s",
-    quality: "Wysoka",
   },
   {
     id: "corrective_rag",
     label: "CRAG",
-    tag: "KOREKCJA",
     Icon: ShieldCheck,
-    desc: "Filtruje słabe fragmenty i uruchamia fallback przy niskiej trafności. Odporny na zaszumione dane.",
-    avgTime: "~5s",
-    quality: "Dobra+",
   },
   {
     id: "iterative_multihop",
     label: "MultiHop",
-    tag: "WIELOETAPOWY",
     Icon: GitMerge,
-    desc: "Rozkłada pytanie na pod-pytania i odpowiada na każde osobno. Idealny do pytań złożonych.",
-    avgTime: "~9s",
-    quality: "Wysoka",
   },
   {
     id: "madam_rag",
     label: "MADAM",
-    tag: "SPRZECZNOŚCI",
     Icon: AlertTriangle,
-    desc: "Wykrywa konflikty między dokumentami i sygnalizuje niejednoznaczności. Kluczowy przy sprzecznych źródłach.",
-    avgTime: "~8s",
-    quality: "Wysoka",
   },
   {
     id: "rare_rag",
     label: "RARE",
-    tag: "AUTO-ROUTING",
     Icon: Shuffle,
-    desc: "Analizuje pytanie i automatycznie wybiera najlepszy tryb RAG. Najinteligentniejszy, ale najwolniejszy.",
-    avgTime: "~12s",
-    quality: "Najwyższa",
   },
 ];
 

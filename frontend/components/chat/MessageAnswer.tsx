@@ -1,9 +1,11 @@
 "use client";
 import React from "react";
 
+interface Cite { chunk_id: string; n?: number }
+
 interface Props {
   text: string;
-  citations: Array<{ chunk_id: string }>;
+  citations: Cite[];
   focusedId: string | null;
   onCiteClick: (id: string) => void;
   streaming?: boolean;
@@ -17,9 +19,21 @@ function normalizeText(text: string): string {
   return out;
 }
 
+/**
+ * Resolve a [n] marker to a citation. Only *cited* sources are returned by the
+ * backend, so the marker number is not the array position: an answer citing
+ * SOURCE_1/2/3/5 yields four citations, and [5] must map to the fourth, not to
+ * citations[4]. Match on the `n` field, falling back to position for older
+ * conversations stored before `n` existed.
+ */
+function resolveCite(citations: Cite[], n: number): Cite | undefined {
+  if (citations.some((c) => c.n != null)) return citations.find((c) => c.n === n);
+  return citations[n - 1];
+}
+
 function renderAnswer(
   text: string,
-  citations: Array<{ chunk_id: string }>,
+  citations: Cite[],
   onCiteClick: (id: string) => void,
   focusedId: string | null
 ): React.ReactNode[] {
@@ -42,7 +56,7 @@ function renderAnswer(
         while ((bm = citeRx.exec(boldText)) !== null) {
           if (bm.index > bLast) boldParts.push(boldText.slice(bLast, bm.index));
           const bn = parseInt(bm[1], 10);
-          const bcit = citations[bn - 1];
+          const bcit = resolveCite(citations, bn);
           if (bcit) {
             const bcid = bcit.chunk_id;
             boldParts.push(
@@ -57,7 +71,7 @@ function renderAnswer(
         const refs = m[2].match(/\[\d+\]/g) ?? [];
         refs.forEach((r) => {
           const n = parseInt(r.slice(1, -1), 10);
-          const cit = citations[n - 1];
+          const cit = resolveCite(citations, n);
           if (!cit) return; // orphaned citation — LLM numbered from larger pool
           const cid = cit.chunk_id;
           parts.push(

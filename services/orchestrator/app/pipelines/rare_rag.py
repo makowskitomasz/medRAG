@@ -141,7 +141,7 @@ class RareRagPipeline(RagPipeline):
             abstained=True,
         )
 
-    async def run_stream(
+    async def run_stream(  # type: ignore[override]
         self,
         query: str,
         project_id: str,
@@ -152,9 +152,34 @@ class RareRagPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
-        # Grounding check requires full answer — run non-stream first, then stream best result.
+        import time as _time
+
+        yield self._sse_think(
+            step=0,
+            label="Triage",
+            text="Analysing the question to pick the best RAG strategy…",
+            duration_ms=0,
+        )
+        t0 = _time.monotonic()
         routed_mode = await self._triage(query)
-        response, score = await self._run_with_grounding(
+        logger.info("rare_rag triage result", route=routed_mode)
+        yield self._sse_think(
+            step=0,
+            label="Triage",
+            text=f"Routed to the '{routed_mode}' pipeline.",
+            duration_ms=int((_time.monotonic() - t0) * 1000),
+        )
+
+        # Grounding check requires a full answer — run the routed pipeline non-streaming
+        # first, then stream the pipeline that passed the check.
+        yield self._sse_think(
+            step=1,
+            label="Grounding check",
+            text=f"Running the '{routed_mode}' pipeline and scoring how well it is grounded…",
+            duration_ms=0,
+        )
+        t1 = _time.monotonic()
+        _, score = await self._run_with_grounding(
             query,
             project_id,
             conversation_id,
@@ -164,9 +189,28 @@ class RareRagPipeline(RagPipeline):
             alpha,
             rerank_top_n,
         )
+        grounded = score >= _GROUNDING_THRESHOLD
+        yield self._sse_think(
+            step=1,
+            label="Grounding check",
+            text=(
+                f"'{routed_mode}' answer scored {score:.2f} "
+                f"(threshold {_GROUNDING_THRESHOLD}). "
+                + ("Accepted." if grounded else "Too weak — retrying with self-reflection.")
+            ),
+            duration_ms=int((_time.monotonic() - t1) * 1000),
+        )
 
-        if score < _GROUNDING_THRESHOLD:
-            response, score = await self._run_with_grounding(
+        final_mode = routed_mode
+        if not grounded:
+            yield self._sse_think(
+                step=2,
+                label="Grounding recheck",
+                text="Re-running the question through the self-reflection pipeline…",
+                duration_ms=0,
+            )
+            t2 = _time.monotonic()
+            _, score = await self._run_with_grounding(
                 query,
                 project_id,
                 conversation_id,
@@ -176,19 +220,51 @@ class RareRagPipeline(RagPipeline):
                 alpha,
                 rerank_top_n,
             )
+            final_mode = "self_reflection"
+            yield self._sse_think(
+                step=2,
+                label="Grounding recheck",
+                text=(
+                    f"Self-reflection answer scored {score:.2f} "
+                    f"(abstention threshold {_ABSTENTION_RETRY_SCORE})."
+                ),
+                duration_ms=int((_time.monotonic() - t2) * 1000),
+            )
 
         if score < _ABSTENTION_RETRY_SCORE:
-            chunks: list[dict] = []
-            return self._stream_generation(
+            logger.info("rare_rag abstaining", final_score=score)
+            yield self._sse_think(
+                step=3,
+                label="Abstention",
+                text="No sufficiently grounded answer could be produced — abstaining.",
+                duration_ms=0,
+            )
+            async for chunk in self._stream_generation(
                 "I cannot provide a reliable answer based on available sources. "
                 "Please consult a qualified healthcare professional.",
-                chunks,
+                [],
                 conversation_history,
                 conversation_id,
                 rag_mode,
-            )
+            ):
+                yield chunk
+            return
 
-        chunks = await self._retrieve(query, project_id, top_k, alpha)
-        return self._stream_generation(
-            query, chunks, conversation_history, conversation_id, rag_mode
-        )
+        # Stream the final answer through the winning pipeline so its own steps
+        # (retrieval, agents, reflection…) stay visible, continuing our numbering.
+        sub = self._get_sub_pipeline(final_mode)
+        sub._step_base = self._max_step + 1
+        async for chunk in sub.run_stream(
+            query=query,
+            project_id=project_id,
+            conversation_id=conversation_id,
+            conversation_history=conversation_history,
+            rag_mode=rag_mode,
+            top_k=top_k,
+            alpha=alpha,
+            rerank_top_n=rerank_top_n,
+        ):
+            yield chunk
+        self._last_chunks = sub._last_chunks or self._last_chunks
+        self._last_input_tokens += sub._last_input_tokens
+        self._last_output_tokens += sub._last_output_tokens

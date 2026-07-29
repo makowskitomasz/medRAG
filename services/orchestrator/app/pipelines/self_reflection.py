@@ -76,8 +76,14 @@ class SelfReflectionPipeline(RagPipeline):
             yield self._sse_search_done(reranked)
 
             # --- think: generate draft ---
-            t1 = _time.monotonic()
             step_label = f"Draft answer (iteration {iteration + 1})"
+            yield self._sse_think(
+                step=iteration * 2,
+                label=step_label,
+                text="Drafting an answer from the retrieved fragments…",
+                duration_ms=0,
+            )
+            t1 = _time.monotonic()
             answer, _ = await self._generate(query, reranked, conversation_history)
             yield self._sse_think(
                 step=iteration * 2,
@@ -87,6 +93,12 @@ class SelfReflectionPipeline(RagPipeline):
             )
 
             # --- think: evaluate ---
+            yield self._sse_think(
+                step=iteration * 2 + 1,
+                label="Quality evaluation",
+                text="Scoring whether the draft is sufficiently grounded and complete…",
+                duration_ms=0,
+            )
             t2 = _time.monotonic()
             score = await self._evaluate_answer(query, answer, reranked)
             logger.info(

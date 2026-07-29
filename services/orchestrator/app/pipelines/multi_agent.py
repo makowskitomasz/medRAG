@@ -15,8 +15,22 @@ _AGENT_PERSPECTIVES = [
     "dosing, monitoring and management guidelines: {query}",
 ]
 
+# UI metadata for the agent view — one entry per perspective, same order.
+_AGENTS = [
+    ("researcher", "Researcher", "Mechanism of action and pharmacokinetics"),
+    ("critic", "Critic", "Clinical risks, contraindications and adverse effects"),
+    ("editor", "Editor", "Dosing, monitoring and management guidelines"),
+]
+
 
 class MultiAgentPipeline(RagPipeline):
+    @staticmethod
+    def _preview(chunks: list[dict], limit: int = 220) -> str:
+        if not chunks:
+            return "No supporting fragments found."
+        top = chunks[0].get("content", "").strip().replace("\n", " ")
+        return top[:limit] + ("…" if len(top) > limit else "")
+
     async def _agent_retrieve(
         self,
         perspective_query: str,
@@ -93,33 +107,27 @@ class MultiAgentPipeline(RagPipeline):
     ) -> AsyncGenerator[str, None]:
         import time as _time
 
-        agent_names = ["Researcher", "Critic", "Editor"]
-        agent_descs = [
-            "Mechanism of action and pharmacokinetics",
-            "Clinical risks, contraindications and adverse effects",
-            "Dosing, monitoring and management guidelines",
-        ]
         per_top_k = max(top_k // len(_AGENT_PERSPECTIVES), 3)
 
         # Stream each agent's search as a think step
+        yield self._sse_search_start()
         per_agent_results: list[list[dict]] = []
-        for i, (pq, name, desc) in enumerate(
+        for i, (pq, (agent_key, name, desc)) in enumerate(
             zip(
                 [p.format(query=query) for p in _AGENT_PERSPECTIVES],
-                agent_names,
-                agent_descs,
-                strict=False,
+                _AGENTS,
+                strict=True,
             )
         ):
-            yield self._sse_search_start()
             t0 = _time.monotonic()
             agent_chunks = await self._agent_retrieve(pq, project_id, per_top_k, alpha)
             per_agent_results.append(agent_chunks)
             yield self._sse_think(
                 step=i,
-                label=f"Agent: {name}",
-                text=f"{desc}. Found {len(agent_chunks)} fragments.",
+                label=f"{name} — {desc}",
+                text=f"Found {len(agent_chunks)} fragments. {self._preview(agent_chunks)}",
                 duration_ms=int((_time.monotonic() - t0) * 1000),
+                agent=agent_key,
             )
 
         # Aggregate + rerank
@@ -141,6 +149,7 @@ class MultiAgentPipeline(RagPipeline):
             label="Merging and reranking",
             text=f"Merged {len(merged)} unique fragments → selected top {len(reranked)}.",
             duration_ms=int((_time.monotonic() - t_rerank) * 1000),
+            agent="moderator",
         )
 
         async for chunk in self._stream_generation(

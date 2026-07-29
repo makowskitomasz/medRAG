@@ -20,6 +20,7 @@ def extract_citations(answer: str, chunks: list[ContextChunk]) -> list[Citation]
         citations.append(
             Citation(
                 chunk_id=chunk.chunk_id,
+                n=idx,
                 filename=chunk.filename,
                 page=chunk.page,
                 snippet=snippet,

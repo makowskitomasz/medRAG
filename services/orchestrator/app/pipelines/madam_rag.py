@@ -16,6 +16,13 @@ _CONFLICT_PERSPECTIVE = "conflicting or uncertain evidence: {query}"
 
 _PERSPECTIVES = [_PRO_PERSPECTIVE, _COUNTER_PERSPECTIVE, _CONFLICT_PERSPECTIVE]
 
+# UI metadata for the debate view — one entry per perspective, same order.
+_DEBATERS = [
+    ("advocate", "Advocate", "Supporting evidence and benefits"),
+    ("skeptic", "Skeptic", "Risks, contraindications and opposing evidence"),
+    ("arbiter", "Arbiter", "Conflicting or uncertain evidence"),
+]
+
 
 class MadamRagPipeline(RagPipeline):
     async def _detect_conflict(self, chunks: list[dict]) -> tuple[bool, float]:
@@ -104,7 +111,14 @@ class MadamRagPipeline(RagPipeline):
             rag_mode=rag_mode,
         )
 
-    async def run_stream(
+    @staticmethod
+    def _preview(chunks: list[dict], limit: int = 220) -> str:
+        if not chunks:
+            return "No supporting fragments found."
+        top = chunks[0].get("content", "").strip().replace("\n", " ")
+        return top[:limit] + ("…" if len(top) > limit else "")
+
+    async def run_stream(  # type: ignore[override]
         self,
         query: str,
         project_id: str,
@@ -115,10 +129,85 @@ class MadamRagPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
-        reranked, conflict_detected = await self._get_chunks(
-            query, project_id, top_k, alpha, rerank_top_n
+        import time as _time
+
+        yield self._sse_search_start()
+        per_perspective_top_k = max(top_k // len(_PERSPECTIVES), 3)
+
+        # Debaters run sequentially here (unlike run()) so each argument can be
+        # reported to the UI as soon as it is available.
+        results: list[list[dict]] = []
+        for i, (perspective, (agent_key, agent_name, agent_desc)) in enumerate(
+            zip(_PERSPECTIVES, _DEBATERS, strict=True)
+        ):
+            t_agent = _time.monotonic()
+            chunks = await self._perspective_retrieve(
+                perspective, query, project_id, per_perspective_top_k, alpha
+            )
+            results.append(chunks)
+            yield self._sse_think(
+                step=i,
+                label=f"{agent_name} — {agent_desc}",
+                text=f"Found {len(chunks)} fragments. {self._preview(chunks)}",
+                duration_ms=int((_time.monotonic() - t_agent) * 1000),
+                agent=agent_key,
+            )
+
+        seen: set[str] = set()
+        merged: list[dict] = []
+        for chunks in results:
+            for chunk in chunks:
+                cid = chunk.get("chunk_id", "")
+                if cid not in seen:
+                    seen.add(cid)
+                    merged.append(chunk)
+
+        # Placeholder first — the conflict LLM call can take tens of seconds.
+        yield self._sse_think(
+            step=len(_PERSPECTIVES),
+            label="Conflict detection",
+            text=f"Cross-checking {len(merged)} fragments for contradictions…",
+            duration_ms=0,
+            agent="moderator",
         )
+        t_conflict = _time.monotonic()
+        has_conflict, confidence = await self._detect_conflict(merged[:10])
+        conflict_detected = has_conflict and confidence >= _CONFLICT_THRESHOLD
+        logger.info(
+            "madam_rag conflict detection",
+            has_conflict=has_conflict,
+            confidence=confidence,
+            conflict_detected=conflict_detected,
+        )
+        yield self._sse_think(
+            step=len(_PERSPECTIVES),
+            label="Conflict detection",
+            text=(
+                f"Conflict {'detected' if conflict_detected else 'not detected'} "
+                f"(confidence {confidence:.2f}, threshold {_CONFLICT_THRESHOLD}). "
+                + (
+                    "The answer will present all perspectives and flag the uncertainty."
+                    if conflict_detected
+                    else "Sources are consistent — answering normally."
+                )
+            ),
+            duration_ms=int((_time.monotonic() - t_conflict) * 1000),
+            agent="moderator",
+        )
+
+        t_rerank = _time.monotonic()
+        reranked = await self._rerank(query, merged, rerank_top_n)
+        yield self._sse_search_done(reranked)
+        yield self._sse_think(
+            step=len(_PERSPECTIVES) + 1,
+            label="Merging and reranking",
+            text=f"Merged {len(merged)} unique fragments → selected top {len(reranked)}.",
+            duration_ms=int((_time.monotonic() - t_rerank) * 1000),
+            agent="moderator",
+        )
+
         effective_query = self._build_cautious_query(query) if conflict_detected else query
-        return self._stream_generation(
+        async for chunk in self._stream_generation(
             effective_query, reranked, conversation_history, conversation_id, rag_mode
-        )
+        ):
+            yield chunk

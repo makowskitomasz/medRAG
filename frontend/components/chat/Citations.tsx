@@ -85,7 +85,7 @@ export function CitationsCards({ citations, revealed, focused, onFocus }: CardsP
             <CitationCard
               key={c.chunk_id}
               citation={c}
-              n={i + 1}
+              n={c.n ?? i + 1}
               focused={focused === c.chunk_id}
               onFocus={() => onFocus(c.chunk_id)}
               compact
@@ -141,7 +141,7 @@ export function CitationsSidebar({ citations, revealed, focused, onFocus, isLoad
               <CitationCard
                 key={c.chunk_id}
                 citation={c}
-                n={i + 1}
+                n={c.n ?? i + 1}
                 focused={focused === c.chunk_id}
                 onFocus={() => onFocus(c.chunk_id)}
               />
@@ -185,7 +185,7 @@ export function CitationsInline({ citations, revealed, focused, onFocus }: Inlin
         return (
           <div key={c.chunk_id} className={`cite-inline-row${open ? " cite-inline-open" : ""}`}>
             <button className="cite-inline-summary" onClick={() => setOpenOne(open ? null : c.chunk_id)}>
-              <span className="cite-num cite-num-sm">{i + 1}</span>
+              <span className="cite-num cite-num-sm">{c.n ?? i + 1}</span>
               <div className="cite-inline-meta">
                 <div className="cite-inline-doc">{c.filename ?? t("fragmentFallback", { n: i + 1 })}</div>
                 <div className="cite-inline-sub">

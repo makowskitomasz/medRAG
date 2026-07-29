@@ -16,6 +16,8 @@ class QueryRequest(BaseModel):
 
 class Citation(BaseModel):
     chunk_id: str
+    #: SOURCE_N index as written in the answer — see generation's Citation schema.
+    n: int | None = None
     filename: str | None = None
     page: int | None = None
     snippet: str

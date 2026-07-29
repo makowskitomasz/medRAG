@@ -74,7 +74,7 @@ class IterativeMultiHopPipeline(RagPipeline):
             rag_mode=rag_mode,
         )
 
-    async def run_stream(
+    async def run_stream(  # type: ignore[override]
         self,
         query: str,
         project_id: str,
@@ -85,7 +85,62 @@ class IterativeMultiHopPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
-        reranked = await self._get_chunks(query, project_id, top_k, alpha, rerank_top_n)
-        return self._stream_generation(
-            query, reranked, conversation_history, conversation_id, rag_mode
+        import time as _time
+
+        yield self._sse_think(
+            step=0,
+            label="Decomposing the question",
+            text="Splitting the question into independently answerable sub-questions…",
+            duration_ms=0,
         )
+        t0 = _time.monotonic()
+        sub_questions = await self._decompose(query)
+        logger.info("iterative_multihop decomposed", n_sub_questions=len(sub_questions))
+        yield self._sse_think(
+            step=0,
+            label=f"Decomposition — {len(sub_questions)} sub-questions",
+            text="\n".join(f"{i + 1}. {sq}" for i, sq in enumerate(sub_questions)),
+            duration_ms=int((_time.monotonic() - t0) * 1000),
+        )
+
+        # Hops run sequentially here (unlike run()) so each one can be reported live.
+        yield self._sse_search_start()
+        per_hop_top_k = max(top_k // len(sub_questions), 3)
+        results: list[list[dict]] = []
+        for i, sub_q in enumerate(sub_questions):
+            t_hop = _time.monotonic()
+            hop_chunks = await self._retrieve_for_subquestion(
+                sub_q, project_id, per_hop_top_k, alpha
+            )
+            results.append(hop_chunks)
+            yield self._sse_think(
+                step=i + 1,
+                label=f"Hop {i + 1}/{len(sub_questions)}",
+                text=f"{sub_q} → found {len(hop_chunks)} fragments.",
+                duration_ms=int((_time.monotonic() - t_hop) * 1000),
+            )
+
+        seen: set[str] = set()
+        merged: list[dict] = []
+        for chunks in results:
+            for chunk in chunks:
+                cid = chunk.get("chunk_id", "")
+                if cid not in seen:
+                    seen.add(cid)
+                    merged.append(chunk)
+
+        logger.info("iterative_multihop aggregated", unique_chunks=len(merged))
+        t_rerank = _time.monotonic()
+        reranked = await self._rerank(query, merged, rerank_top_n)
+        yield self._sse_search_done(reranked)
+        yield self._sse_think(
+            step=len(sub_questions) + 1,
+            label="Merging and reranking",
+            text=f"Merged {len(merged)} unique fragments → selected top {len(reranked)}.",
+            duration_ms=int((_time.monotonic() - t_rerank) * 1000),
+        )
+
+        async for chunk in self._stream_generation(
+            query, reranked, conversation_history, conversation_id, rag_mode
+        ):
+            yield chunk

@@ -27,6 +27,8 @@ export interface ChatMessage {
   searchProgress?: number;
   error?: string;
   timing?: { totalMs: number; searchMs: number; thinkMs: number; streamMs: number };
+  /** Wall time from send to the last streamed token. */
+  elapsedMs?: number;
   usedChunkIds?: string[];
 }
 
@@ -109,6 +111,7 @@ export function useChatStream(): UseChatStreamReturn {
     setPhase("searching");
 
     const pendingCitations: Citation[] = [];
+    const startedAt = performance.now();
 
     try {
       await streamQuery(
@@ -149,12 +152,11 @@ export function useChatStream(): UseChatStreamReturn {
                 prev.map((m) => m.id === aiMsgId ? { ...m, phase: "searching" } : m)
               );
             } else if (ev.status === "done") {
-              // Backend format: done with filenames
-              const searchDocs: ScannedDoc[] = (ev.filenames ?? []).map((name) => ({
-                name,
-                hits: 0,
-                done: true,
-              }));
+              // Backend format: `files` carries per-document hit counts; `filenames`
+              // is the older shape kept for compatibility.
+              const searchDocs: ScannedDoc[] = ev.files
+                ? ev.files.map((f) => ({ name: f.name, hits: f.hits, done: true }))
+                : (ev.filenames ?? []).map((name) => ({ name, hits: 0, done: true }));
               setMessages((prev) =>
                 prev.map((m) =>
                   m.id === aiMsgId
@@ -222,12 +224,12 @@ export function useChatStream(): UseChatStreamReturn {
                 if (m.id !== aiMsgId) return m;
                 const newText = (m.streamedText ?? "") + token;
                 let revealed = m.citationsRevealed ?? 0;
-                const refs = token.match(/\[(\d+)\]/g);
-                if (refs) {
-                  for (const r of refs) {
-                    const n = parseInt(r.slice(1, -1), 10);
-                    if (n > revealed) revealed = n;
-                  }
+                // The model cites as [SOURCE_n] / 【SOURCE_n】; MessageAnswer rewrites
+                // those to [n] for display, so match every form here. Scan the whole
+                // text, not just this token — a marker can straddle two chunks.
+                for (const r of newText.matchAll(/[[【]\s*(?:SOURCE_)?(\d+)[^\]】]*[\]】]/g)) {
+                  const n = parseInt(r[1], 10);
+                  if (n > revealed) revealed = n;
                 }
                 return {
                   ...m,
@@ -279,6 +281,7 @@ export function useChatStream(): UseChatStreamReturn {
                 text: m.streamedText ?? "",
                 citations: pendingCitations,
                 citationsRevealed: pendingCitations.length,
+                elapsedMs: performance.now() - startedAt,
               }
             : m
         )
