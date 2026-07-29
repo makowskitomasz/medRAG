@@ -1,9 +1,11 @@
 "use client";
-import { Brain, ChevronDown, Check, Sparkles, RefreshCw, ShieldCheck, GitMerge, AlertTriangle, Shuffle } from "lucide-react";
+import { Brain, ChevronDown, Check, Sparkles, RefreshCw, ShieldCheck, GitMerge, AlertTriangle, Shuffle, Zap, Users } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { ThinkStep } from "@/hooks/useChatStream";
 
 const MODE_PANEL: Record<string, { label: string; Icon: React.ComponentType<{ size: number }> }> = {
+  vanilla:            { label: "Vanilla",      Icon: Zap },
+  multi_agent:        { label: "Multi-Agent",  Icon: Users },
   hyde:               { label: "HyDE",         Icon: Sparkles },
   query_rewriting:    { label: "Query Rewriting", Icon: RefreshCw },
   self_reflection:    { label: "Self-Reflection", Icon: Brain },

@@ -116,6 +116,13 @@ class IterativeMultiHopPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
+        # Decomposition is a full LLM call — announce it so the panel is not blank.
+        yield self._sse_think(
+            step=0,
+            label="Decomposing the question",
+            text="Splitting the question into sub-questions to chain retrieval over…",
+            duration_ms=0,
+        )
         sub_questions = await self._decompose(query)
         per_hop_top_k = max(top_k // len(sub_questions), 5)
         findings: list[str] = []

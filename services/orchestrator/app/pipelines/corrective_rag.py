@@ -81,7 +81,7 @@ class CorrectiveRagPipeline(RagPipeline):
             rag_mode=rag_mode,
         )
 
-    async def run_stream(
+    async def run_stream(  # type: ignore[override]
         self,
         query: str,
         project_id: str,
@@ -92,7 +92,72 @@ class CorrectiveRagPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
-        reranked = await self._get_chunks(query, project_id, top_k, alpha, rerank_top_n)
-        return self._stream_generation(
-            query, reranked, conversation_history, conversation_id, rag_mode
+        import time as _time
+
+        yield self._sse_search_start()
+        t0 = _time.monotonic()
+        chunks = await self._retrieve(query, project_id, top_k, alpha)
+        relevant = self._filter_relevant(chunks)
+        relevant_fraction = len(relevant) / len(chunks) if chunks else 0.0
+        yield self._sse_think(
+            step=0,
+            label="Relevance check",
+            text=(
+                f"{len(relevant)} of {len(chunks)} fragments scored above "
+                f"{_RELEVANCE_THRESHOLD} ({relevant_fraction:.0%} relevant)."
+            ),
+            duration_ms=int((_time.monotonic() - t0) * 1000),
         )
+
+        step = 1
+        if relevant_fraction < _MIN_RELEVANT_FRACTION:
+            logger.info(
+                "corrective_rag low relevance",
+                relevant=len(relevant),
+                total=len(chunks),
+                fraction=relevant_fraction,
+            )
+            t1 = _time.monotonic()
+            fallback_chunks = await self._fallback_retrieve(query, project_id, top_k, alpha)
+            seen: set[str] = set()
+            merged: list[dict] = []
+            for c in chunks + fallback_chunks:
+                cid = c.get("chunk_id", "")
+                if cid not in seen:
+                    seen.add(cid)
+                    merged.append(c)
+            yield self._sse_think(
+                step=step,
+                label="Corrective fallback",
+                text=(
+                    f"Relevance below {_MIN_RELEVANT_FRACTION:.0%} — broadened the search "
+                    f"(more keyword weight, doubled top_k) and added "
+                    f"{len(merged) - len(chunks)} new fragments."
+                ),
+                duration_ms=int((_time.monotonic() - t1) * 1000),
+            )
+            chunks = merged
+            step += 1
+        else:
+            yield self._sse_think(
+                step=step,
+                label="No correction needed",
+                text="Retrieval quality is sufficient — skipping the fallback search.",
+                duration_ms=0,
+            )
+            step += 1
+
+        t2 = _time.monotonic()
+        reranked = await self._rerank(query, chunks, rerank_top_n)
+        yield self._sse_search_done(reranked)
+        yield self._sse_think(
+            step=step,
+            label="Reranking",
+            text=f"Reranked {len(chunks)} fragments → selected top {len(reranked)}.",
+            duration_ms=int((_time.monotonic() - t2) * 1000),
+        )
+
+        async for chunk in self._stream_generation(
+            query, reranked, conversation_history, conversation_id, rag_mode
+        ):
+            yield chunk

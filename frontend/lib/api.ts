@@ -294,6 +294,7 @@ export interface SearchEvent {
   status: "start" | "done";
   count?: number;
   filenames?: string[];
+  files?: Array<{ name: string; hits: number }>;
 }
 
 export interface ThinkEvent {
@@ -320,12 +321,14 @@ export interface StreamEvent {
   citations?: Citation[];
   conversation_id?: string;
   rag_mode?: string;
-  // search (mock: progress+docs, backend: status+filenames)
+  // search (mock: progress+docs, backend: status+files/filenames)
   progress?: number;
   docs?: ScannedDoc[];
   status?: "start" | "done";
   count?: number;
   filenames?: string[];
+  /** Per-document chunk counts for the selected fragments. */
+  files?: Array<{ name: string; hits: number }>;
   // think
   step?: number;
   label?: string;

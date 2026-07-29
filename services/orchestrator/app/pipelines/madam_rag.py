@@ -171,18 +171,81 @@ class MadamRagPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
-        t0 = time.monotonic()
-        yield self._sse_search_start()
-        revised, evidence = await self._debate(query, project_id, top_k, alpha, rerank_top_n)
-        yield self._sse_search_done(evidence)
+        # _debate() is inlined here (same phases, same parallelism) so the UI sees each
+        # round land. Calling it would keep the whole debate silent until it finished.
+        per_agent_top_k = max(top_k // len(_AGENTS), 3)
+        per_agent_top_n = max(rerank_top_n // len(_AGENTS), 2)
 
-        for i, (agent, answer) in enumerate(zip(_AGENTS, revised, strict=True)):
+        yield self._sse_search_start()
+        t_retrieve = time.monotonic()
+        agent_chunks = await asyncio.gather(
+            *[
+                self._agent_retrieve(a, query, project_id, per_agent_top_k, alpha, per_agent_top_n)
+                for a in _AGENTS
+            ]
+        )
+        for i, (agent, chunks) in enumerate(zip(_AGENTS, agent_chunks, strict=True)):
             yield self._sse_think(
                 step=i,
-                label=f"Agent: {agent['name']}",
-                text=answer,
-                duration_ms=int((time.monotonic() - t0) * 1000),
+                label=f"{agent['name']} — gathering evidence",
+                text=f"Retrieved {len(chunks)} passages from its own angle.",
+                duration_ms=int((time.monotonic() - t_retrieve) * 1000),
+                agent=agent["name"].lower(),
             )
+
+        t_draft = time.monotonic()
+        candidates = await asyncio.gather(
+            *[self._candidate(a, query, c) for a, c in zip(_AGENTS, agent_chunks, strict=True)]
+        )
+        drafts = [answer for answer, _ in candidates]
+        for i, (agent, draft) in enumerate(zip(_AGENTS, drafts, strict=True)):
+            yield self._sse_think(
+                step=len(_AGENTS) + i,
+                label=f"{agent['name']} — opening argument",
+                text=draft,
+                duration_ms=int((time.monotonic() - t_draft) * 1000),
+                agent=agent["name"].lower(),
+            )
+
+        t_revise = time.monotonic()
+        revised = list(
+            await asyncio.gather(
+                *[
+                    self._revise(
+                        agent,
+                        query,
+                        agent_chunks[i],
+                        drafts[i],
+                        drafts[1 - i],
+                        _AGENTS[1 - i]["name"],
+                    )
+                    for i, agent in enumerate(_AGENTS)
+                ]
+            )
+        )
+        logger.info("madam_rag debate round complete", n_agents=len(_AGENTS))
+        for i, (agent, answer) in enumerate(zip(_AGENTS, revised, strict=True)):
+            yield self._sse_think(
+                step=2 * len(_AGENTS) + i,
+                label=f"{agent['name']} — after rebuttal",
+                text=answer,
+                duration_ms=int((time.monotonic() - t_revise) * 1000),
+                agent=agent["name"].lower(),
+            )
+
+        collected: dict[str, dict] = {}
+        for chunks in agent_chunks:
+            for chunk in chunks:
+                collected.setdefault(chunk.get("chunk_id", ""), chunk)
+        evidence = await self._rerank(query, list(collected.values()), rerank_top_n)
+        yield self._sse_search_done(evidence)
+        yield self._sse_think(
+            step=3 * len(_AGENTS),
+            label="Judge — reconciling the debate",
+            text=f"Merged {len(collected)} unique passages → {len(evidence)} for the verdict.",
+            duration_ms=0,
+            agent="judge",
+        )
 
         async for event in self._stream_generation(
             query,

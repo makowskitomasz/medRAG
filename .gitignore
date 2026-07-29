@@ -42,18 +42,25 @@ Thumbs.db
 *.bin
 *.pt
 *.safetensors
-data/
-!data/raw/.gitkeep
 tmp/uploads/
 
-# Benchmark results (large, generated)
-results/*.json
-results/*.csv
-results/*.txt
-results/*.log
-results/plots/
-results/final/
-results/hotpotqa_final/
-results/ddi_benchmark_final/
-results/test_fix/
+# Generated / local-only trees. Note the `dir/*` form: git does not descend into an
+# ignored directory, so a negation only works for a file sitting directly in it
+# (results/.gitkeep works; a nested docs/adr/.gitkeep could not be un-ignored).
+data/*
+results/*
 !results/.gitkeep
+docs/*
+
+# LaTeX build artefacts. Never ignore *.tex — the chapters are the thesis.
+thesis-latex/main.pdf
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.toc

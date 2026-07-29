@@ -34,6 +34,13 @@ class RagPipeline(ABC):
         self._last_chunks: list[dict] = []  # all reranked chunks passed to LLM
         self._last_input_tokens: int = 0
         self._last_output_tokens: int = 0
+        # Highest `think` step index emitted so far — the generation service always
+        # labels its chain-of-thought as step 0, which would overwrite the pipeline's
+        # own steps in the UI, so it gets remapped past this watermark.
+        self._max_step: int = -1
+        # Shifts this pipeline's step numbering — set by a parent pipeline (RARE)
+        # that delegates to a sub-pipeline after already emitting its own steps.
+        self._step_base: int = 0
 
     @abstractmethod
     async def run(
@@ -73,31 +80,42 @@ class RagPipeline(ABC):
 
     @staticmethod
     def _sse_search_done(chunks: list[dict]) -> str:
-        filenames = list(
-            dict.fromkeys(
-                c.get("filename") or c.get("metadata", {}).get("filename") or "" for c in chunks
-            )
-        )
+        # Count how many selected chunks each document contributed, preserving rank order.
+        hits: dict[str, int] = {}
+        for c in chunks:
+            name = c.get("filename") or c.get("metadata", {}).get("filename") or ""
+            if name:
+                hits[name] = hits.get(name, 0) + 1
         return RagPipeline._sse(
             {
                 "type": "search",
                 "status": "done",
                 "count": len(chunks),
-                "filenames": [f for f in filenames if f],
+                "filenames": list(hits),
+                "files": [{"name": name, "hits": n} for name, n in hits.items()],
             }
         )
 
-    @staticmethod
-    def _sse_think(step: int, label: str, text: str, duration_ms: int) -> str:
-        return RagPipeline._sse(
-            {
-                "type": "think",
-                "step": step,
-                "label": label,
-                "text": text,
-                "durationMs": duration_ms,
-            }
-        )
+    def _sse_think(
+        self,
+        step: int,
+        label: str,
+        text: str,
+        duration_ms: int,
+        agent: str | None = None,
+    ) -> str:
+        step += self._step_base
+        self._max_step = max(self._max_step, step)
+        event: dict = {
+            "type": "think",
+            "step": step,
+            "label": label,
+            "text": text,
+            "durationMs": duration_ms,
+        }
+        if agent:
+            event["agent"] = agent
+        return self._sse(event)
 
     async def _retrieve(
         self,
@@ -270,7 +288,12 @@ class RagPipeline(ABC):
         return score
 
     async def _evaluate_answer(self, query: str, answer: str, chunks: list[dict]) -> float:
-        """Ask generation service to score answer sufficiency (0.0–1.0)."""
+        """Ask generation service to score answer sufficiency (0.0–1.0).
+
+        Structured-output scoring is model-dependent and can fail (some providers
+        return a bare number or an empty completion). A failed self-assessment must
+        not fail the whole query, so it degrades to "sufficient".
+        """
         payload: dict = {
             "query": query,
             "answer": answer,
@@ -279,7 +302,11 @@ class RagPipeline(ABC):
         }
         if self.llm_model:
             payload["llm_model"] = self.llm_model
-        data = await self._tracked_post(f"{self.settings.generation_url}/evaluate", payload)
+        try:
+            data = await self._tracked_post(f"{self.settings.generation_url}/evaluate", payload)
+        except Exception as exc:
+            _logger.warning("answer evaluation failed, assuming sufficient", error=str(exc))
+            return 1.0
         return float(data.get("score", 1.0))
 
     async def _stream_text(
@@ -326,6 +353,9 @@ class RagPipeline(ABC):
         if self.llm_model:
             payload["llm_model"] = self.llm_model
         url = f"{self.settings.generation_url}/generate/stream"
+        # Reserve one step index for the model's chain-of-thought so it appends
+        # after the pipeline steps instead of replacing step 0.
+        generation_step = self._max_step + 1
 
         async with self.http.stream("POST", url, json=payload) as resp:
             resp.raise_for_status()
@@ -338,6 +368,8 @@ class RagPipeline(ABC):
                     if event.get("type") == "citations":
                         event["conversation_id"] = conversation_id
                         event["rag_mode"] = rag_mode
+                    elif event.get("type") == "think":
+                        event["step"] = generation_step
                     yield f"data: {json.dumps(event)}\n\n"
 
         yield "data: [DONE]\n\n"

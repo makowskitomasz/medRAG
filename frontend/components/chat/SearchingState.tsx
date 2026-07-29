@@ -75,7 +75,8 @@ export default function SearchingState({ docs = [], progress = 0, done = false }
                   {isDone
                     ? doc.hits > 0
                       ? <><strong>{doc.hits}</strong> {t("chunksUsed", { n: "" }).split(" ")[0]}</>
-                      : <CheckCircle2 size={12} style={{ color: "var(--c-accent-mint)" }} />
+                      // No tick here — the row already ends with search-doc-check.
+                      : null
                     : isActive
                     ? <span className="search-doc-loading">{t("searchScan")}</span>
                     : <span className="search-doc-pending">—</span>}

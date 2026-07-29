@@ -1,17 +1,9 @@
 import type { NextConfig } from "next";
 
-const API_GATEWAY = process.env.API_GATEWAY_URL ?? "http://localhost:8000";
-
+// NOTE: /api/* is proxied by the route handler in app/api/[...path]/route.ts, not by
+// a rewrite — rewrites buffer the response and break SSE streaming.
 const nextConfig: NextConfig = {
   output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
-  async rewrites() {
-    return [
-      {
-        source: "/api/:path*",
-        destination: `${API_GATEWAY}/:path*`,
-      },
-    ];
-  },
 };
 
 export default nextConfig;

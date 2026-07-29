@@ -24,6 +24,9 @@ class GenerationRequest(BaseModel):
 
 class Citation(BaseModel):
     chunk_id: str
+    #: SOURCE_N index as written in the answer. Only cited sources are returned, so
+    #: this is NOT the position in this list — clients must match markers by `n`.
+    n: int | None = None
     filename: str | None = None
     page: int | None = None
     snippet: str

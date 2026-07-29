@@ -116,6 +116,13 @@ class MultiAgentPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
+        yield self._sse_think(
+            step=0,
+            label="Planner",
+            text="Breaking the question into sub-tasks…",
+            duration_ms=0,
+            agent="planner",
+        )
         t0 = time.monotonic()
         steps = await self._plan(query, max_steps=_MAX_STEPS)
         yield self._sse_think(
@@ -123,6 +130,7 @@ class MultiAgentPipeline(RagPipeline):
             label="Planner",
             text="Sub-tasks: " + "; ".join(s.get("sub_task", "") for s in steps),
             duration_ms=int((time.monotonic() - t0) * 1000),
+            agent="planner",
         )
 
         per_agent_top_k = max(top_k // len(steps), 3)
@@ -145,6 +153,7 @@ class MultiAgentPipeline(RagPipeline):
                 label=f"Executor {i + 1}: {step.get('sub_task', '')}",
                 text=finding,
                 duration_ms=int((time.monotonic() - t_step) * 1000),
+                agent="executor",
             )
 
         evidence = await self._rerank(query, list(collected.values()), rerank_top_n)

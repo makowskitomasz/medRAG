@@ -110,11 +110,41 @@ async def generate_stream(
         stream=True,
     )
 
+    reasoning_parts: list[str] = []
+    reasoning_emitted = 0
+
     async for chunk in stream:  # type: ignore[assignment]
-        delta = chunk.choices[0].delta.content if chunk.choices else None
-        if delta:
-            full_answer.append(delta)
-            yield f"data: {json.dumps({'type': 'token', 'content': delta})}\n\n"
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+
+        # Reasoning models (e.g. gpt-oss) stream a long chain-of-thought in
+        # `delta.reasoning` before any answer content. Surface it as `think`
+        # events so the UI shows live progress instead of a frozen spinner.
+        reasoning = getattr(delta, "reasoning", None)
+        if reasoning:
+            reasoning_parts.append(reasoning)
+            reasoning_emitted += 1
+            # Emit the first update immediately (fast switch to "thinking"),
+            # then throttle to a cumulative update every few deltas.
+            if reasoning_emitted == 1 or reasoning_emitted % 8 == 0:
+                yield (
+                    "data: "
+                    + json.dumps(
+                        {
+                            "type": "think",
+                            "step": 0,
+                            "label": "Reasoning",
+                            "text": "".join(reasoning_parts),
+                        }
+                    )
+                    + "\n\n"
+                )
+
+        content = delta.content
+        if content:
+            full_answer.append(content)
+            yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
 
     answer = "".join(full_answer)
     citations = extract_citations(answer, request.chunks)
