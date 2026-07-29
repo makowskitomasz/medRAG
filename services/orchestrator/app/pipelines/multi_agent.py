@@ -1,78 +1,87 @@
 import asyncio
+import time
 from collections.abc import AsyncGenerator
 
 from medrag_shared import get_logger
 
 from app.pipelines.base import RagPipeline
-from app.schemas.orchestrator_schemas import QueryResponse
+from app.schemas.orchestrator_schemas import Citation, QueryResponse
 
 logger = get_logger(__name__)
 
-# Each agent reformulates the query from a different angle to maximise recall diversity.
-_AGENT_PERSPECTIVES = [
-    "mechanism of action and pharmacokinetics: {query}",
-    "clinical risks, contraindications and adverse effects: {query}",
-    "dosing, monitoring and management guidelines: {query}",
-]
+_MAX_STEPS = 3
 
-# UI metadata for the agent view — one entry per perspective, same order.
-_AGENTS = [
-    ("researcher", "Researcher", "Mechanism of action and pharmacokinetics"),
-    ("critic", "Critic", "Clinical risks, contraindications and adverse effects"),
-    ("editor", "Editor", "Dosing, monitoring and management guidelines"),
-]
+_SYNTHESIS_INSTRUCTIONS = (
+    "A planner split the question into sub-tasks and an executor agent resolved each one "
+    "against its own retrieved passages. The findings below are those executors' reports; "
+    "the passages are the evidence behind them. Compose one coherent answer from the "
+    "findings, citing [SOURCE_N] passages. Where a finding reports no evidence, say so "
+    "instead of relying on prior knowledge."
+)
 
 
 class MultiAgentPipeline(RagPipeline):
-    @staticmethod
-    def _preview(chunks: list[dict], limit: int = 220) -> str:
-        if not chunks:
-            return "No supporting fragments found."
-        top = chunks[0].get("content", "").strip().replace("\n", " ")
-        return top[:limit] + ("…" if len(top) > limit else "")
+    """MA-RAG: planner decomposes, executor agents resolve sub-tasks, QA agent synthesises."""
 
-    async def _agent_retrieve(
-        self,
-        perspective_query: str,
-        project_id: str,
-        top_k: int,
-        alpha: float,
-    ) -> list[dict]:
-        try:
-            return await self._retrieve(perspective_query, project_id, top_k, alpha)
-        except Exception as exc:
-            logger.warning("agent retrieval failed", query=perspective_query, error=str(exc))
-            return []
-
-    async def _aggregate_chunks(
+    async def _execute_step(
         self,
         query: str,
+        step: dict,
         project_id: str,
         top_k: int,
         alpha: float,
         rerank_top_n: int,
-    ) -> list[dict]:
-        perspective_queries = [p.format(query=query) for p in _AGENT_PERSPECTIVES]
-        per_agent_top_k = max(top_k // len(perspective_queries), 3)
+    ) -> tuple[str, list[dict]]:
+        """One executor agent: retrieve for its sub-task and report a focused finding."""
+        sub_task = step.get("sub_task", query)
+        focus = step.get("focus") or ""
+        retrieval_query = f"{sub_task} {focus}".strip()
+        try:
+            chunks = await self._retrieve(retrieval_query, project_id, top_k, alpha)
+        except Exception as exc:
+            logger.warning("executor retrieval failed", sub_task=sub_task, error=str(exc))
+            return "No supporting evidence found.", []
+
+        chunks = await self._rerank(retrieval_query, chunks, rerank_top_n) if chunks else []
+        finding, _ = await self._extract(query=query, sub_question=sub_task, chunks=chunks)
+        return finding, chunks
+
+    async def _run_agents(
+        self, query: str, project_id: str, top_k: int, alpha: float, rerank_top_n: int
+    ) -> tuple[list[dict], list[str], list[dict]]:
+        """Returns (plan steps, executor findings, evidence chunks for synthesis)."""
+        steps = await self._plan(query, max_steps=_MAX_STEPS)
+        logger.info("multi_agent plan", n_steps=len(steps))
+
+        per_agent_top_k = max(top_k // len(steps), 3)
+        per_agent_top_n = max(rerank_top_n // len(steps), 2)
 
         results = await asyncio.gather(
             *[
-                self._agent_retrieve(pq, project_id, per_agent_top_k, alpha)
-                for pq in perspective_queries
+                self._execute_step(query, s, project_id, per_agent_top_k, alpha, per_agent_top_n)
+                for s in steps
             ]
         )
 
-        seen: set[str] = set()
-        merged: list[dict] = []
-        for chunks in results:
+        findings = [finding for finding, _ in results]
+        collected: dict[str, dict] = {}
+        for _, chunks in results:
             for chunk in chunks:
-                chunk_id = chunk.get("chunk_id", "")
-                if chunk_id not in seen:
-                    seen.add(chunk_id)
-                    merged.append(chunk)
+                collected.setdefault(chunk.get("chunk_id", ""), chunk)
 
-        logger.info("multi_agent aggregation", total_unique_chunks=len(merged))
-        return await self._rerank(query, merged, rerank_top_n)
+        evidence = await self._rerank(query, list(collected.values()), rerank_top_n)
+        return steps, findings, evidence
+
+    async def _synthesise(
+        self, query: str, evidence: list[dict], findings: list[str], history: list[dict]
+    ) -> tuple[str, list[Citation]]:
+        return await self._generate(
+            query,
+            evidence,
+            history,
+            evidence_notes=findings,
+            task_instructions=_SYNTHESIS_INSTRUCTIONS,
+        )
 
     async def run(
         self,
@@ -85,8 +94,10 @@ class MultiAgentPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> QueryResponse:
-        reranked = await self._aggregate_chunks(query, project_id, top_k, alpha, rerank_top_n)
-        answer, citations = await self._generate(query, reranked, conversation_history)
+        _, findings, evidence = await self._run_agents(
+            query, project_id, top_k, alpha, rerank_top_n
+        )
+        answer, citations = await self._synthesise(query, evidence, findings, conversation_history)
         return QueryResponse(
             conversation_id=conversation_id,
             answer=answer,
@@ -105,54 +116,54 @@ class MultiAgentPipeline(RagPipeline):
         alpha: float,
         rerank_top_n: int,
     ) -> AsyncGenerator[str, None]:
-        import time as _time
-
-        per_top_k = max(top_k // len(_AGENT_PERSPECTIVES), 3)
-
-        # Stream each agent's search as a think step
-        yield self._sse_search_start()
-        per_agent_results: list[list[dict]] = []
-        for i, (pq, (agent_key, name, desc)) in enumerate(
-            zip(
-                [p.format(query=query) for p in _AGENT_PERSPECTIVES],
-                _AGENTS,
-                strict=True,
-            )
-        ):
-            t0 = _time.monotonic()
-            agent_chunks = await self._agent_retrieve(pq, project_id, per_top_k, alpha)
-            per_agent_results.append(agent_chunks)
-            yield self._sse_think(
-                step=i,
-                label=f"{name} — {desc}",
-                text=f"Found {len(agent_chunks)} fragments. {self._preview(agent_chunks)}",
-                duration_ms=int((_time.monotonic() - t0) * 1000),
-                agent=agent_key,
-            )
-
-        # Aggregate + rerank
-        seen: set[str] = set()
-        merged: list[dict] = []
-        for chunks in per_agent_results:
-            for chunk in chunks:
-                cid = chunk.get("chunk_id", "")
-                if cid not in seen:
-                    seen.add(cid)
-                    merged.append(chunk)
-
-        logger.info("multi_agent aggregation", total_unique_chunks=len(merged))
-        t_rerank = _time.monotonic()
-        reranked = await self._rerank(query, merged, rerank_top_n)
-        yield self._sse_search_done(reranked)
         yield self._sse_think(
-            step=len(_AGENT_PERSPECTIVES),
-            label="Merging and reranking",
-            text=f"Merged {len(merged)} unique fragments → selected top {len(reranked)}.",
-            duration_ms=int((_time.monotonic() - t_rerank) * 1000),
-            agent="moderator",
+            step=0,
+            label="Planner",
+            text="Breaking the question into sub-tasks…",
+            duration_ms=0,
+            agent="planner",
+        )
+        t0 = time.monotonic()
+        steps = await self._plan(query, max_steps=_MAX_STEPS)
+        yield self._sse_think(
+            step=0,
+            label="Planner",
+            text="Sub-tasks: " + "; ".join(s.get("sub_task", "") for s in steps),
+            duration_ms=int((time.monotonic() - t0) * 1000),
+            agent="planner",
         )
 
-        async for chunk in self._stream_generation(
-            query, reranked, conversation_history, conversation_id, rag_mode
+        per_agent_top_k = max(top_k // len(steps), 3)
+        per_agent_top_n = max(rerank_top_n // len(steps), 2)
+        findings: list[str] = []
+        collected: dict[str, dict] = {}
+
+        for i, step in enumerate(steps):
+            yield self._sse_search_start()
+            t_step = time.monotonic()
+            finding, chunks = await self._execute_step(
+                query, step, project_id, per_agent_top_k, alpha, per_agent_top_n
+            )
+            for chunk in chunks:
+                collected.setdefault(chunk.get("chunk_id", ""), chunk)
+            findings.append(finding)
+            yield self._sse_search_done(chunks)
+            yield self._sse_think(
+                step=i + 1,
+                label=f"Executor {i + 1}: {step.get('sub_task', '')}",
+                text=finding,
+                duration_ms=int((time.monotonic() - t_step) * 1000),
+                agent="executor",
+            )
+
+        evidence = await self._rerank(query, list(collected.values()), rerank_top_n)
+        async for event in self._stream_generation(
+            query,
+            evidence,
+            conversation_history,
+            conversation_id,
+            rag_mode,
+            evidence_notes=findings,
+            task_instructions=_SYNTHESIS_INSTRUCTIONS,
         ):
-            yield chunk
+            yield event

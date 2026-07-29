@@ -5,6 +5,10 @@ When you use information from a passage, cite it inline as [SOURCE_N].
 If the context does not contain enough information, say so clearly.
 Do not invent information not present in the context.
 Be concise, accurate, and clinically precise.
+{% if task_instructions %}
+
+{{ task_instructions }}
+{% endif %}
 {% if safety_note %}
 {{ safety_note }}
 {% endif %}

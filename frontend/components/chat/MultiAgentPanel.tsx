@@ -18,22 +18,20 @@ interface AgentMeta {
 
 /**
  * Agent keys are sent by the orchestrator (`agent` field on `think` events).
- * multi_agent → researcher/critic/editor, madam_rag → advocate/skeptic/arbiter.
+ * multi_agent (MA-RAG) → planner + executors; madam_rag → the two debaters + judge.
  */
 const AGENTS: Record<string, AgentMeta> = {
-  researcher: { name: "Researcher", color: "#7DD3FC", desc: "Mechanism of action and pharmacokinetics" },
-  critic:     { name: "Critic",     color: "#C7CEEA", desc: "Clinical risks and adverse effects" },
-  editor:     { name: "Editor",     color: "#6EE7B7", desc: "Dosing, monitoring and management" },
-  advocate:   { name: "Advocate",   color: "#6EE7B7", desc: "Supporting evidence and benefits" },
-  skeptic:    { name: "Skeptic",    color: "#FCA5A5", desc: "Risks and opposing evidence" },
-  arbiter:    { name: "Arbiter",    color: "#FCD34D", desc: "Conflicting or uncertain evidence" },
-  moderator:  { name: "Moderator",  color: "#C7CEEA", desc: "Merges the agents' findings" },
-  reasoning:  { name: "Reasoning",  color: "#A5B4FC", desc: "Model chain-of-thought" },
+  planner:   { name: "Planner",   color: "#7DD3FC", desc: "Splits the question into sub-tasks" },
+  executor:  { name: "Executor",  color: "#6EE7B7", desc: "Resolves one sub-task against its own passages" },
+  advocate:  { name: "Advocate",  color: "#6EE7B7", desc: "Argues from supporting evidence" },
+  skeptic:   { name: "Skeptic",   color: "#FCA5A5", desc: "Argues from risks and opposing evidence" },
+  judge:     { name: "Judge",     color: "#FCD34D", desc: "Reconciles the debate into a verdict" },
+  reasoning: { name: "Reasoning", color: "#A5B4FC", desc: "Model chain-of-thought" },
 };
 
 const EXPECTED_AGENTS: Record<string, number> = {
-  multi_agent: 4, // 3 agents + moderator
-  madam_rag: 5,   // 3 debaters + conflict detection + merge
+  multi_agent: 4, // planner + 3 executors
+  madam_rag: 7,   // 2 debaters × (evidence, opening, rebuttal) + judge
 };
 
 const PANEL_LABEL: Record<string, string> = {

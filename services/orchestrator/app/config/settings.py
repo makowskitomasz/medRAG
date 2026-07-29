@@ -8,12 +8,14 @@ class Settings(BaseServiceSettings):
     reranker_url: str = "http://reranker:8000"
     generation_url: str = "http://generation:8000"
     query_processor_url: str = "http://query-processor:8000"
+    embedding_url: str = "http://embedding:8000"
 
     # Env aliases from .env.example (docker service names)
     retrieval_service_url: str | None = None
     reranker_service_url: str | None = None
     generation_service_url: str | None = None
     query_processor_service_url: str | None = None
+    embedding_service_url: str | None = None
 
     def model_post_init(self, __context) -> None:  # type: ignore[override]
         if self.retrieval_service_url:
@@ -24,6 +26,8 @@ class Settings(BaseServiceSettings):
             object.__setattr__(self, "generation_url", self.generation_service_url)
         if self.query_processor_service_url:
             object.__setattr__(self, "query_processor_url", self.query_processor_service_url)
+        if self.embedding_service_url:
+            object.__setattr__(self, "embedding_url", self.embedding_service_url)
 
 
 settings = Settings()

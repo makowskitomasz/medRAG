@@ -41,6 +41,25 @@ class DecomposeResponse(BaseModel):
     output_tokens: int = 0
 
 
+class PlanRequest(BaseModel):
+    query: str
+    max_steps: int = 4
+    llm_model: str | None = None
+    prompt_overrides: dict[str, str] = {}
+
+
+class PlanStep(BaseModel):
+    sub_task: str
+    focus: str = ""
+
+
+class PlanResponse(BaseModel):
+    original_query: str
+    steps: list[PlanStep]
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
 class TriageRequest(BaseModel):
     query: str
     llm_model: str | None = None
