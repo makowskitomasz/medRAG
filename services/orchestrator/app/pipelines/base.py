@@ -368,6 +368,10 @@ class RagPipeline(ABC):
                     if event.get("type") == "citations":
                         event["conversation_id"] = conversation_id
                         event["rag_mode"] = rag_mode
+                        # Usage rides along on the final event; without recording
+                        # it here every streamed answer was billed as zero tokens.
+                        self._last_input_tokens += event.pop("input_tokens", 0)
+                        self._last_output_tokens += event.pop("output_tokens", 0)
                     elif event.get("type") == "think":
                         event["step"] = generation_step
                     yield f"data: {json.dumps(event)}\n\n"

@@ -122,18 +122,36 @@ export default function ChatPage() {
 
   const conversationId = activeConversationId ?? (id !== "session" ? id : null);
 
+  const answerCount = messages.filter((m) => m.role === "ai" && !m.error).length;
+
   // Per-answer evaluation, paired with assistant messages in order.
+  //
+  // The eval service scores asynchronously behind LLM-judge calls, so a row lands
+  // roughly half a minute after the stream ends. Ask again until every answer has
+  // one — a single fetch at "done" always came back empty. `idle` is included
+  // because a conversation restored from history never reaches the `done` phase.
   const { data: evalData } = useQuery({
     queryKey: ["eval", conversationId],
     queryFn: () => evaluation.byConversation(conversationId!),
-    enabled: !!conversationId && phase === "done",
-    staleTime: 15_000,
+    enabled: !!conversationId && !isGenerating && answerCount > 0,
+    staleTime: 10_000,
     retry: false,
+    refetchInterval: (q) => {
+      const rows = q.state.data?.items.length ?? 0;
+      if (rows >= answerCount) return false;
+      // Give up after a couple of minutes rather than polling a stuck queue forever.
+      return q.state.dataUpdateCount < 25 ? 5_000 : false;
+    },
   });
 
-  const metricsByAiIndex = useMemo(() => {
-    const map: Record<number, Metrics> = {};
-    (evalData?.items ?? []).forEach((r, i) => { map[i] = r.metrics; });
+  // Keyed by question rather than by position: conversations from before streamed
+  // queries were evaluated have fewer rows than answers, and index pairing would
+  // then attach the wrong metrics to every answer after the gap.
+  const metricsByQuestion = useMemo(() => {
+    const map: Record<string, Metrics> = {};
+    for (const r of evalData?.items ?? []) {
+      if (r.question) map[r.question.trim()] = r.metrics; // latest run wins
+    }
     return map;
   }, [evalData]);
 
@@ -345,7 +363,7 @@ export default function ChatPage() {
                           toggleCite={toggleCite}
                           citationLayout={citationLayout}
                           isLast={msg.id === messages.findLast((m) => m.role === "ai")?.id}
-                          metrics={metricsByAiIndex[messages.slice(0, i).filter((m) => m.role === "ai").length]}
+                          metrics={metricsByQuestion[(messages[i - 1]?.text ?? "").trim()]}
                           onRegenerate={handleRegenerate}
                           onRetry={() => handleRetry(messages[i - 1]?.text ?? "")}
                           canAct={!isReadOnly && !composerDisabled}
