@@ -58,7 +58,58 @@ An early version of this work asked simply which architecture is best, and the
 evaluation in \cref{cha:evaluation} shows that the question has no
 benchmark-independent answer: the architectures that lose on an encyclopedic
 benchmark are the ones that win on hard clinical questions, using the same code.
-The dependence on task difficulty is the finding, not a complication of it.
+The dependence on task difficulty appears to be the finding itself rather than a
+complication of it.
+
+Each research question is answered by a specific experiment reported in a specific
+place, and \cref{tab:rq_map} states that mapping explicitly so that the empirical
+basis of every answer can be located directly.
+
+\begin{table}[htbp]
+  \centering
+  \caption[Mapping of research questions to experiments.]{Mapping of each research
+    question to the experiment that verifies it, the section reporting it, and the
+    answer obtained.  Every quality comparison is a paired, per-question contrast
+    against a vanilla control, tested with a Wilcoxon signed-rank test
+    (\cref{subsec:stat_method}).}
+  \label{tab:rq_map}
+  \small
+  \begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X
+                                  >{\raggedright\arraybackslash}X l@{}}
+    \toprule
+    \textbf{RQ} & \textbf{Experimental verification} & \textbf{Answer obtained}
+      & \textbf{Section} \\
+    \midrule
+    RQ1
+      & Nine pipeline variants on HotpotQA ($9 \times 1{,}000$) and on the DDI
+        benchmark ($9 \times 100$, five difficulty levels); quality metrics and
+        end-to-end latency, with a per-difficulty breakdown
+      & Benchmark-dependent: the agentic modes lose on HotpotQA and win on the
+        hardest clinical questions.  Complexity buys grounding, not accuracy
+      & \cref{sec:results_quality},
+        \cref{subsec:ddi_difficulty},
+        \cref{sec:results_latency} \\
+    \addlinespace
+    RQ2
+      & \rarerag{} contrasted against Vanilla and the single-path modes on both
+        benchmarks, with a component-level diagnosis of the shortfall
+      & Partially negative: the routing premise is supported, set-wise selection
+        prunes evidence too aggressively, and \rarerag{} does not beat the vanilla
+        baseline on either benchmark
+      & \cref{subsec:rare_verdict},
+        \cref{sec:hypothesis_eval} \\
+    \addlinespace
+    RQ3
+      & End-to-end operation of the 14-service platform over the OpenFDA and
+        DrugBank corpora, with citation traceability and production-mode metric
+        collection; worked advisory queries
+      & Yes as a demonstrator: every claim is traceable to a cited passage, with
+        correctness near 0.5 and abstention never exercised by these benchmarks
+      & \cref{sec:ddi_demo},
+        \cref{cha:implementation} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
 
 % ------------------------------------------------------------
 \section{Scope and Limitations}
@@ -107,8 +158,20 @@ It is reported here as a partially negative result: the complexity router is
 supported by the difficulty-scaling finding above, but set-wise selection prunes
 evidence too aggressively on multi-drug questions, and \rarerag{} does not beat a
 vanilla baseline on either benchmark (\cref{cha:evaluation}).
-Reporting that honestly, with the mechanism that explains it, is a more useful
-contribution than an unqualified claim of superiority would have been.
+
+That negative result is treated here as a contribution in its own right rather
+than as a shortfall to be minimised, and it is worth being explicit about why.
+A result of the form ``the proposed architecture wins'' is only as informative as
+the baseline it was measured against.
+What is reported instead is a specific design error --- optimising selected
+evidence for diversity when the binding constraint on polypharmacy questions is
+coverage --- which is actionable for anyone building a similar pipeline.
+That precision is possible only because all nine modes run on one controlled
+platform sharing a single retrieval backend, embedding model and generator, so the
+shortfall can be traced to the stage responsible instead of disappearing into an
+end-to-end number.
+Given how rarely unsuccessful configurations are reported at all, such localised
+negative findings are correspondingly scarce.
 
 The \textbf{open-source \medrag{} platform} --- a microservice system comprising
 14 services with configurable chunking strategies, embedding providers, and RAG modes,

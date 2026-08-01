@@ -94,7 +94,8 @@ On Natural Questions and TriviaQA, the RAG model outperformed parametric-only
 models of comparable size by 5--10 points of Exact Match, establishing retrieval
 augmentation as a reliable lever for factual accuracy.
 The core insight --- that non-parametric memory can substitute for parametric
-memorisation of facts --- has not been seriously challenged since.
+memorisation of facts --- appears to have remained largely unchallenged since,
+and underpins the architectures surveyed in the remainder of this chapter.
 
 % ------------------------------------------------------------
 \section{Retrieval Foundations}
@@ -503,6 +504,13 @@ for particular sub-tasks.
 Singh \etal~\cite{singh2025agenticrag} survey this emerging landscape, organising
 it by number of agents (single vs.\ multi-agent), control structure (sequential,
 hierarchical, collaborative), and autonomy level.
+A more recent systematisation by Mishra \etal~\cite{mishra2026sokagentic} formalises
+agentic RAG as a partially observable sequential decision process and classifies
+systems by planning mechanism, retrieval orchestration, memory paradigm and tool
+behaviour.
+Among the systemic risks they identify in autonomous retrieval loops is the
+propagation of hallucinated content between steps --- the failure mode that
+motivates the post-generation grounding check proposed in \cref{cha:rare_rag}.
 At the high end, systems such as A-RAG~\cite{du2026arag} expose three distinct
 retrieval interfaces --- keyword search, semantic search, and chunk read --- directly
 to the LLM as callable tools, allowing the model to compose retrieval strategies

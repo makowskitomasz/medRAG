@@ -371,6 +371,19 @@ The grounding verifier addresses this by treating the retrieved passages as the
 authoritative source of truth for the generated response and auditing each
 claim before delivery.
 
+The general shape of this mechanism --- decompose a response into individually
+checkable claims, then verify each one strictly against the retrieved context ---
+has since been developed independently and in considerably more depth by Yu
+\etal~\cite{yu2026retromorphic}, who separate the verdict into entailed,
+contradicted and baseless claims rather than the binary judgement used here, and
+report that commonly used benchmarks appear to underestimate how often
+hallucination actually occurs.
+That convergence is worth noting in both directions.
+It offers independent support for the design choice made here, and it also marks
+the limit of the version implemented in this thesis: the verifier described below
+uses a single supported\slash unsupported decision and a fixed threshold, which is
+the coarsest usable form of the idea.
+
 \subsection{Claim Extraction and Verification}
 
 The verifier operates in two steps.
@@ -544,5 +557,57 @@ downstream evidence-quality components that Adaptive-RAG does not address.
   \end{tabularx}
 \end{table}
 
-No architecture in the survey (\cref{cha:background}) combines all five
-dimensions simultaneously; their combination is the primary novelty of \rarerag{}.
+% ------------------------------------------------------------
+\subsection{Originality of the Proposed Approach}
+\label{sec:rarerag_originality}
+
+It is worth stating plainly what is and is not new here, because the distinction
+matters for how the results in \cref{cha:evaluation} should be read.
+
+The originality of \rarerag{} is \emph{architectural rather than algorithmic}.
+None of its four components is invented in this thesis, and none is claimed to be.
+Complexity-based routing is the central idea of
+Adaptive-RAG~\cite{jeong2024adaptiverag}; hybrid sparse--dense retrieval is
+standard practice and is available out of the box in the vector store used here;
+reasoning over a \emph{set} of passages rather than over independently scored ones
+is the premise of the diversity-aware reranking literature; and post-hoc
+verification of generated claims against retrieved evidence underlies both
+Self-RAG~\cite{asai2024selfrag} and Corrective RAG~\cite{yan2024crag}.
+Each mechanism, taken alone, is established.
+
+What is proposed is their composition into a single forward pass in which each
+stage addresses a failure mode that the adjacent stages leave open.
+Routing decides \emph{how much} retrieval a query deserves, but says nothing about
+whether the retrieved passages are collectively sufficient.
+Set-wise selection addresses collective sufficiency, but cannot tell whether the
+generator actually used the evidence it was given.
+The grounding verifier closes that last gap, and abstention converts its verdict
+into a behaviour rather than a diagnostic.
+The resulting pipeline is therefore not a longer chain of independently useful
+tricks but a sequence in which the output of each stage is the input the next one
+needs in order to be meaningful at all.
+That the five design dimensions of \cref{tab:arch_comparison} have not previously
+been combined is, on this reading, less a gap in the literature than a consequence
+of each prior architecture optimising a single point in the pipeline.
+
+A second, and in practice more consequential, aspect of the proposal is that the
+composition is \emph{decomposable under evaluation}.
+Because every component is toggleable and all nine modes run on an otherwise
+identical stack (\cref{cha:system_design}), a difference in outcome between two
+configurations is attributable to the component that differs rather than to
+incidental variation around it.
+This is what makes the partially negative result reported in
+\cref{cha:evaluation} interpretable: the evaluation does not merely establish that
+\rarerag{} fails to beat a vanilla baseline, it localises the cause to set-wise
+selection pruning evidence too aggressively on multi-drug questions, while the
+routing hypothesis that motivated the architecture is independently supported.
+An architecture that could only be measured end to end would have yielded a single
+disappointing number and no mechanism.
+
+In summary, the originality of the proposed approach consists of three things:
+the first architecture, to the best of our knowledge, to combine complexity
+routing, hybrid retrieval, set-wise evidence selection, grounding verification and
+abstention in one pipeline; a formulation of that pipeline as a chain of
+complementary failure modes rather than an accumulation of enhancements; and an
+implementation on a shared, component-toggleable platform that makes the
+contribution of each stage separately measurable.

@@ -14,6 +14,18 @@ pipelines (\cref{sec:query_pipeline,sec:ingestion_pipeline}), the data model
 Implementation details are deferred to \cref{cha:implementation};
 the evaluation methodology is described in \cref{cha:evaluation}.
 
+Three levels of description are kept deliberately separate across
+\crefrange{cha:rare_rag}{cha:implementation}, and it is worth naming them once.
+\cref{cha:rare_rag} states the \emph{conceptual} proposal: what \rarerag{} does and
+why, independently of any particular system.
+The present chapter specifies the \emph{architecture} that realises it: how
+responsibilities are divided between services, what contracts hold between them,
+and how data and control flow through the two runtime pipelines --- all of which
+would survive a change of programming language or vendor.
+\cref{cha:implementation} then covers \emph{implementation}: the concrete
+technologies, libraries and engineering trade-offs chosen to build that
+architecture, which would not survive such a change.
+
 % ------------------------------------------------------------
 \section{Design Principles}
 \label{sec:design_principles}

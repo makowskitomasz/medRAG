@@ -142,6 +142,11 @@ The thesis makes four contributions:
     questions, and \rarerag{} does not beat a vanilla baseline on either benchmark.
     The negative result is reported together with the mechanism that produced it,
     which is a more solid contribution than an unqualified claim of superiority.
+    Its value rests on the localisation rather than on the honesty: because the
+    modes differ only in the pipeline under test, the shortfall is attributable to
+    a named component and an identified design error --- and
+    that is a reusable finding for anyone assembling a comparable pipeline, in a
+    literature where unsuccessful configurations are rarely reported at all.
 
   \item \textbf{Open-source medical RAG platform.}
     \medrag{}: a fully containerised, microservice-based system comprising
@@ -289,3 +294,44 @@ The evaluation service is already instrumented for production-mode metric
 collection (faithfulness and citation precision without gold answers), which
 provides a foundation for ongoing quality monitoring and drift detection
 without requiring labelled data.
+
+% ------------------------------------------------------------
+\section{Closing Remarks}
+\label{sec:closing_remarks}
+
+Two threads run through this work, and they point in different directions.
+The engineering thread ends in a qualified result: a complete, reproducible
+platform, and a benchmark with significance testing behind every claim, but no
+architecture that can be recommended over a plain retrieve-then-generate pass on
+the strength of these experiments alone.
+The scientific thread ends somewhere more interesting.
+The finding that the value of architectural complexity depends on how hard the
+questions are --- and that what complexity buys is traceability rather than
+accuracy --- suggests that the question ``which RAG architecture is best?'' may be
+badly posed, and that ``which architecture for which query?'' is the one worth
+asking.
+That reframing is what motivates routing, and it is why the routing premise is the
+part of \rarerag{} this thesis would defend most confidently.
+
+It is also worth noting a reading of \rarerag{} that this thesis has kept
+deliberately in the background.
+Described in the vocabulary of RAG engineering, the architecture is a pipeline of
+four components.
+Described more generally, it is an adaptive reasoning procedure over an external
+knowledge source: it assesses what a question demands before committing resources,
+assembles a body of evidence judged for collective sufficiency rather than
+item-wise relevance, checks its own conclusions against that evidence, and declines
+to answer when the check fails.
+Those are the concerns of knowledge representation, explainable AI, and intelligent
+decision support rather than of retrieval engineering specifically, and the
+citation mechanism that makes every claim traceable to a passage is what connects
+the two readings.
+Developing that interpretation properly is beyond the scope of this thesis, but it
+appears to be the natural direction in which the present work extends.
+
+Beyond the specific medical application, the architecture presented here suggests
+that adaptive retrieval pipelines --- ones that select their own depth of reasoning
+per query, and that treat abstention as a legitimate output rather than a failure
+--- may constitute a promising direction for trustworthy LLM-based advisory systems
+in other high-risk domains, wherever an answer must be defensible to a human expert
+before it can be acted upon.

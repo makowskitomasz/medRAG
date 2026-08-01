@@ -1020,6 +1020,24 @@ The claim this chapter defends is about how the benefit of complexity scales wit
 task difficulty for a given generator, not about an absolute ranking of
 architectures.
 
+\emph{The faithfulness metric is itself a model judgement.}
+Faithfulness carries most of the weight in this chapter's conclusions, and it is
+computed by an LLM judge rather than measured directly.
+Chen \etal~\cite{chen2026rethinkeval} argue that benchmarks for exactly this kind
+of grounded hallucination detection are currently the weakest part of the
+evaluation stack --- long-context grounded samples are scarce, and label noise is
+rarely modelled --- which suggests that absolute faithfulness values across
+studies are not straightforwardly comparable.
+The paired design (\cref{subsec:stat_method}) is what makes the results here
+robust to that concern, and it is worth being precise about how far the protection
+extends.
+It absorbs any bias the judge applies uniformly to both conditions.
+It does not absorb a bias that depends on the property under test --- a judge that
+systematically rewards hedged phrasing, for instance --- and the shift towards
+cautious language observed in the self-reflection modes
+(\cref{subsec:faithfulness_orthogonality}) is precisely a case where that
+possibility cannot be excluded.
+
 % ------------------------------------------------------------
 \section{Drug Interaction Advisory Demonstration}
 \label{sec:ddi_demo}

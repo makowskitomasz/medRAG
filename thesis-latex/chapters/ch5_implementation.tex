@@ -4,8 +4,10 @@
 \chapter{Implementation}
 \label{cha:implementation}
 
-This chapter describes the concrete engineering decisions made while building
-the \medrag{} prototype.  Rather than walking through the code exhaustively,
+This chapter discusses implementation decisions rather than architectural
+concepts.  The service decomposition, the contracts between services, and the two
+runtime pipelines are specified in \cref{cha:system_design}; what follows is how
+that design was actually built.  Rather than walking through the code exhaustively,
 the focus is on the non-trivial choices --- ones that required a genuine trade-off
 or that differ from a textbook solution.  Six topics are covered: the technology
 stack and its rationale~(\cref{sec:tech_stack}), the provider abstraction for
