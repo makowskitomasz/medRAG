@@ -1,10 +1,12 @@
 "use client";
 import { Clock, Coins } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { AnswerMetrics as Metrics } from "@/lib/api";
 
 interface Props {
-  metrics?: Metrics | null;
+  /** Wall time measured by the client, from send to the last streamed token. */
+  elapsedMs?: number;
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 function formatTokens(n: number): string {
@@ -12,39 +14,31 @@ function formatTokens(n: number): string {
 }
 
 /**
- * Cost and speed of the answer, from the `eval` service. Quality scores
- * (faithfulness, relevance, citation precision) are deliberately not shown here —
- * they belong in the benchmark results, not next to a single answer.
+ * Cost and speed of the answer. Both values are known the moment the stream ends
+ * — the client times the request itself and generation reports usage on its final
+ * event — so nothing here waits on the asynchronous evaluation pipeline.
+ *
+ * Quality scores (faithfulness, relevance, citation precision) are deliberately
+ * absent: they belong in the benchmark results, not beside a single answer.
  */
-export default function AnswerMetrics({ metrics }: Props) {
+export default function AnswerMetrics({ elapsedMs, inputTokens, outputTokens }: Props) {
   const t = useTranslations("chat");
-  if (!metrics) return null;
 
-  const latency = typeof metrics.latency_ms === "number" ? metrics.latency_ms : null;
-  const inTok = typeof metrics.input_tokens === "number" ? metrics.input_tokens : null;
-  const outTok = typeof metrics.output_tokens === "number" ? metrics.output_tokens : null;
-  const total = typeof metrics.token_count === "number"
-    ? metrics.token_count
-    : (inTok ?? 0) + (outTok ?? 0);
-
-  if (latency == null && !total) return null;
+  const total = (inputTokens ?? 0) + (outputTokens ?? 0);
+  if (elapsedMs == null && !total) return null;
 
   return (
     <div className="ans-metrics">
-      {latency != null && (
-        <span className="ans-metric" title={t("metric_latency_ms")}>
+      {elapsedMs != null && (
+        <span className="ans-metric" title={t("elapsedLabel")}>
           <Clock size={11} aria-hidden="true" />
-          <span className="ans-metric-v">{(latency / 1000).toFixed(1)}s</span>
+          <span className="ans-metric-v">{(elapsedMs / 1000).toFixed(1)}s</span>
         </span>
       )}
       {total > 0 && (
         <span
           className="ans-metric"
-          title={
-            inTok != null && outTok != null
-              ? t("tokensBreakdown", { in: inTok, out: outTok })
-              : t("metric_tokens")
-          }
+          title={t("tokensBreakdown", { in: inputTokens ?? 0, out: outputTokens ?? 0 })}
         >
           <Coins size={11} aria-hidden="true" />
           <span className="ans-metric-v">{formatTokens(total)}</span>

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   Activity, Shield, RefreshCw, X,
@@ -21,8 +21,8 @@ import { useChatStream, ChatMessage, Phase } from "@/hooks/useChatStream";
 import { useUIStore } from "@/store";
 import { useProjects, useProjectDocCounts } from "@/hooks/useProjects";
 import { useTranslations, useLocale } from "next-intl";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { conversations, evaluation, AnswerMetrics as Metrics } from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { conversations } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 
 const MODE_ICONS: Record<string, React.ComponentType<{ size: number }>> = {
@@ -121,39 +121,6 @@ export default function ChatPage() {
   const convTitle = convTitleOverride ?? firstQuestion;
 
   const conversationId = activeConversationId ?? (id !== "session" ? id : null);
-
-  const answerCount = messages.filter((m) => m.role === "ai" && !m.error).length;
-
-  // Per-answer evaluation, paired with assistant messages in order.
-  //
-  // The eval service scores asynchronously behind LLM-judge calls, so a row lands
-  // roughly half a minute after the stream ends. Ask again until every answer has
-  // one — a single fetch at "done" always came back empty. `idle` is included
-  // because a conversation restored from history never reaches the `done` phase.
-  const { data: evalData } = useQuery({
-    queryKey: ["eval", conversationId],
-    queryFn: () => evaluation.byConversation(conversationId!),
-    enabled: !!conversationId && !isGenerating && answerCount > 0,
-    staleTime: 10_000,
-    retry: false,
-    refetchInterval: (q) => {
-      const rows = q.state.data?.items.length ?? 0;
-      if (rows >= answerCount) return false;
-      // Give up after a couple of minutes rather than polling a stuck queue forever.
-      return q.state.dataUpdateCount < 25 ? 5_000 : false;
-    },
-  });
-
-  // Keyed by question rather than by position: conversations from before streamed
-  // queries were evaluated have fewer rows than answers, and index pairing would
-  // then attach the wrong metrics to every answer after the gap.
-  const metricsByQuestion = useMemo(() => {
-    const map: Record<string, Metrics> = {};
-    for (const r of evalData?.items ?? []) {
-      if (r.question) map[r.question.trim()] = r.metrics; // latest run wins
-    }
-    return map;
-  }, [evalData]);
 
   // load conversation history when navigating to an existing chat
   const fetchConversation = useCallback((convId: string, limit: number) => {
@@ -363,7 +330,6 @@ export default function ChatPage() {
                           toggleCite={toggleCite}
                           citationLayout={citationLayout}
                           isLast={msg.id === messages.findLast((m) => m.role === "ai")?.id}
-                          metrics={metricsByQuestion[(messages[i - 1]?.text ?? "").trim()]}
                           onRegenerate={handleRegenerate}
                           onRetry={() => handleRetry(messages[i - 1]?.text ?? "")}
                           canAct={!isReadOnly && !composerDisabled}
@@ -483,7 +449,6 @@ interface AiMsgProps {
   toggleCite: (id: string) => void;
   citationLayout: string;
   isLast: boolean;
-  metrics?: Metrics;
   onRegenerate: () => void;
   onRetry: () => void;
   canAct: boolean;
@@ -492,7 +457,7 @@ interface AiMsgProps {
 function AiMessage({
   msg, phase, thinkOpen, setThinkOpen,
   focusedCiteId, toggleCite, citationLayout, isLast,
-  metrics, onRegenerate, onRetry, canAct,
+  onRegenerate, onRetry, canAct,
 }: AiMsgProps) {
   const t = useTranslations("chat");
   const [copied, setCopied] = useState(false);
@@ -610,7 +575,7 @@ function AiMessage({
         {/* Actions */}
         {msgPhase === "done" && !msg.error && (
           <>
-            <AnswerMetrics metrics={metrics} />
+            <AnswerMetrics elapsedMs={msg.elapsedMs} inputTokens={msg.inputTokens} outputTokens={msg.outputTokens} />
             <div className="msg-actions fade-up">
               <span className="msg-cost">{t("chunksUsed", { n: citations.length })}</span>
               {displayText && (

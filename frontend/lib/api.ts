@@ -324,6 +324,8 @@ export interface StreamEvent {
   citations?: Citation[];
   conversation_id?: string;
   rag_mode?: string;
+  input_tokens?: number;
+  output_tokens?: number;
   // search (mock: progress+docs, backend: status+files/filenames)
   progress?: number;
   docs?: ScannedDoc[];
@@ -476,25 +478,3 @@ export const conversations = {
     request<void>(`/chat/conversations/${id}`, { method: "DELETE" }),
 };
 
-/* ---- Evaluation metrics ---- */
-export interface AnswerMetrics {
-  faithfulness?: number | null;
-  answer_relevance?: number | null;
-  token_f1?: number | null;
-  citation_precision?: number | null;
-  latency_ms?: number | null;
-  [key: string]: number | null | undefined;
-}
-
-export interface EvalResult {
-  id: string;
-  rag_mode: string;
-  question: string;
-  metrics: AnswerMetrics;
-  timestamp: string;
-}
-
-export const evaluation = {
-  byConversation: (conversationId: string) =>
-    request<{ items: EvalResult[] }>(`/eval/results/by-conversation/${conversationId}`),
-};

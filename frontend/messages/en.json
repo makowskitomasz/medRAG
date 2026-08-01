@@ -129,7 +129,6 @@
     "copied": "Copied",
     "copyAnswer": "Copy answer",
     "retryQuestion": "Try again",
-    "metric_latency_ms": "Latency",
     "elapsedLabel": "Elapsed",
     "selectProjectFirst": "Select a project in the sidebar first.",
     "loadEarlier": "Load earlier messages",

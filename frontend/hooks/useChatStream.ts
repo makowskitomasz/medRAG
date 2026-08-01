@@ -38,6 +38,9 @@ export interface ChatMessage {
   timing?: { totalMs: number; searchMs: number; thinkMs: number; streamMs: number };
   /** Wall time from send to the last streamed token. */
   elapsedMs?: number;
+  /** LLM token usage reported on the final stream event. */
+  inputTokens?: number;
+  outputTokens?: number;
   usedChunkIds?: string[];
 }
 
@@ -249,7 +252,13 @@ export function useChatStream(): UseChatStreamReturn {
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === aiMsgId
-                  ? { ...m, ragMode: ev.rag_mode ?? m.ragMode, conversationId: ev.conversation_id }
+                  ? {
+                      ...m,
+                      ragMode: ev.rag_mode ?? m.ragMode,
+                      conversationId: ev.conversation_id,
+                      inputTokens: ev.input_tokens,
+                      outputTokens: ev.output_tokens,
+                    }
                   : m
               )
             );
