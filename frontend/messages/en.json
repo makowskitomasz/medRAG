@@ -132,12 +132,6 @@
     "copied": "Copied",
     "copyAnswer": "Copy answer",
     "retryQuestion": "Try again",
-    "metricsTitle": "Answer quality",
-    "metricsPending": "Scoring…",
-    "metric_faithfulness": "Faithfulness",
-    "metric_answer_relevance": "Relevance",
-    "metric_citation_precision": "Citation precision",
-    "metric_token_f1": "Token F1",
     "metric_latency_ms": "Latency",
     "elapsedLabel": "Elapsed",
     "selectProjectFirst": "Select a project in the sidebar first.",
@@ -146,7 +140,9 @@
     "srAnswerStream": "Assistant answer",
     "compareLink": "Compare modes",
     "renameTitle": "Rename conversation",
-    "titlePlaceholder": "Conversation name"
+    "titlePlaceholder": "Conversation name",
+    "metric_tokens": "tokens",
+    "tokensBreakdown": "{in} in / {out} out"
   },
   "modes": {
     "vanilla": "Vanilla",

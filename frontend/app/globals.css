@@ -1410,15 +1410,10 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 .ans-table th { background: var(--bg-subtle); font-weight: 600; }
 
-/* ---- Answer metrics ---- */
+/* ---- Answer metrics (latency + token usage only) ---- */
 .ans-metrics {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   margin-top: 12px;
-}
-.ans-metrics-h {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--text-muted);
 }
 .ans-metric {
   display: inline-flex; align-items: center; gap: 5px;
@@ -1427,12 +1422,10 @@ input[type="number"]::-webkit-outer-spin-button {
   border: 1px solid var(--border);
   background: var(--bg-subtle);
   font-size: 11.5px;
+  color: var(--text-muted);
 }
 .ans-metric-k { color: var(--text-muted); }
 .ans-metric-v { font-family: var(--font-mono); font-weight: 600; color: var(--text); }
-.ans-metric.metric-good { border-color: color-mix(in oklch, var(--c-accent-mint) 55%, transparent); }
-.ans-metric.metric-mid  { border-color: color-mix(in oklch, #FCD34D 55%, transparent); }
-.ans-metric.metric-low  { border-color: color-mix(in oklch, #FCA5A5 60%, transparent); }
 
 /* ---- Message actions & errors ---- */
 .msg-action {

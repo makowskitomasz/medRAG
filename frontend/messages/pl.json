@@ -132,12 +132,6 @@
     "copied": "Skopiowano",
     "copyAnswer": "Kopiuj odpowiedź",
     "retryQuestion": "Spróbuj ponownie",
-    "metricsTitle": "Jakość odpowiedzi",
-    "metricsPending": "Liczenie…",
-    "metric_faithfulness": "Wierność źródłom",
-    "metric_answer_relevance": "Trafność",
-    "metric_citation_precision": "Precyzja cytowań",
-    "metric_token_f1": "Token F1",
     "metric_latency_ms": "Czas",
     "elapsedLabel": "Czas",
     "selectProjectFirst": "Najpierw wybierz projekt w panelu bocznym.",
@@ -146,7 +140,9 @@
     "srAnswerStream": "Odpowiedź asystenta",
     "compareLink": "Porównaj tryby",
     "renameTitle": "Zmień nazwę rozmowy",
-    "titlePlaceholder": "Nazwa rozmowy"
+    "titlePlaceholder": "Nazwa rozmowy",
+    "metric_tokens": "tokenów",
+    "tokensBreakdown": "{in} wej. / {out} wyj."
   },
   "modes": {
     "vanilla": "Vanilla",
