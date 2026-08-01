@@ -1355,6 +1355,16 @@ input[type="number"]::-webkit-outer-spin-button {
 /* Only suppress the ring for pointer users, never for keyboard ones. */
 :focus:not(:focus-visible) { outline: none; }
 
+/* Fields whose wrapper already signals focus via :focus-within would otherwise
+   draw a second ring inside the first. The wrapper is the visible affordance. */
+.chat-composer .chat-input:focus-visible,
+.login-input input:focus-visible,
+.chat-sb-search input:focus-visible,
+.hist-search input:focus-visible,
+.adm-docs-search input:focus-visible {
+  outline: none;
+}
+
 .skip-link {
   position: absolute;
   left: -9999px;
