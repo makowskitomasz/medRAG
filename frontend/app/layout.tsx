@@ -69,6 +69,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${inter.variable} ${mono.variable} ${poppins.variable} ${plex.variable}`}
       style={{ fontFamily: "var(--font)" }}
     >
+      <head>
+        {/* This layout is a client component, so `export const metadata` is not
+            available — the tab would otherwise show Next.js's default title. */}
+        <title>medRAG — Drug interaction advisor</title>
+        <meta name="description" content="Retrieval-augmented advisory demonstrator for drug interactions." />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </head>
       <body style={{ margin: 0, padding: 0, height: "100%" }}>
         <QueryClientProvider client={queryClient}>
           <IntlWrapper>

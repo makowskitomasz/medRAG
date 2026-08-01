@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { ChevronDown, Quote, FileText, Copy, Info } from "lucide-react";
+import { ChevronDown, Quote, FileText, Copy, Check, Info } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Citation } from "@/lib/api";
 
@@ -69,7 +69,7 @@ export function CitationsCards({ citations, revealed, focused, onFocus }: CardsP
 
   return (
     <div className={`cite-cards-wrap${expanded ? " cite-cards-open" : " cite-cards-collapsed"}`}>
-      <button type="button" className="cite-cards-head cite-cards-head-btn" onClick={() => setExpanded(!expanded)}>
+      <button type="button" className="cite-cards-head cite-cards-head-btn" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
         <div className="cite-cards-t">
           <Quote size={15} />
           <span>{t("citedSources", { n: Math.min(revealed, citations.length) })}</span>
@@ -116,7 +116,7 @@ export function CitationsSidebar({ citations, revealed, focused, onFocus, isLoad
 
   return (
     <div className={`cite-sidebar${expanded ? " cite-sidebar-open" : " cite-sidebar-collapsed"}`}>
-      <button type="button" className="cite-side-head cite-side-head-btn" onClick={() => setExpanded(!expanded)}>
+      <button type="button" className="cite-side-head cite-side-head-btn" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
         <div>
           <div className="cite-side-t">{t("sidebarSources")}</div>
           <div className="cite-side-s">
@@ -165,17 +165,30 @@ interface InlineProps {
   revealed: number;
   focused: string | null;
   onFocus: (id: string) => void;
+  /** Opens the cited document in the admin document list, when the caller can. */
+  onOpenDocument?: (c: Citation) => void;
 }
 
-export function CitationsInline({ citations, revealed, focused, onFocus }: InlineProps) {
+export function CitationsInline({ citations, revealed, focused, onFocus, onOpenDocument }: InlineProps) {
   const t = useTranslations("chat");
   const [expanded, setExpanded] = useState(true);
   const [openOne, setOpenOne] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // These two buttons rendered with no handler at all before.
+  const copySnippet = (c: Citation) => {
+    const text = c.filename ? `"${c.snippet}" — ${c.filename}` : c.snippet;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(c.chunk_id);
+      setTimeout(() => setCopiedId(null), 1500);
+    }).catch(() => {});
+  };
+
   if (!citations.length) return null;
 
   return (
     <div className={`cite-inline${expanded ? " cite-inline-wrap-open" : " cite-inline-wrap-collapsed"}`} style={{ marginTop: 18 }}>
-      <button type="button" className="cite-inline-head cite-inline-head-btn" onClick={() => setExpanded(!expanded)}>
+      <button type="button" className="cite-inline-head cite-inline-head-btn" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
         <Quote size={14} />
         <span>{t("footnotesTitle", { n: Math.min(revealed, citations.length) })}</span>
         <ChevronDown size={14} className="cite-inline-head-chev" />
@@ -184,7 +197,11 @@ export function CitationsInline({ citations, revealed, focused, onFocus }: Inlin
         const open = openOne === c.chunk_id;
         return (
           <div key={c.chunk_id} className={`cite-inline-row${open ? " cite-inline-open" : ""}`}>
-            <button className="cite-inline-summary" onClick={() => setOpenOne(open ? null : c.chunk_id)}>
+            <button
+              className={`cite-inline-summary${focused === c.chunk_id ? " cite-inline-focus" : ""}`}
+              onClick={() => { setOpenOne(open ? null : c.chunk_id); onFocus(c.chunk_id); }}
+              aria-expanded={open}
+            >
               <span className="cite-num cite-num-sm">{c.n ?? i + 1}</span>
               <div className="cite-inline-meta">
                 <div className="cite-inline-doc">{c.filename ?? t("fragmentFallback", { n: i + 1 })}</div>
@@ -199,8 +216,21 @@ export function CitationsInline({ citations, revealed, focused, onFocus }: Inlin
               <div className="cite-inline-body fade-up">
                 <p>"{c.snippet}"</p>
                 <div className="cite-inline-actions">
-                  <button className="btn-ghost cite-inline-act"><FileText size={12} /> {t("openDocument")}</button>
-                  <button className="btn-ghost cite-inline-act"><Copy size={12} /> {t("copySnippet")}</button>
+                  {c.filename && (
+                    <button
+                      className="btn-ghost cite-inline-act"
+                      onClick={() => onOpenDocument?.(c)}
+                    >
+                      <FileText size={12} /> {t("openDocument")}
+                    </button>
+                  )}
+                  <button
+                    className="btn-ghost cite-inline-act"
+                    onClick={() => copySnippet(c)}
+                  >
+                    {copiedId === c.chunk_id ? <Check size={12} /> : <Copy size={12} />}
+                    {copiedId === c.chunk_id ? t("copied") : t("copySnippet")}
+                  </button>
                 </div>
               </div>
             )}

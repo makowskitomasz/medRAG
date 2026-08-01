@@ -44,6 +44,8 @@ class Conversation(BaseModel):
     id: str = Field(default_factory=lambda: str(ObjectId()), alias="_id")
     project_id: str
     user_id: str | None = None
+    #: User-supplied name; when unset the UI falls back to the first user message.
+    title: str | None = None
     messages: list[ConversationMessage] = Field(default_factory=list)
     rag_mode: str = "vanilla"
     created_at: datetime = Field(default_factory=datetime.utcnow)

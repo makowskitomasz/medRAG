@@ -164,6 +164,11 @@ class RareRagPipeline(RagPipeline):
     ) -> AsyncGenerator[str, None]:
         import time as _time
 
+        # RARE delegates retrieval to a sub-pipeline run non-streaming, so the UI
+        # would otherwise sit on an empty spinner for the whole triage + grounding
+        # phase with no indication that a search is even happening.
+        yield self._sse_search_start()
+
         yield self._sse_think(
             step=0,
             label="Triage",
@@ -200,6 +205,8 @@ class RareRagPipeline(RagPipeline):
             rerank_top_n,
         )
         grounded = score >= _GROUNDING_THRESHOLD
+        # The sub-pipeline has retrieved by now; surface which documents it touched.
+        yield self._sse_search_done(self._last_chunks or [])
         yield self._sse_think(
             step=1,
             label="Grounding check",

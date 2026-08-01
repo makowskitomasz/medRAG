@@ -1,8 +1,14 @@
 "use client";
 import { useState, useRef, useCallback } from "react";
 import { streamQuery, Citation, ScannedDoc, ConversationMessage } from "@/lib/api";
+import { highestCitedIndex } from "@/lib/citations";
 
 export type Phase = "idle" | "searching" | "thinking" | "streaming" | "done";
+
+/** Mongo stores naive UTC, so an unsuffixed timestamp must not be read as local time. */
+function parseUtc(iso: string): number {
+  return Date.parse(/([zZ]|[+-]\d{2}:?\d{2})$/.test(iso) ? iso : iso + "Z");
+}
 
 export interface ThinkStep {
   step: number;
@@ -16,6 +22,9 @@ export interface ChatMessage {
   id: string;
   role: "user" | "ai";
   text: string;
+  /** Captured once when the message is created — rendering `new Date()` made the
+   *  displayed time jump on every token. */
+  createdAt?: number;
   citations?: Citation[];
   conversationId?: string;
   ragMode?: string;
@@ -37,16 +46,34 @@ interface UseChatStreamReturn {
   phase: Phase;
   isGenerating: boolean;
   activeConversationId: string | null;
-  send: (text: string, projectId: string, ragMode?: string) => Promise<void>;
+  send: (
+    text: string,
+    projectId: string,
+    ragMode?: string,
+    replaceLastExchange?: boolean
+  ) => Promise<void>;
+  /** Re-run the most recent question, replacing its answer. */
+  regenerate: (projectId: string, ragMode?: string) => Promise<void>;
+  /** Text of the last question — used to restore the composer after a failure. */
+  lastQuery: string | null;
   stop: () => void;
   reset: () => void;
-  loadHistory: (convId: string, ragMode: string, msgs: ConversationMessage[]) => void;
+  loadHistory: (
+    convId: string,
+    ragMode: string,
+    msgs: ConversationMessage[],
+    meta?: { totalMessages?: number }
+  ) => void;
+  /** Total messages stored server-side; larger than `messages` when windowed. */
+  totalMessages: number;
 }
 
 export function useChatStream(): UseChatStreamReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [phase, setPhase] = useState<Phase>("idle");
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [totalMessages, setTotalMessages] = useState(0);
+  const [lastQuery, setLastQuery] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const aiMsgIdRef = useRef<string>("");
 
@@ -62,17 +89,27 @@ export function useChatStream(): UseChatStreamReturn {
     setMessages([]);
     setPhase("idle");
     setActiveConversationId(null);
+    setTotalMessages(0);
+    setLastQuery(null);
   }, []);
 
-  const loadHistory = useCallback((convId: string, ragMode: string, msgs: ConversationMessage[]) => {
+  const loadHistory = useCallback((
+    convId: string,
+    ragMode: string,
+    msgs: ConversationMessage[],
+    meta?: { totalMessages?: number }
+  ) => {
     abortRef.current?.abort();
     setActiveConversationId(convId);
     setPhase("idle");
+    setTotalMessages(meta?.totalMessages ?? msgs.length);
+    setLastQuery([...msgs].reverse().find((m) => m.role === "user")?.content ?? null);
     setMessages(
       msgs.map((m, i) => ({
         id: `hist-${i}`,
         role: m.role === "user" ? "user" : "ai",
         text: m.content,
+        createdAt: m.timestamp ? parseUtc(m.timestamp) : undefined,
         ragMode: m.role !== "user" ? ragMode : undefined,
         phase: "done" as Phase,
         citations: m.citations ?? [],
@@ -81,7 +118,13 @@ export function useChatStream(): UseChatStreamReturn {
     );
   }, []);
 
-  const send = useCallback(async (text: string, projectId: string, ragMode?: string) => {
+  const send = useCallback(async (
+    text: string,
+    projectId: string,
+    ragMode?: string,
+    /** Drop the previous question/answer pair first — used by regenerate. */
+    replaceLastExchange = false,
+  ) => {
     if (!text.trim() || !projectId) return;
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -90,14 +133,15 @@ export function useChatStream(): UseChatStreamReturn {
     const userMsgId = `u-${Date.now()}`;
     const aiMsgId = `a-${Date.now()}`;
     aiMsgIdRef.current = aiMsgId;
+    setLastQuery(text);
 
-    setMessages((prev) => [
-      ...prev,
-      { id: userMsgId, role: "user", text },
+    const pending: ChatMessage[] = [
+      { id: userMsgId, role: "user", text, createdAt: Date.now() },
       {
         id: aiMsgId,
         role: "ai",
         text: "",
+        createdAt: Date.now(),
         ragMode: ragMode,
         phase: "searching",
         streamedText: "",
@@ -107,7 +151,15 @@ export function useChatStream(): UseChatStreamReturn {
         searchDocs: [],
         searchProgress: 0,
       },
-    ]);
+    ];
+    setMessages((prev) => {
+      if (!replaceLastExchange) return [...prev, ...pending];
+      // Walk back past the trailing assistant reply and its question.
+      const cut = [...prev];
+      if (cut.at(-1)?.role === "ai") cut.pop();
+      if (cut.at(-1)?.role === "user") cut.pop();
+      return [...cut, ...pending];
+    });
     setPhase("searching");
 
     const pendingCitations: Citation[] = [];
@@ -223,14 +275,13 @@ export function useChatStream(): UseChatStreamReturn {
               prev.map((m) => {
                 if (m.id !== aiMsgId) return m;
                 const newText = (m.streamedText ?? "") + token;
-                let revealed = m.citationsRevealed ?? 0;
-                // The model cites as [SOURCE_n] / 【SOURCE_n】; MessageAnswer rewrites
-                // those to [n] for display, so match every form here. Scan the whole
-                // text, not just this token — a marker can straddle two chunks.
-                for (const r of newText.matchAll(/[[【]\s*(?:SOURCE_)?(\d+)[^\]】]*[\]】]/g)) {
-                  const n = parseInt(r[1], 10);
-                  if (n > revealed) revealed = n;
-                }
+                // Scan the whole text, not just this token — a marker can straddle
+                // two chunks. Marker variants live in lib/citations so the reveal
+                // logic and the renderer can never drift apart.
+                const revealed = Math.max(
+                  m.citationsRevealed ?? 0,
+                  highestCitedIndex(newText)
+                );
                 return {
                   ...m,
                   streamedText: newText,
@@ -300,5 +351,23 @@ export function useChatStream(): UseChatStreamReturn {
     }
   }, [activeConversationId]);
 
-  return { messages, phase, isGenerating, activeConversationId, send, stop, reset, loadHistory };
+  const regenerate = useCallback(async (projectId: string, ragMode?: string) => {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (!lastUser) return;
+    await send(lastUser.text, projectId, ragMode, true);
+  }, [messages, send]);
+
+  return {
+    messages,
+    phase,
+    isGenerating,
+    activeConversationId,
+    send,
+    regenerate,
+    lastQuery,
+    stop,
+    reset,
+    loadHistory,
+    totalMessages,
+  };
 }

@@ -1,25 +1,28 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
-  Activity, Shield, RefreshCw,
-  ChevronDown, ArrowUp, Square,
+  Activity, Shield, RefreshCw, X,
+  ArrowUp, Square, Copy, Check, RotateCw, AlertTriangle as AlertIcon,
   Zap, Brain, Sparkles, Users, ShieldCheck, GitMerge, AlertTriangle, Shuffle, MessageSquare,
+  FileWarning, ChevronUp,
 } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import TopBar from "@/components/layout/TopBar";
+import SettingsDrawer from "@/components/layout/SettingsDrawer";
 import SearchingState from "@/components/chat/SearchingState";
 import ThinkPanel from "@/components/chat/ThinkPanel";
 import MultiAgentPanel from "@/components/chat/MultiAgentPanel";
 import MessageAnswer from "@/components/chat/MessageAnswer";
 import ModeSelector from "@/components/chat/ModeSelector";
+import AnswerMetrics from "@/components/chat/AnswerMetrics";
 import { CitationsCards, CitationsSidebar, CitationsInline } from "@/components/chat/Citations";
-import { useChatStream, ChatMessage, Phase, ThinkStep } from "@/hooks/useChatStream";
+import { useChatStream, ChatMessage, Phase } from "@/hooks/useChatStream";
 import { useUIStore } from "@/store";
-import { useProjects } from "@/hooks/useProjects";
-import { useTranslations } from "next-intl";
-import { useQueryClient } from "@tanstack/react-query";
-import { conversations } from "@/lib/api";
+import { useProjects, useProjectDocCounts } from "@/hooks/useProjects";
+import { useTranslations, useLocale } from "next-intl";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { conversations, evaluation, AnswerMetrics as Metrics } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 
 const MODE_ICONS: Record<string, React.ComponentType<{ size: number }>> = {
@@ -46,13 +49,9 @@ const MODE_LABELS: Record<string, string> = {
   rare_rag: "RARE",
 };
 
-const FOLLOW_UPS = [
-  "Jakie są skutki uboczne?",
-  "Ile razy dziennie przyjmować?",
-  "Czy można łączyć z alkoholem?",
-];
-
 const DISCLAIMER_KEY = "medrag_disclaimer_hidden";
+/** How many of the newest messages a long conversation opens with. */
+const INITIAL_MESSAGE_WINDOW = 20;
 
 function useDisclaimer() {
   const [visible, setVisible] = useState(true);
@@ -74,11 +73,22 @@ export default function ChatPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const t = useTranslations("chat");
-  const { citationLayout, activeProjectId, ragMode } = useUIStore();
+  const locale = useLocale();
+  // Subscribed individually — reading these off `getState()` meant the layout
+  // never re-rendered when the sidebar collapsed.
+  const citationLayout = useUIStore((s) => s.citationLayout);
+  const activeProjectId = useUIStore((s) => s.activeProjectId);
+  const ragMode = useUIStore((s) => s.ragMode);
+  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
+
   const { data: projectList = [], isLoading: projectsLoading } = useProjects();
+  const docCounts = useProjectDocCounts(projectList);
   const queryClient = useQueryClient();
-  const { messages, phase, isGenerating, send, stop, reset, loadHistory } = useChatStream();
-  const { visible: disclaimerVisible } = useDisclaimer();
+  const {
+    messages, phase, isGenerating, send, regenerate, stop, reset, loadHistory,
+    totalMessages, activeConversationId,
+  } = useChatStream();
+  const { visible: disclaimerVisible, hide: hideDisclaimer } = useDisclaimer();
 
   const [input, setInput] = useState("");
   const [focusedCiteId, setFocusedCiteId] = useState<string | null>(null);
@@ -88,27 +98,59 @@ export default function ChatPage() {
   const [thinkOpenIds, setThinkOpenIds] = useState<Record<string, boolean>>({});
   const [citesOpenIds, setCitesOpenIds] = useState<Record<string, boolean>>({});
   const [convOwnerId, setConvOwnerId] = useState<string | null>(null);
+  const [convTitleOverride, setConvTitleOverride] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [windowed, setWindowed] = useState(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const currentUser = getUser<{ id?: string; role?: string }>();
   const activeProject = projectList.find((p) => p.project_id === activeProjectId) ?? projectList[0];
+  const activeDocCount = activeProject ? docCounts[activeProject.project_id] : undefined;
+  const projectIsEmpty = activeDocCount === 0;
 
-  // true when viewing another user's conversation (admin read-only mode)
   const isReadOnly = convOwnerId !== null && convOwnerId !== currentUser?.id;
 
   const lastAi = messages.findLast((m) => m.role === "ai");
-  const convTitle = messages.find((m) => m.role === "user")?.text;
+  const firstQuestion = messages.find((m) => m.role === "user")?.text;
+  const convTitle = convTitleOverride ?? firstQuestion;
+
+  const conversationId = activeConversationId ?? (id !== "session" ? id : null);
+
+  // Per-answer evaluation, paired with assistant messages in order.
+  const { data: evalData } = useQuery({
+    queryKey: ["eval", conversationId],
+    queryFn: () => evaluation.byConversation(conversationId!),
+    enabled: !!conversationId && phase === "done",
+    staleTime: 15_000,
+    retry: false,
+  });
+
+  const metricsByAiIndex = useMemo(() => {
+    const map: Record<number, Metrics> = {};
+    (evalData?.items ?? []).forEach((r, i) => { map[i] = r.metrics; });
+    return map;
+  }, [evalData]);
 
   // load conversation history when navigating to an existing chat
+  const fetchConversation = useCallback((convId: string, limit: number) => {
+    conversations.get(convId, limit).then((conv) => {
+      setConvOwnerId(conv.user_id ?? null);
+      setConvTitleOverride(conv.title ?? null);
+      setWindowed(conv.total_messages > conv.messages.length);
+      loadHistory(conv.id, conv.rag_mode, conv.messages, {
+        totalMessages: conv.total_messages,
+      });
+    }).catch(() => {/* conversation not found, stay empty */});
+  }, [loadHistory]);
+
   useEffect(() => {
     if (!id || id === "session") return;
-    conversations.get(id).then((conv) => {
-      setConvOwnerId(conv.user_id ?? null);
-      loadHistory(conv.id, conv.rag_mode, conv.messages);
-    }).catch(() => {/* conversation not found, stay empty */});
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Long threads open on the tail; the rest is fetched only if asked for.
+    fetchConversation(id, INITIAL_MESSAGE_WINDOW);
+  }, [id, fetchConversation]);
 
   // auto-scroll
   useEffect(() => {
@@ -123,14 +165,30 @@ export default function ChatPage() {
     }
   }, [input]);
 
-  const handleSend = useCallback(async () => {
-    if (!input.trim() || isGenerating || projectsLoading) return;
-    if (!activeProject?.project_id) { alert("Please select a project in the sidebar."); return; }
-    const text = input;
+  const runQuery = useCallback(async (text: string) => {
+    if (!text.trim() || isGenerating || projectsLoading) return;
+    if (!activeProject?.project_id) return;
     setInput("");
-    await send(text, activeProject.project_id, ragMode);
-    queryClient.invalidateQueries({ queryKey: ["conversations", activeProject.project_id] });
-  }, [input, isGenerating, projectsLoading, activeProject, send, queryClient, ragMode]);
+    try {
+      await send(text, activeProject.project_id, ragMode);
+    } finally {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    }
+  }, [isGenerating, projectsLoading, activeProject, send, queryClient, ragMode]);
+
+  const handleSend = useCallback(() => runQuery(input), [runQuery, input]);
+
+  const handleRegenerate = useCallback(async () => {
+    if (!activeProject?.project_id || isGenerating) return;
+    await regenerate(activeProject.project_id, ragMode);
+    queryClient.invalidateQueries({ queryKey: ["conversations"] });
+  }, [activeProject, isGenerating, regenerate, ragMode, queryClient]);
+
+  /** Put a failed question back in the composer so it need not be retyped. */
+  const handleRetry = useCallback((question: string) => {
+    setInput(question);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -139,7 +197,6 @@ export default function ChatPage() {
     }
   };
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "n") {
@@ -152,15 +209,27 @@ export default function ChatPage() {
     return () => window.removeEventListener("keydown", handler);
   }, [reset, router]);
 
+  const composerDisabled = !activeProject?.project_id || projectsLoading;
+  const noProjects = !projectsLoading && projectList.length === 0;
+
   return (
-    <div className={`chat-root${useUIStore.getState().sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
+    <div className={`chat-root${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
       <Sidebar
-        onNewChat={() => { reset(); router.push("/chat/new"); }}
+        onNewChat={() => { reset(); setConvTitleOverride(null); router.push("/chat/new"); }}
         activeConvTitle={convTitle}
+        activeConvId={conversationId ?? undefined}
+        mobileOpen={mobileNavOpen}
+        onMobileClose={() => setMobileNavOpen(false)}
+        onSettingsOpen={() => setSettingsOpen(true)}
       />
 
       <main className="chat-main">
-        <TopBar project={activeProject} convTitle={convTitle} />
+        <TopBar
+          project={activeProject}
+          convTitle={convTitle}
+          onSettingsOpen={() => setSettingsOpen(true)}
+          onMenuOpen={() => setMobileNavOpen(true)}
+        />
 
         <div className={`chat-body${citationLayout === "sidebar" ? " cite-sidebar" : ""}`}>
           <div className="chat-thread-wrap">
@@ -170,19 +239,57 @@ export default function ChatPage() {
                 {/* Disclaimer */}
                 {disclaimerVisible && (
                   <div className="chat-disclaimer">
-                    <Shield size={14} />
+                    <Shield size={14} aria-hidden="true" />
                     <span>
                       {t("disclaimerPre")}{" "}
                       <strong>{t("disclaimerBold")}</strong>
                       {t("disclaimerPost")}
                     </span>
+                    <button
+                      className="icon-btn chat-disclaimer-x"
+                      onClick={hideDisclaimer}
+                      aria-label={t("disclaimerDismiss")}
+                      title={t("disclaimerDismiss")}
+                    >
+                      <X size={13} />
+                    </button>
                   </div>
+                )}
+
+                {/* Project has no indexed documents — every answer would be a refusal */}
+                {projectIsEmpty && !noProjects && (
+                  <div className="chat-empty-project">
+                    <FileWarning size={16} aria-hidden="true" />
+                    <div>
+                      <strong>{t("emptyProjectTitle")}</strong>
+                      <p>{t("emptyProjectDesc")}</p>
+                    </div>
+                    {currentUser?.role === "admin" && (
+                      <button className="btn-ghost" onClick={() => router.push("/admin")}>
+                        {t("emptyProjectAdminHint")}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Older messages exist beyond the initial window */}
+                {windowed && (
+                  <button
+                    className="chat-load-earlier"
+                    onClick={() => { setWindowed(false); fetchConversation(id, 0); }}
+                  >
+                    <ChevronUp size={13} aria-hidden="true" />
+                    {t("loadEarlier")}
+                    <span className="chat-load-earlier-sub">
+                      {t("showingLastN", { n: messages.length, total: totalMessages })}
+                    </span>
+                  </button>
                 )}
 
                 {/* Empty state */}
                 {messages.length === 0 && !projectsLoading && (
                   <div className="chat-empty">
-                    <div className="chat-empty-icon"><MessageSquare size={48} /></div>
+                    <div className="chat-empty-icon"><MessageSquare size={48} aria-hidden="true" /></div>
                     <h3>{t("emptyTitle")}</h3>
                     <p>
                       {activeProject
@@ -191,45 +298,72 @@ export default function ChatPage() {
                         ? t("noProjectAccess")
                         : t("emptyNoProject")}
                     </p>
+                    {activeProject && !projectIsEmpty && (
+                      <div className="chat-suggestions">
+                        <span className="chat-suggestions-h">{t("suggestedTitle")}</span>
+                        {["suggestion1", "suggestion2", "suggestion3"].map((k) => (
+                          <button
+                            key={k}
+                            className="chat-suggestion"
+                            onClick={() => runQuery(t(k))}
+                          >
+                            {t(k)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* Messages */}
-                {messages.map((msg) => (
-                  <div key={msg.id} className={`msg ${msg.role === "user" ? "msg-user" : ""} fade-up`}>
-                    {msg.role === "user" ? (
-                      <>
-                        <div className="msg-bubble"><p>{msg.text}</p></div>
-                        <div className="msg-meta">
-                          <span>{new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span>
-                        </div>
-                      </>
-                    ) : (
-                      <AiMessage
-                        msg={msg}
-                        phase={phase}
-                        thinkOpen={thinkOpenIds[msg.id]}
-                        setThinkOpen={(v) => setThinkOpenIds((prev) => ({ ...prev, [msg.id]: v }))}
-                        citesOpen={citesOpenIds[msg.id]}
-                        setCitesOpen={(v) => setCitesOpenIds((prev) => ({ ...prev, [msg.id]: v }))}
-                        focusedCiteId={focusedCiteId}
-                        setFocusedCiteId={setFocusedCiteId}
-                        toggleCite={toggleCite}
-                        citationLayout={citationLayout}
-                        isLast={msg.id === messages.findLast((m) => m.role === "ai")?.id}
-                      />
-                    )}
-                  </div>
-                ))}
+                <div aria-live="polite" aria-atomic="false" aria-relevant="additions text">
+                  {messages.map((msg, i) => (
+                    <div key={msg.id} className={`msg ${msg.role === "user" ? "msg-user" : ""} fade-up`}>
+                      {msg.role === "user" ? (
+                        <>
+                          <div className="msg-bubble"><p>{msg.text}</p></div>
+                          {msg.createdAt != null && (
+                            <div className="msg-meta">
+                              <span>
+                                {new Date(msg.createdAt).toLocaleTimeString(locale, {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <AiMessage
+                          msg={msg}
+                          phase={phase}
+                          thinkOpen={thinkOpenIds[msg.id]}
+                          setThinkOpen={(v) => setThinkOpenIds((prev) => ({ ...prev, [msg.id]: v }))}
+                          citesOpen={citesOpenIds[msg.id]}
+                          setCitesOpen={(v) => setCitesOpenIds((prev) => ({ ...prev, [msg.id]: v }))}
+                          focusedCiteId={focusedCiteId}
+                          setFocusedCiteId={setFocusedCiteId}
+                          toggleCite={toggleCite}
+                          citationLayout={citationLayout}
+                          isLast={msg.id === messages.findLast((m) => m.role === "ai")?.id}
+                          metrics={metricsByAiIndex[messages.slice(0, i).filter((m) => m.role === "ai").length]}
+                          onRegenerate={handleRegenerate}
+                          onRetry={() => handleRetry(messages[i - 1]?.text ?? "")}
+                          canAct={!isReadOnly && !composerDisabled}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
 
                 <div ref={bottomRef} />
               </div>
             </div>
 
             {/* Composer / Read-only / No-access banner */}
-            {isReadOnly || (!projectsLoading && projectList.length === 0) ? (
+            {isReadOnly || noProjects ? (
               <div className="chat-readonly-banner">
-                <Shield size={14} />
+                <Shield size={14} aria-hidden="true" />
                 <span>
                   {isReadOnly
                     ? "Read-only — this conversation belongs to another user."
@@ -244,12 +378,15 @@ export default function ChatPage() {
                     <textarea
                       ref={textareaRef}
                       className="chat-input"
+                      aria-label={t("emptyTitle")}
                       placeholder={
                         isGenerating
                           ? t("aiGenerating")
-                          : activeProject
-                          ? t("emptyDesc", { project: activeProject.name })
-                          : t("emptyNoProject")
+                          : !activeProject
+                          ? t("emptyNoProject")
+                          : projectIsEmpty
+                          ? t("emptyProjectTitle")
+                          : t("emptyDesc", { project: activeProject.name })
                       }
                       rows={1}
                       value={input}
@@ -264,20 +401,28 @@ export default function ChatPage() {
                             <span className="chat-composer-hint-live">
                               <span className="msg-live-dot" /> {t("generating")}
                             </span>
+                          ) : composerDisabled ? (
+                            t("selectProjectFirst")
                           ) : (
                             <><kbd>⏎</kbd> {t("sendHint")} · <kbd>⇧⏎</kbd> {t("newLineHint")}</>
                           )}
                         </span>
                         {isGenerating ? (
-                          <button className="chat-composer-send chat-composer-stop" onClick={stop} title="Zatrzymaj">
+                          <button
+                            className="chat-composer-send chat-composer-stop"
+                            onClick={stop}
+                            title={t("stop")}
+                            aria-label={t("stop")}
+                          >
                             <Square size={12} />
                           </button>
                         ) : (
                           <button
                             className="chat-composer-send"
                             onClick={handleSend}
-                            title="Wyślij"
-                            disabled={!input.trim() || !activeProject?.project_id || projectsLoading}
+                            title={t("send")}
+                            aria-label={t("send")}
+                            disabled={!input.trim() || composerDisabled}
                           >
                             <ArrowUp size={16} />
                           </button>
@@ -302,6 +447,8 @@ export default function ChatPage() {
           )}
         </div>
       </main>
+
+      <SettingsDrawer open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }
@@ -319,13 +466,19 @@ interface AiMsgProps {
   toggleCite: (id: string) => void;
   citationLayout: string;
   isLast: boolean;
+  metrics?: Metrics;
+  onRegenerate: () => void;
+  onRetry: () => void;
+  canAct: boolean;
 }
 
 function AiMessage({
-  msg, phase, thinkOpen, setThinkOpen, citesOpen, setCitesOpen,
-  focusedCiteId, setFocusedCiteId, toggleCite, citationLayout, isLast,
+  msg, phase, thinkOpen, setThinkOpen,
+  focusedCiteId, toggleCite, citationLayout, isLast,
+  metrics, onRegenerate, onRetry, canAct,
 }: AiMsgProps) {
   const t = useTranslations("chat");
+  const [copied, setCopied] = useState(false);
   const msgPhase = isLast ? phase : "done";
   const isGenerating = msgPhase === "searching" || msgPhase === "thinking" || msgPhase === "streaming";
   const showAnswer = msgPhase === "streaming" || msgPhase === "done" || msgPhase === "idle";
@@ -337,9 +490,16 @@ function AiMessage({
   // unless the user has explicitly toggled this particular message.
   const thinkExpanded = thinkOpen ?? isGenerating;
 
+  const copyAnswer = () => {
+    navigator.clipboard.writeText(displayText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
+  };
+
   return (
     <div className="msg-ai">
-      <div className="msg-avatar"><Activity size={18} /></div>
+      <div className="msg-avatar" aria-hidden="true"><Activity size={18} /></div>
       <div className="msg-content">
         {/* Head */}
         <div className="msg-head">
@@ -361,8 +521,14 @@ function AiMessage({
 
         {/* Error */}
         {msg.error && (
-          <div style={{ padding: "12px 14px", background: "rgba(239,68,68,0.1)", borderRadius: "var(--r-md)", fontSize: 14, color: "#EF4444" }}>
-            {msg.error}
+          <div className="msg-error" role="alert">
+            <AlertIcon size={14} aria-hidden="true" />
+            <span>{msg.error}</span>
+            {canAct && (
+              <button className="btn-ghost msg-error-retry" onClick={onRetry}>
+                <RotateCw size={12} /> {t("retryQuestion")}
+              </button>
+            )}
           </div>
         )}
 
@@ -426,9 +592,23 @@ function AiMessage({
 
         {/* Actions */}
         {msgPhase === "done" && !msg.error && (
-          <div className="msg-actions fade-up">
-            <span className="msg-cost">{t("chunksUsed", { n: citations.length })}</span>
-          </div>
+          <>
+            <AnswerMetrics metrics={metrics} />
+            <div className="msg-actions fade-up">
+              <span className="msg-cost">{t("chunksUsed", { n: citations.length })}</span>
+              {displayText && (
+                <button className="btn-ghost msg-action" onClick={copyAnswer} title={t("copyAnswer")}>
+                  {copied ? <Check size={12} /> : <Copy size={12} />}
+                  {copied ? t("copied") : t("copy")}
+                </button>
+              )}
+              {isLast && canAct && (
+                <button className="btn-ghost msg-action" onClick={onRegenerate} title={t("regenerate")}>
+                  <RotateCw size={12} /> {t("regenerate")}
+                </button>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

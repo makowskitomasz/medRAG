@@ -6,8 +6,18 @@ import string
 # ── Text normalisation ────────────────────────────────────────────────────────
 
 
+# Kept in sync with generation's citation_extractor.CITATION_RX — models pad the
+# marker with markdown emphasis or zero-width characters, and a leftover marker
+# would otherwise be scored as answer content.
+_PAD = r"[\s*_~`​‌‍⁠﻿]*"
+_CITATION_RX = re.compile(
+    rf"[\[(【]{_PAD}SOURCE{_PAD}[-_\s]?{_PAD}\d+{_PAD}[\])】]",
+    re.IGNORECASE,
+)
+
+
 def _normalise(text: str) -> str:
-    text = re.sub(r"\[SOURCE_\d+\]", "", text, flags=re.IGNORECASE)
+    text = _CITATION_RX.sub("", text)
     text = text.lower()
     text = text.translate(str.maketrans("", "", string.punctuation))
     return " ".join(text.split())

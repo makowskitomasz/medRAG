@@ -32,3 +32,4 @@ async def ensure_indexes() -> None:
     await get_db().eval_results.create_index("project_id")
     await get_db().eval_results.create_index("rag_mode")
     await get_db().eval_results.create_index("timestamp")
+    await get_db().eval_results.create_index("conversation_id")
