@@ -110,6 +110,9 @@ export default function ChatPage() {
   const activeProject = projectList.find((p) => p.project_id === activeProjectId) ?? projectList[0];
   const activeDocCount = activeProject ? docCounts[activeProject.project_id] : undefined;
   const projectIsEmpty = activeDocCount === 0;
+  // Starter questions are a property of the corpus, so they come from project
+  // settings; a project with none simply shows no suggestions.
+  const sampleQuestions = activeProject?.settings?.sample_questions ?? [];
 
   const isReadOnly = convOwnerId !== null && convOwnerId !== currentUser?.id;
 
@@ -298,16 +301,12 @@ export default function ChatPage() {
                         ? t("noProjectAccess")
                         : t("emptyNoProject")}
                     </p>
-                    {activeProject && !projectIsEmpty && (
+                    {!projectIsEmpty && sampleQuestions.length > 0 && (
                       <div className="chat-suggestions">
                         <span className="chat-suggestions-h">{t("suggestedTitle")}</span>
-                        {["suggestion1", "suggestion2", "suggestion3"].map((k) => (
-                          <button
-                            key={k}
-                            className="chat-suggestion"
-                            onClick={() => runQuery(t(k))}
-                          >
-                            {t(k)}
+                        {sampleQuestions.map((q) => (
+                          <button key={q} className="chat-suggestion" onClick={() => runQuery(q)}>
+                            {q}
                           </button>
                         ))}
                       </div>

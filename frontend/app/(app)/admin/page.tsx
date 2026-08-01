@@ -184,6 +184,10 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
   const [hybridAlpha, setHybridAlpha] = useState(project.settings.hybrid_alpha);
   const [topK, setTopK] = useState(project.settings.top_k);
   const [rerankTopN, setRerankTopN] = useState(project.settings.rerank_top_n);
+  // Edited as one question per line — a list is friendlier than JSON here.
+  const [sampleQuestions, setSampleQuestions] = useState(
+    (project.settings.sample_questions ?? []).join("\n")
+  );
 
   const { data: options } = useSettingsOptions();
   const updateSettings = useUpdateSettings(project.id);
@@ -236,6 +240,11 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
         hybrid_alpha: hybridAlpha,
         top_k: topK,
         rerank_top_n: rerankTopN,
+        sample_questions: sampleQuestions
+          .split("\n")
+          .map((q) => q.trim())
+          .filter(Boolean)
+          .slice(0, 6),
       }),
     ]);
     setSaved(true);
@@ -392,6 +401,18 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
                   step={rerankConstraint?.step ?? 1} min={rerankConstraint?.min ?? 1} max={rerankConstraint?.max ?? 20}
                   onChange={(e) => setRerankTopN(parseInt(e.target.value))} />
                 <span style={hintStyle}>{t("hint_rerank_top_n")}</span>
+              </div>
+
+              <div style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+                <label style={labelStyle}>{t("field_sample_questions")}</label>
+                <textarea
+                  style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }}
+                  rows={4}
+                  value={sampleQuestions}
+                  onChange={(e) => setSampleQuestions(e.target.value)}
+                  placeholder={t("placeholder_sample_questions")}
+                />
+                <span style={hintStyle}>{t("hint_sample_questions")}</span>
               </div>
             </div>
           </div>

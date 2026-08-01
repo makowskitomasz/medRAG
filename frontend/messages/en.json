@@ -126,9 +126,6 @@
     "emptyProjectDesc": "Answers would be based on nothing. Upload and index documents first.",
     "emptyProjectAdminHint": "Open the admin panel to upload documents",
     "suggestedTitle": "Try asking",
-    "suggestion1": "Can warfarin be combined with aspirin?",
-    "suggestion2": "What are the risks of ibuprofen with lisinopril?",
-    "suggestion3": "Does omeprazole affect clopidogrel?",
     "copied": "Copied",
     "copyAnswer": "Copy answer",
     "retryQuestion": "Try again",
@@ -261,7 +258,10 @@
     "field_description": "Description",
     "hint_hybrid_alpha": "0 = full vector, 1 = full keyword",
     "hint_top_k": "Candidate chunks to retrieve",
-    "hint_rerank_top_n": "Chunks passed to the LLM after reranking"
+    "hint_rerank_top_n": "Chunks passed to the LLM after reranking",
+    "field_sample_questions": "Starter questions",
+    "hint_sample_questions": "One per line, up to 6. Shown on the empty chat screen for this project. Leave blank for none.",
+    "placeholder_sample_questions": "Can warfarin be combined with aspirin?\nDoes omeprazole affect clopidogrel?"
   },
   "history": {
     "backToChat": "Back to conversation",

@@ -99,6 +99,8 @@ export interface ProjectSettings {
   top_k: number;
   rerank_top_n: number;
   prompt_overrides: Record<string, string>;
+  /** Starter questions for the empty chat screen, curated per corpus. */
+  sample_questions: string[];
 }
 export interface Project {
   id: string;
@@ -132,6 +134,7 @@ export interface UpdateSettingsInput {
   top_k?: number;
   rerank_top_n?: number;
   prompt_overrides?: Record<string, string>;
+  sample_questions?: string[];
 }
 
 export interface EnumOption {

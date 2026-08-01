@@ -42,6 +42,10 @@ class ProjectSettings(BaseModel):
     # Per-project Jinja2 prompt overrides. Keys match template slugs
     # (e.g. "generate_system", "evaluate_system"). Empty = use file defaults.
     prompt_overrides: dict[str, str] = Field(default_factory=dict)
+    # Starter questions offered on the empty chat screen. They only make sense in
+    # terms of what a given corpus contains, so they belong to the project rather
+    # than to the UI. Empty = show no suggestions.
+    sample_questions: list[str] = Field(default_factory=list, max_length=6)
 
 
 class Project(BaseModel):

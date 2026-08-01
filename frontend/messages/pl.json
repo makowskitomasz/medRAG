@@ -126,9 +126,6 @@
     "emptyProjectDesc": "Odpowiedzi nie miałyby się na czym oprzeć. Najpierw wgraj i zaindeksuj dokumenty.",
     "emptyProjectAdminHint": "Otwórz panel administratora, aby wgrać dokumenty",
     "suggestedTitle": "Przykładowe pytania",
-    "suggestion1": "Czy warfarynę można łączyć z aspiryną?",
-    "suggestion2": "Jakie jest ryzyko przy ibuprofenie z lizynoprylem?",
-    "suggestion3": "Czy omeprazol wpływa na klopidogrel?",
     "copied": "Skopiowano",
     "copyAnswer": "Kopiuj odpowiedź",
     "retryQuestion": "Spróbuj ponownie",
@@ -261,7 +258,10 @@
     "field_description": "Opis",
     "hint_hybrid_alpha": "0 = tylko wektorowe, 1 = tylko słowa kluczowe",
     "hint_top_k": "Liczba kandydatów do pobrania",
-    "hint_rerank_top_n": "Fragmenty przekazane do LLM po rerankingu"
+    "hint_rerank_top_n": "Fragmenty przekazane do LLM po rerankingu",
+    "field_sample_questions": "Pytania startowe",
+    "hint_sample_questions": "Po jednym w wierszu, maksymalnie 6. Pokazywane na pustym ekranie czatu dla tego projektu. Puste = brak sugestii.",
+    "placeholder_sample_questions": "Czy warfarynę można łączyć z aspiryną?\nCzy omeprazol wpływa na klopidogrel?"
   },
   "history": {
     "backToChat": "Wróć do rozmowy",
