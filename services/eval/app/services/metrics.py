@@ -11,7 +11,9 @@ import string
 # references into one bracket; a leftover marker would otherwise be scored as
 # answer content.
 _PAD = r"[\s*_~`​‌‍⁠﻿]*"
-_ONE = rf"SOURCE{_PAD}[-_\s]?{_PAD}\d+"
+# Models translate the marker when answering in another language ("[ŹRÓDŁO 3]").
+_KEYWORD = r"(?:SOURCE|ŹRÓDŁO|ZRODLO|ŹRODLO|QUELLE|FUENTE)"
+_ONE = rf"{_KEYWORD}{_PAD}[-_\s]?{_PAD}\d+"
 _SEP = rf"{_PAD}(?:[,;&+/]|and)?{_PAD}"
 _CITATION_RX = re.compile(
     rf"[\[(【]{_PAD}{_ONE}(?:{_SEP}(?:{_ONE}|\d+))*{_PAD}[\])】]",

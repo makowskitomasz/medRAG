@@ -9,8 +9,13 @@ from app.schemas.generation_schemas import Citation, ContextChunk
 # permissive; the surrounding brackets and the SOURCE keyword carry the meaning.
 _PAD = r"[\s*_~`​‌‍⁠﻿]*"
 
+# Answering in another language, models translate the marker despite the prompt
+# ("[ŹRÓDŁO 3]" instead of "[SOURCE_3]"), which silently cost the whole answer its
+# citations. The prompt now pins the marker; these aliases catch the rest.
+_KEYWORD = r"(?:SOURCE|ŹRÓDŁO|ZRODLO|ŹRODLO|QUELLE|FUENTE)"
+
 #: One `SOURCE_n` reference, however the model chose to punctuate it.
-_ONE = rf"SOURCE{_PAD}[-_\s]?{_PAD}\d+"
+_ONE = rf"{_KEYWORD}{_PAD}[-_\s]?{_PAD}\d+"
 #: What may sit between grouped references: `, ` `; ` ` and ` `&` `+` `/`.
 _SEP = rf"{_PAD}(?:[,;&+/]|and)?{_PAD}"
 

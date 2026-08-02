@@ -12,8 +12,13 @@
 // reads as a grapheme-cluster combiner, whereas here each of these is simply one more
 // invisible character to skip over.
 const PAD = "(?:[\\s*_~`\\u200b\\u200c\\u2060\\ufeff]|\\u200d)*";
+/**
+ * Answering in another language, models translate the marker despite the prompt
+ * ("[ŹRÓDŁO 3]" instead of "[SOURCE_3]"). The prompt pins it; these catch the rest.
+ */
+const KEYWORD = "(?:SOURCE|ŹRÓDŁO|ZRODLO|ŹRODLO|QUELLE|FUENTE)";
 /** One `SOURCE_n` reference, however the model chose to punctuate it. */
-const ONE = `SOURCE${PAD}[-_\\s]?${PAD}\\d+`;
+const ONE = `${KEYWORD}${PAD}[-_\\s]?${PAD}\\d+`;
 /** What may sit between grouped references: `, ` `; ` ` and ` `&` `+` `/`. */
 const SEP = `${PAD}(?:[,;&+/]|and)?${PAD}`;
 

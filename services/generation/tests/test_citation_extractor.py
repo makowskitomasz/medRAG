@@ -89,6 +89,14 @@ def test_grouped_sources_respect_chunk_range():
     assert [c.n for c in citations] == [1]
 
 
+def test_extracts_translated_marker_when_answering_in_polish():
+    """Answering in Polish the model writes `[ŹRÓDŁO 3]`, losing every citation."""
+    chunks = [_chunk(f"c{i}", f"Content {i}") for i in range(1, 5)]
+    # U+202F narrow no-break space is what the model actually emits here.
+    citations = extract_citations("Nasila działanie [ŹRÓDŁO 3] i [ŹRÓDŁO 1].", chunks)
+    assert [c.n for c in citations] == [1, 3]
+
+
 def test_snippet_truncated_at_200_chars():
     long_content = "x" * 300
     chunks = [_chunk("c1", long_content)]
