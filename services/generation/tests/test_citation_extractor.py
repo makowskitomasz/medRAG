@@ -70,6 +70,25 @@ def test_extracts_spaced_and_lowercase_variants():
     assert [c.n for c in citations] == [2, 3]
 
 
+def test_extracts_grouped_sources_in_one_bracket():
+    """`[SOURCE_3, SOURCE_5]` used to match nothing, losing both citations."""
+    chunks = [_chunk(f"c{i}", f"Content {i}") for i in range(1, 6)]
+    citations = extract_citations("Both agree [SOURCE_3, SOURCE_5].", chunks)
+    assert [c.n for c in citations] == [3, 5]
+
+
+def test_extracts_grouped_sources_with_keyword_dropped():
+    chunks = [_chunk(f"c{i}", f"Content {i}") for i in range(1, 6)]
+    citations = extract_citations("See [SOURCE_1, 4] and [SOURCE_2 and SOURCE_5].", chunks)
+    assert [c.n for c in citations] == [1, 2, 4, 5]
+
+
+def test_grouped_sources_respect_chunk_range():
+    chunks = [_chunk("c1", "Content 1")]
+    citations = extract_citations("Claim [SOURCE_1, SOURCE_9].", chunks)
+    assert [c.n for c in citations] == [1]
+
+
 def test_snippet_truncated_at_200_chars():
     long_content = "x" * 300
     chunks = [_chunk("c1", long_content)]

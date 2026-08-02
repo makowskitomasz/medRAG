@@ -7,11 +7,14 @@ import string
 
 
 # Kept in sync with generation's citation_extractor.CITATION_RX — models pad the
-# marker with markdown emphasis or zero-width characters, and a leftover marker
-# would otherwise be scored as answer content.
+# marker with markdown emphasis or zero-width characters and group several
+# references into one bracket; a leftover marker would otherwise be scored as
+# answer content.
 _PAD = r"[\s*_~`​‌‍⁠﻿]*"
+_ONE = rf"SOURCE{_PAD}[-_\s]?{_PAD}\d+"
+_SEP = rf"{_PAD}(?:[,;&+/]|and)?{_PAD}"
 _CITATION_RX = re.compile(
-    rf"[\[(【]{_PAD}SOURCE{_PAD}[-_\s]?{_PAD}\d+{_PAD}[\])】]",
+    rf"[\[(【]{_PAD}{_ONE}(?:{_SEP}(?:{_ONE}|\d+))*{_PAD}[\])】]",
     re.IGNORECASE,
 )
 
