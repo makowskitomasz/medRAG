@@ -1,0 +1,424 @@
+{
+  "phase": "2 — Ingestion Pipeline",
+  "goal": "Verify that the entire pipeline works end-to-end: file upload → parsing → chunking → embedding → indexing in Weaviate. Document status must transition through each stage.",
+  "preconditions_global": [
+    "Phase 0 and Phase 1 completed successfully",
+    "You have a PDF file for testing (e.g. a drug leaflet, medical article — any PDF with text)",
+    "You have $ADMIN_TOKEN (from scenario 1.11)"
+  ],
+  "variables_legend": {
+    "$ADMIN_TOKEN": "Admin JWT token from scenario 1.11",
+    "$PROJECT_ID": "Project ID — copy from response of scenario 2.1",
+    "$DOCUMENT_ID": "Document ID — copy from response of scenario 2.3",
+    "$PDF_PATH": "Path to a PDF file on your machine, e.g. /Users/tomasz/Downloads/leaflet.pdf"
+  },
+  "scenarios": [
+    {
+      "id": "2.1",
+      "title": "Create project with ingestion settings",
+      "description": "Before uploading you need a project. The project defines the chunking strategy, embedding provider and RAG mode. Testing project creation with full settings.",
+      "preconditions": ["You have $ADMIN_TOKEN"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Create a test project with default settings",
+          "command": "curl -s -X POST http://localhost:8000/admin/projects -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"name\": \"Test Ingestion\", \"description\": \"Project for pipeline testing\", \"chunking_strategy\": \"recursive\", \"embedding_provider\": \"local_bge\", \"rag_mode\": \"vanilla\"}' | python3 -m json.tool",
+          "expected_status": 201,
+          "expected_response": {
+            "id": "(string MongoDB ObjectId, 24 hex chars)",
+            "name": "Test Ingestion",
+            "settings": {
+              "chunking_strategy": "recursive",
+              "embedding_provider": "local_bge",
+              "rag_mode": "vanilla"
+            }
+          },
+          "notes": "Save the 'id' field as $PROJECT_ID — needed in every subsequent step"
+        }
+      ],
+      "expected_outcome": "HTTP 201, project with id and settings",
+      "save_for_later": {
+        "$PROJECT_ID": "$.id"
+      }
+    },
+    {
+      "id": "2.2",
+      "title": "Fetch project details",
+      "description": "Verify that the project is accessible and settings were saved correctly.",
+      "preconditions": ["You have $PROJECT_ID from 2.1"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Fetch project details by ID",
+          "command": "curl -s http://localhost:8000/admin/projects/$PROJECT_ID -H 'Authorization: Bearer $ADMIN_TOKEN' | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": {
+            "id": "$PROJECT_ID",
+            "name": "Test Ingestion",
+            "settings": {
+              "chunking_strategy": "recursive"
+            }
+          },
+          "notes": "Replace $PROJECT_ID with your id from step 2.1"
+        }
+      ],
+      "expected_outcome": "HTTP 200, project with correct settings",
+      "save_for_later": {}
+    },
+    {
+      "id": "2.3",
+      "title": "Upload PDF file — happy path",
+      "description": "Main ingestion test. PDF file is sent via multipart/form-data. The service saves the document in Mongo with status 'uploaded' and publishes an event to RabbitMQ. Response 202 Accepted = accepted for processing.",
+      "preconditions": ["You have $PROJECT_ID", "You have a PDF file on disk"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Send PDF file via multipart/form-data",
+          "command": "curl -s -X POST http://localhost:8000/ingest/projects/$PROJECT_ID/documents -H 'Authorization: Bearer $ADMIN_TOKEN' -F 'file=@$PDF_PATH' | python3 -m json.tool",
+          "expected_status": 202,
+          "expected_response": {
+            "id": "(document_id, 24 hex chars)",
+            "status": "uploaded",
+            "filename": "(PDF filename)",
+            "project_id": "$PROJECT_ID"
+          },
+          "notes": "Replace $PDF_PATH with the file path, e.g. -F 'file=@/Users/tomasz/Downloads/test.pdf'. Status 202 Accepted means: received, processing asynchronously."
+        },
+        {
+          "step": 2,
+          "action": "Save document_id from response",
+          "command": "(copy 'id' field from the response)",
+          "expected_output": "document_id e.g. '6641a3b2f3e4c5d6e7f80002'",
+          "notes": "Needed in subsequent tests as $DOCUMENT_ID"
+        }
+      ],
+      "expected_outcome": "HTTP 202, document with status=uploaded in MongoDB",
+      "save_for_later": {
+        "$DOCUMENT_ID": "$.id"
+      }
+    },
+    {
+      "id": "2.4",
+      "title": "Upload — validation: unsupported file type (415 or 422)",
+      "description": "The system should reject files that are not PDF or DOCX.",
+      "preconditions": ["You have $PROJECT_ID"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Try to upload a .txt file",
+          "command": "echo 'test content' > /tmp/test.txt && curl -s -X POST http://localhost:8000/ingest/projects/$PROJECT_ID/documents -H 'Authorization: Bearer $ADMIN_TOKEN' -F 'file=@/tmp/test.txt;type=text/plain' | python3 -m json.tool",
+          "expected_status": 415,
+          "expected_response": {
+            "detail": "(unsupported media type message)"
+          },
+          "notes": "Acceptable statuses: 415 Unsupported Media Type or 422 Unprocessable Entity"
+        },
+        {
+          "step": 2,
+          "action": "Try to upload a .exe file (binary)",
+          "command": "echo -ne '\\x4D\\x5A' > /tmp/test.exe && curl -s -X POST http://localhost:8000/ingest/projects/$PROJECT_ID/documents -H 'Authorization: Bearer $ADMIN_TOKEN' -F 'file=@/tmp/test.exe;type=application/octet-stream' | python3 -m json.tool",
+          "expected_status": 415,
+          "expected_response": {
+            "detail": "(invalid type message)"
+          },
+          "notes": null
+        }
+      ],
+      "expected_outcome": "HTTP 415 or 422 — file rejected",
+      "save_for_later": {}
+    },
+    {
+      "id": "2.5",
+      "title": "Upload — without token (401)",
+      "description": "The upload endpoint is protected. Without a token it must return 401.",
+      "preconditions": ["You have $PROJECT_ID"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Send upload without Authorization header",
+          "command": "curl -s -X POST http://localhost:8000/ingest/projects/$PROJECT_ID/documents -F 'file=@$PDF_PATH' | python3 -m json.tool",
+          "expected_status": 401,
+          "expected_response": {
+            "detail": "(missing token message)"
+          },
+          "notes": null
+        }
+      ],
+      "expected_outcome": "HTTP 401",
+      "save_for_later": {}
+    },
+    {
+      "id": "2.6",
+      "title": "Upload — to non-existent project (404)",
+      "description": "Uploading to a project that does not exist should return 404, not 500.",
+      "preconditions": ["You have $ADMIN_TOKEN"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Send upload with a fake project_id",
+          "command": "curl -s -X POST http://localhost:8000/ingest/projects/000000000000000000000000/documents -H 'Authorization: Bearer $ADMIN_TOKEN' -F 'file=@$PDF_PATH' | python3 -m json.tool",
+          "expected_status": 404,
+          "expected_response": {
+            "detail": "(project not found message)"
+          },
+          "notes": "000000000000000000000000 is a valid MongoDB ObjectId format but non-existent"
+        }
+      ],
+      "expected_outcome": "HTTP 404",
+      "save_for_later": {}
+    },
+    {
+      "id": "2.7",
+      "title": "Deduplication — upload the same file twice",
+      "description": "The system computes a content_hash for each file. A second upload of the same file should not create a new document.",
+      "preconditions": ["Scenario 2.3 completed — file already uploaded once to $PROJECT_ID"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Send the same PDF file a second time",
+          "command": "curl -s -X POST http://localhost:8000/ingest/projects/$PROJECT_ID/documents -H 'Authorization: Bearer $ADMIN_TOKEN' -F 'file=@$PDF_PATH' | python3 -m json.tool",
+          "expected_status": 409,
+          "expected_response": {
+            "detail": "(duplicate message, e.g. 'Document with this content already exists')",
+            "existing_id": "(id of the existing document — optional)"
+          },
+          "notes": "If you get 202 again — content_hash deduplication is broken. Check ingestion service logs."
+        }
+      ],
+      "expected_outcome": "HTTP 409 Conflict — duplicate rejected",
+      "save_for_later": {}
+    },
+    {
+      "id": "2.8",
+      "title": "Status tracking — check document status",
+      "description": "GET /ingest/projects/{pid}/documents/{did} returns the current document status and history of pipeline transitions.",
+      "preconditions": ["You have $PROJECT_ID and $DOCUMENT_ID from 2.3"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Check document status right after upload",
+          "command": "curl -s http://localhost:8000/ingest/projects/$PROJECT_ID/documents/$DOCUMENT_ID -H 'Authorization: Bearer $ADMIN_TOKEN' | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": {
+            "id": "$DOCUMENT_ID",
+            "status": "uploaded (or further if pipeline already started)",
+            "filename": "(filename)",
+            "status_history": [
+              {
+                "status": "uploaded",
+                "timestamp": "(ISO timestamp)",
+                "trace_id": "(UUID)"
+              }
+            ]
+          },
+          "notes": "Status may already be 'parsing' or further if the pipeline is fast"
+        }
+      ],
+      "expected_outcome": "HTTP 200 with status and status_history",
+      "save_for_later": {}
+    },
+    {
+      "id": "2.9",
+      "title": "Pipeline E2E — tracking status transitions (polling)",
+      "description": "Document transitions through: uploaded → parsing → parsed → chunking → chunked → embedding → embedded → indexing → indexed. Track progress every few seconds.",
+      "preconditions": ["You have $PROJECT_ID and $DOCUMENT_ID, pipeline not yet finished"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Watch document status every 5 seconds (stop when status=indexed or failed)",
+          "command": "watch -n 5 \"curl -s http://localhost:8000/ingest/projects/$PROJECT_ID/documents/$DOCUMENT_ID -H 'Authorization: Bearer $ADMIN_TOKEN' | python3 -c 'import sys,json; d=json.load(sys.stdin); print(\\\"status:\\\", d.get(\\\"status\\\"), \\\"|\\\", len(d.get(\\\"status_history\\\", [])), \\\"steps\\\")'\"",
+          "expected_output": "Sequence of entries:\nstatus: uploaded | 1 steps\nstatus: parsing | 1 steps\nstatus: parsed | 2 steps\nstatus: chunking | 2 steps\n...\nstatus: indexed | 9 steps",
+          "notes": "Ctrl+C to stop watch. On macOS may need: brew install watch. Alternatively run curl manually every few seconds."
+        },
+        {
+          "step": 2,
+          "action": "Check final status and full history",
+          "command": "curl -s http://localhost:8000/ingest/projects/$PROJECT_ID/documents/$DOCUMENT_ID -H 'Authorization: Bearer $ADMIN_TOKEN' | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": {
+            "status": "indexed",
+            "status_history": [
+              {"status": "uploaded"},
+              {"status": "parsing"},
+              {"status": "parsed"},
+              {"status": "chunking"},
+              {"status": "chunked"},
+              {"status": "embedding"},
+              {"status": "embedded"},
+              {"status": "indexing"},
+              {"status": "indexed"}
+            ]
+          },
+          "notes": "status_history should contain at least 9 entries with timestamps and trace_id. If status=failed — check logs: docker compose logs parser chunking embedding indexing"
+        }
+      ],
+      "expected_outcome": "status=indexed, status_history with min. 9 stages",
+      "save_for_later": {}
+    },
+    {
+      "id": "2.10",
+      "title": "Pipeline diagnosis — what to do when status=failed",
+      "description": "If the document is stuck at some stage or has status 'failed', here is how to diagnose it.",
+      "preconditions": ["Document status is 'failed' or pipeline is stuck"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Check parser logs (parses PDF)",
+          "command": "docker compose logs --tail=50 parser",
+          "expected_output": "Look for: ERROR, Exception, Traceback. Common issues: 1) PDF is encrypted (pypdf cannot read it), 2) PDF contains only images (no text to extract)",
+          "notes": null
+        },
+        {
+          "step": 2,
+          "action": "Check chunking logs",
+          "command": "docker compose logs --tail=50 chunking",
+          "expected_output": "Look for: ERROR. Common issue: empty text from parser.",
+          "notes": null
+        },
+        {
+          "step": 3,
+          "action": "Check embedding logs (slowest — loads ML model)",
+          "command": "docker compose logs --tail=50 embedding",
+          "expected_output": "Look for: 'Loading model' (normal on startup), 'ERROR', 'CUDA out of memory' (GPU issue).",
+          "notes": "Embedding may take 30-120s on CPU depending on chunk count"
+        },
+        {
+          "step": 4,
+          "action": "Check indexing logs (Weaviate)",
+          "command": "docker compose logs --tail=50 indexing",
+          "expected_output": "Look for: 'ERROR', 'Connection refused' (Weaviate problem), 'schema not found'.",
+          "notes": null
+        },
+        {
+          "step": 5,
+          "action": "Check for stuck messages in RabbitMQ",
+          "command": "curl -s -u guest:guest http://localhost:15672/api/queues | python3 -c \"import sys,json; [print(f'{q[\\\"name\\\"]}: {q[\\\"messages\\\"]} msgs, {q[\\\"messages_unacknowledged\\\"]} unack') for q in json.load(sys.stdin)]\"",
+          "expected_output": "A queue with messages > 0 and unack > 0 indicates a service that received the message but is not processing it",
+          "notes": null
+        }
+      ],
+      "expected_outcome": "Root cause of the error found in logs",
+      "save_for_later": {}
+    },
+    {
+      "id": "2.11",
+      "title": "Weaviate — verify chunks were indexed",
+      "description": "After the pipeline completes, the document's vectors should be in Weaviate. Verify chunk count and fields.",
+      "preconditions": ["document status = indexed (scenario 2.9)"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Check that the Chunk class exists in Weaviate schema",
+          "command": "curl -s http://localhost:8080/v1/schema | python3 -c \"import sys,json; classes=[c['class'] for c in json.load(sys.stdin).get('classes',[])]; print('Classes:', classes)\"",
+          "expected_output": "Classes: ['Chunk']",
+          "notes": "The Chunk class is created by the indexing service on the first ingest"
+        },
+        {
+          "step": 2,
+          "action": "Count chunks in Weaviate",
+          "command": "curl -s 'http://localhost:8080/v1/objects?class=Chunk&limit=1' | python3 -c \"import sys,json; d=json.load(sys.stdin); print('Total chunks:', d.get('totalResults', 'N/A'))\"",
+          "expected_output": "Total chunks: (number > 0, e.g. 15 for a small PDF)",
+          "notes": "Number of chunks depends on PDF size and chunking strategy. For a 5-page PDF expect 10-30 chunks."
+        },
+        {
+          "step": 3,
+          "action": "Fetch a sample chunk and check its fields",
+          "command": "curl -s 'http://localhost:8080/v1/objects?class=Chunk&limit=1' | python3 -m json.tool",
+          "expected_status": 200,
+          "expected_response": {
+            "objects": [
+              {
+                "class": "Chunk",
+                "properties": {
+                  "content": "(text fragment from the document)",
+                  "document_id": "$DOCUMENT_ID",
+                  "project_id": "$PROJECT_ID",
+                  "chunk_index": 0
+                },
+                "vector": "(array of numbers — embedding, should be long, e.g. 768 or 1024 elements)"
+              }
+            ]
+          },
+          "notes": "Key: the 'vector' field must be non-empty (these are the actual vectors). If vector=null — embedding did not work."
+        },
+        {
+          "step": 4,
+          "action": "Check chunks for a specific document via GraphQL",
+          "command": "curl -s -X POST http://localhost:8080/v1/graphql -H 'Content-Type: application/json' -d $'{\"query\": \"{ Get { Chunk(where: {path: [\\\"document_id\\\"], operator: Equal, valueText: \\\"$DOCUMENT_ID\\\"}) { content chunk_index document_id } } }\"}' | python3 -m json.tool",
+          "expected_output": "List of chunks belonging to $DOCUMENT_ID with content and chunk_index fields",
+          "notes": "Replace $DOCUMENT_ID with your document id (without the $ sign). Chunks should be ordered by chunk_index."
+        }
+      ],
+      "expected_outcome": "Chunk class exists, chunks have non-empty vectors, chunks belong to $DOCUMENT_ID",
+      "save_for_later": {}
+    },
+    {
+      "id": "2.12",
+      "title": "RabbitMQ — queues empty after pipeline completion",
+      "description": "After the pipeline finishes, all queues should be empty — every message was processed by its consumer.",
+      "preconditions": ["document status = indexed"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Check the state of all ingestion queues",
+          "command": "for queue in parser.queue chunking.queue embedding.queue indexing.queue; do echo -n \"$queue: \"; curl -s -u guest:guest \"http://localhost:15672/api/queues/%2F/$queue\" | python3 -c \"import sys,json; q=json.load(sys.stdin); print(f'messages={q[\\\"messages\\\"]}, unack={q[\\\"messages_unacknowledged\\\"]}')\"; done",
+          "expected_output": "parser.queue: messages=0, unack=0\nchunking.queue: messages=0, unack=0\nembedding.queue: messages=0, unack=0\nindexing.queue: messages=0, unack=0",
+          "notes": "If any queue has messages > 0 — the service did not process the message. Check its logs."
+        }
+      ],
+      "expected_outcome": "All 4 queues have 0 messages",
+      "save_for_later": {}
+    },
+    {
+      "id": "2.13",
+      "title": "Chunking — compare fixed_512 vs recursive strategies",
+      "description": "The system supports different chunking strategies. Create two projects with different strategies, upload the same PDF and compare chunk counts.",
+      "preconditions": ["You have $ADMIN_TOKEN and a PDF file"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Create project with fixed_512 strategy",
+          "command": "curl -s -X POST http://localhost:8000/admin/projects -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"name\": \"Test fixed_512\", \"chunking_strategy\": \"fixed_512\", \"embedding_provider\": \"local_bge\", \"rag_mode\": \"vanilla\"}' | python3 -c \"import sys,json; print(json.load(sys.stdin)['id'])\"",
+          "expected_output": "fixed_512 project ID (save as $PROJECT_FIXED)",
+          "notes": null
+        },
+        {
+          "step": 2,
+          "action": "Upload PDF to fixed_512 project and wait for indexed",
+          "command": "curl -s -X POST http://localhost:8000/ingest/projects/$PROJECT_FIXED/documents -H 'Authorization: Bearer $ADMIN_TOKEN' -F 'file=@$PDF_PATH' | python3 -c \"import sys,json; print(json.load(sys.stdin)['id'])\"",
+          "expected_output": "document_id (save as $DOC_FIXED)",
+          "notes": "Wait for status=indexed (polling as in 2.9)"
+        },
+        {
+          "step": 3,
+          "action": "Count chunks for fixed_512 project in Weaviate",
+          "command": "curl -s -X POST http://localhost:8080/v1/graphql -H 'Content-Type: application/json' -d $'{\"query\": \"{ Aggregate { Chunk(where: {path: [\\\"project_id\\\"], operator: Equal, valueText: \\\"$PROJECT_FIXED\\\"}) { meta { count } } } }\"}' | python3 -m json.tool",
+          "expected_output": "Chunk count for the fixed_512 strategy",
+          "notes": "Compare with chunk count from the recursive project (2.1). fixed_512 creates fixed-length 512-token chunks — count may differ from recursive depending on the text."
+        }
+      ],
+      "expected_outcome": "Both projects have indexed chunks, their count differs between strategies",
+      "save_for_later": {}
+    },
+    {
+      "id": "2.14",
+      "title": "Document status — non-existent document_id (404)",
+      "description": "GET status for a non-existent document should return 404.",
+      "preconditions": ["You have $PROJECT_ID"],
+      "steps": [
+        {
+          "step": 1,
+          "action": "Fetch status of a non-existent document",
+          "command": "curl -s http://localhost:8000/ingest/projects/$PROJECT_ID/documents/000000000000000000000000 -H 'Authorization: Bearer $ADMIN_TOKEN' | python3 -m json.tool",
+          "expected_status": 404,
+          "expected_response": {
+            "detail": "(document not found message)"
+          },
+          "notes": null
+        }
+      ],
+      "expected_outcome": "HTTP 404",
+      "save_for_later": {}
+    }
+  ]
+}

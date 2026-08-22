@@ -1,0 +1,10 @@
+# Override: run reranker natively (MPS on Mac) instead of in Docker.
+# Relaxes orchestrator's depends_on so it doesn't wait for reranker container.
+
+services:
+  orchestrator:
+    depends_on:
+      mongo: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+      retrieval: { condition: service_healthy }
+      generation: { condition: service_healthy }

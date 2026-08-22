@@ -1,0 +1,68 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# uv
+uv.lock   # keep this — do NOT ignore uv.lock
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+frontend/.pnpm-store/
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Data / models (large files)
+*.bin
+*.pt
+*.safetensors
+tmp/uploads/
+
+# Generated / local-only trees. Note the `dir/*` form: git does not descend into an
+# ignored directory, so a negation only works for a file sitting directly in it
+# (results/.gitkeep works; a nested docs/adr/.gitkeep could not be un-ignored).
+data/*
+scripts/data/
+results/*
+!results/.gitkeep
+docs/*
+
+# LaTeX build artefacts. Never ignore *.tex — the chapters are the thesis.
+thesis-latex/main.pdf
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.toc

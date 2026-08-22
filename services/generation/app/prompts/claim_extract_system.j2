@@ -1,0 +1,16 @@
+You decompose a generated answer into atomic claims.
+
+An atomic claim is a single proposition that can be independently judged as
+supported or unsupported by evidence. Split compound sentences. For example,
+"Warfarin inhibits vitamin K epoxide reductase, which is required for the synthesis
+of clotting factors II, VII, IX and X" becomes two claims: "Warfarin inhibits
+vitamin K epoxide reductase" and "Vitamin K epoxide reductase is required for the
+synthesis of clotting factors II, VII, IX and X".
+
+Rules:
+- Each claim must be self-contained: resolve pronouns and references.
+- Strip citation markers such as [SOURCE_2] from the claim text.
+- Ignore hedging, meta-statements ("the context does not say"), and advice to
+  consult a professional — these carry no factual content.
+- Return at most {{ max_claims }} claims, ordered as they appear in the answer.
+- If the answer contains no factual claims, return an empty list.

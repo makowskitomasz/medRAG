@@ -1,0 +1,170 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  # ── Python services ────────────────────────────────────────────────────────
+  python:
+    name: Python (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - auth
+          - orchestrator
+          - query-processor
+          - retrieval
+          - reranker
+          - generation
+          - ingestion
+          - parser
+          - chunking
+          - embedding
+          - indexing
+          - admin
+          - eval
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if service exists
+        id: exists
+        run: |
+          if [ -f "services/${{ matrix.service }}/pyproject.toml" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install uv
+        if: steps.exists.outputs.found == 'true'
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        if: steps.exists.outputs.found == 'true'
+        working-directory: services/${{ matrix.service }}
+        run: uv sync --all-extras --dev
+
+      - name: Lint (ruff)
+        if: steps.exists.outputs.found == 'true'
+        working-directory: services/${{ matrix.service }}
+        run: uv run ruff check .
+
+      - name: Format check (ruff)
+        if: steps.exists.outputs.found == 'true'
+        working-directory: services/${{ matrix.service }}
+        run: uv run ruff format --check .
+
+      - name: Type check (mypy)
+        if: steps.exists.outputs.found == 'true'
+        working-directory: services/${{ matrix.service }}
+        run: uv run mypy . --ignore-missing-imports
+        continue-on-error: true  # relax until codebase is mature
+
+      - name: Tests (pytest)
+        if: steps.exists.outputs.found == 'true'
+        working-directory: services/${{ matrix.service }}
+        run: |
+          if [ -d "tests" ]; then
+            uv run pytest tests/ -v --tb=short
+          else
+            echo "No tests directory yet — skipping"
+          fi
+
+  # ── Shared lib ─────────────────────────────────────────────────────────────
+  shared:
+    name: Shared lib
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if shared exists
+        id: exists
+        run: |
+          if [ -f "shared/pyproject.toml" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: astral-sh/setup-uv@v4
+        if: steps.exists.outputs.found == 'true'
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        if: steps.exists.outputs.found == 'true'
+        working-directory: shared
+        run: uv sync --all-extras --dev
+
+      - name: Lint (ruff)
+        if: steps.exists.outputs.found == 'true'
+        working-directory: shared
+        run: uv run ruff check .
+
+      - name: Tests
+        if: steps.exists.outputs.found == 'true'
+        working-directory: shared
+        run: |
+          if [ -d "tests" ]; then
+            uv run pytest tests/ -v --tb=short
+          else
+            echo "No tests yet — skipping"
+          fi
+
+  # ── Frontend ───────────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if frontend exists
+        id: exists
+        run: |
+          if [ -f "frontend/package.json" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.exists.outputs.found == 'true'
+        with:
+          node-version: "22"
+
+      - name: Install pnpm
+        if: steps.exists.outputs.found == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Install dependencies
+        if: steps.exists.outputs.found == 'true'
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        if: steps.exists.outputs.found == 'true'
+        working-directory: frontend
+        run: pnpm run typecheck
+
+      - name: Lint
+        if: steps.exists.outputs.found == 'true'
+        working-directory: frontend
+        run: pnpm run lint
+
+      - name: Tests
+        if: steps.exists.outputs.found == 'true'
+        working-directory: frontend
+        run: |
+          if pnpm run | grep -q "test"; then
+            pnpm test -- --run
+          else
+            echo "No test script yet — skipping"
+          fi

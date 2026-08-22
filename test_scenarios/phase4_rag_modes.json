@@ -1,0 +1,706 @@
+{
+  "phase": "4 — Full RAG Architecture Library + RARE-RAG",
+  "goal": "Verify that all 9 RAG modes work E2E, new query-processor and generation endpoints respond correctly, and prompt overrides are saved and used at runtime.",
+  "status": "READY",
+  "preconditions_global": [
+    "Phase 3 completed and green — query pipeline works, SSE streaming works",
+    "docker-compose up -d — all services running (check health on each port)",
+    "Project with an indexed document (status 'indexed') — save $PROJECT_ID",
+    "$ADMIN_TOKEN from POST http://localhost:8000/auth/login",
+    "ANTHROPIC_API_KEY set in .env and services reloaded"
+  ],
+  "variables_legend": {
+    "$ADMIN_TOKEN": "Admin JWT token — from POST http://localhost:8000/auth/login",
+    "$PROJECT_ID": "Project ObjectId with indexed documents",
+    "$CONVERSATION_ID": "conversation_id from /chat/query response — for multi-turn tests"
+  },
+  "test_query": "What are the risks of combining aspirin and warfarin?",
+  "note_on_timing": "First request may take 30-60s — BGE models are loaded at startup. Subsequent requests are significantly faster.",
+
+  "scenarios": [
+    {
+      "id": "4.0",
+      "title": "Health check — all phase 4 services",
+      "status": "TODO",
+      "description": "Quick verification that all query pipeline services are responding.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Health check orchestrator",
+          "command": "curl -s http://localhost:8002/health",
+          "postman_command": "curl --location 'http://localhost:8002/health'",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "orchestrator" }
+        },
+        {
+          "step": 2,
+          "action": "Health check query-processor",
+          "command": "curl -s http://localhost:8003/health",
+          "postman_command": "curl --location 'http://localhost:8003/health'",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "query-processor" }
+        },
+        {
+          "step": 3,
+          "action": "Health check generation",
+          "command": "curl -s http://localhost:8006/health",
+          "postman_command": "curl --location 'http://localhost:8006/health'",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "generation" }
+        },
+        {
+          "step": 4,
+          "action": "Health check admin",
+          "command": "curl -s http://localhost:8012/health",
+          "postman_command": "curl --location 'http://localhost:8012/health'",
+          "expected_status": 200,
+          "expected_response": { "status": "ok", "service": "admin" }
+        }
+      ]
+    },
+
+    {
+      "id": "4.1",
+      "title": "Admin — get settings/options (enum metadata for frontend)",
+      "status": "TODO",
+      "description": "GET /projects/settings/options returns available enum values with descriptions, slider constraints, and list of prompt slots with default templates. No authorization required (public endpoint).",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Fetch settings options",
+          "command": "curl -s http://localhost:8012/projects/settings/options",
+          "postman_command": "curl --location 'http://localhost:8012/projects/settings/options'",
+          "expected_status": 200,
+          "checks": [
+            "rag_modes contains exactly 9 elements: vanilla, hyde, query_rewriting, self_reflection, multi_agent, corrective_rag, iterative_multihop, madam_rag, rare_rag",
+            "chunking_strategies contains 3 elements: fixed_512, recursive, semantic",
+            "embedding_providers contains 3 elements: local_bge, cohere, openai",
+            "hybrid_alpha: { type: 'float', min: 0.0, max: 1.0, step: 0.05, default: 0.5 }",
+            "top_k: { type: 'int', min: 1, max: 100 }",
+            "rerank_top_n: { type: 'int', min: 1, max: 20 }",
+            "prompt_slots contains 7 elements — each has slug, label, description, default_template"
+          ],
+          "notes": "The default_template field will be an empty string if .j2 files are not mounted — that is OK in local dev."
+        }
+      ]
+    },
+
+    {
+      "id": "4.2",
+      "title": "Admin — create project with new rag_mode values",
+      "status": "TODO",
+      "description": "Verifies that projects can be created with rag_mode=iterative_multihop and that new enum values are accepted by the API.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Create project with rag_mode=iterative_multihop",
+          "command": "curl -s -X POST http://localhost:8000/admin/projects -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"name\": \"Test Multihop\", \"rag_mode\": \"iterative_multihop\", \"top_k\": 15, \"rerank_top_n\": 5}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/admin/projects' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"name\": \"Test Multihop\", \"rag_mode\": \"iterative_multihop\", \"top_k\": 15, \"rerank_top_n\": 5}'",
+          "expected_status": 201,
+          "checks": [
+            "settings.rag_mode == 'iterative_multihop'",
+            "id is a non-empty string",
+            "created_at and created_by are present in the response"
+          ]
+        },
+        {
+          "step": 2,
+          "action": "Create project with rag_mode=madam_rag",
+          "command": "curl -s -X POST http://localhost:8000/admin/projects -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"name\": \"Test MADAM\", \"rag_mode\": \"madam_rag\"}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/admin/projects' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"name\": \"Test MADAM\", \"rag_mode\": \"madam_rag\"}'",
+          "expected_status": 201
+        },
+        {
+          "step": 3,
+          "action": "Create project with rag_mode=rare_rag",
+          "command": "curl -s -X POST http://localhost:8000/admin/projects -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"name\": \"Test RARE-RAG\", \"rag_mode\": \"rare_rag\"}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/admin/projects' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"name\": \"Test RARE-RAG\", \"rag_mode\": \"rare_rag\"}'",
+          "expected_status": 201
+        },
+        {
+          "step": 4,
+          "action": "Invalid rag_mode — expected validation error",
+          "command": "curl -s -X POST http://localhost:8000/admin/projects -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"name\": \"Bad\", \"rag_mode\": \"nonexistent_mode\"}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/admin/projects' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"name\": \"Bad\", \"rag_mode\": \"nonexistent_mode\"}'",
+          "expected_status": 422,
+          "notes": "Pydantic should reject an unknown enum value"
+        }
+      ]
+    },
+
+    {
+      "id": "4.3",
+      "title": "Admin — granular PATCH /settings and prompt overrides",
+      "status": "TODO",
+      "description": "PATCH /projects/{id}/settings updates only the provided fields (merge, not replace). Prompt overrides are merged per key — they do not overwrite the entire dictionary.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Change only rag_mode (other fields unchanged)",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"vanilla\"}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"rag_mode\": \"vanilla\"}'",
+          "expected_status": 200,
+          "checks": [
+            "settings.rag_mode == 'vanilla'",
+            "other settings fields unchanged (hybrid_alpha, top_k, rerank_top_n)"
+          ]
+        },
+        {
+          "step": 2,
+          "action": "Add prompt override for generate_system",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"prompt_overrides\": {\"generate_system\": \"You are a concise medical assistant. Use sources [SOURCE_N] inline. Answer in 2 sentences max. Specialty: {{ specialty }}.\"}}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"prompt_overrides\": {\"generate_system\": \"You are a concise medical assistant. Use sources [SOURCE_N] inline. Answer in 2 sentences max. Specialty: {{ specialty }}.\"}}'",
+          "expected_status": 200,
+          "checks": [
+            "settings.prompt_overrides.generate_system contains the provided string"
+          ]
+        },
+        {
+          "step": 3,
+          "action": "Add second override without deleting the first (merge)",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"prompt_overrides\": {\"evaluate_system\": \"Score strictly: 1.0 = grounded, 0.0 = not grounded. {{ strict_mode }}\"}}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"prompt_overrides\": {\"evaluate_system\": \"Score strictly: 1.0 = grounded, 0.0 = not grounded. {{ strict_mode }}\"}}' ",
+          "expected_status": 200,
+          "checks": [
+            "settings.prompt_overrides.generate_system STILL exists (not deleted)",
+            "settings.prompt_overrides.evaluate_system is new"
+          ]
+        },
+        {
+          "step": 4,
+          "action": "Delete a single override — revert to default template",
+          "command": "curl -s -X DELETE http://localhost:8000/admin/projects/$PROJECT_ID/settings/prompts/evaluate_system -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request DELETE 'http://localhost:8000/admin/projects/$PROJECT_ID/settings/prompts/evaluate_system' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "checks": [
+            "settings.prompt_overrides no longer contains 'evaluate_system'",
+            "settings.prompt_overrides.generate_system still exists"
+          ]
+        },
+        {
+          "step": 5,
+          "action": "Delete non-existent override — idempotent (not an error)",
+          "command": "curl -s -X DELETE http://localhost:8000/admin/projects/$PROJECT_ID/settings/prompts/nonexistent -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request DELETE 'http://localhost:8000/admin/projects/$PROJECT_ID/settings/prompts/nonexistent' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200,
+          "notes": "DELETE of a non-existent key should return 200 without error"
+        }
+      ]
+    },
+
+    {
+      "id": "4.4",
+      "title": "Query Processor — /decompose (decomposition into sub-questions)",
+      "status": "TODO",
+      "description": "POST /decompose breaks a complex question into 2-4 sub-questions. Uses instructor + Pydantic (structured output) with max_retries=2. Called directly to the service.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Decompose a complex interaction question",
+          "command": "curl -s -X POST http://localhost:8003/decompose -H 'Content-Type: application/json' -d $'{\"query\": \"What are the risks of combining warfarin with aspirin, and what monitoring is required for a patient also taking statins?\"}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8003/decompose' --header 'Content-Type: application/json' --data '{\"query\": \"What are the risks of combining warfarin with aspirin, and what monitoring is required for a patient also taking statins?\"}'",
+          "expected_status": 200,
+          "expected_response_shape": {
+            "original_query": "What are the risks of combining warfarin with aspirin, and what monitoring is required for a patient also taking statins?",
+            "sub_questions": [
+              "<string — sub-question 1>",
+              "<string — sub-question 2>",
+              "<optional sub-question 3>"
+            ]
+          },
+          "checks": [
+            "sub_questions is a list (non-empty)",
+            "each sub-question is a string > 10 characters",
+            "list has 2-4 elements",
+            "sub-questions collectively cover the original question (warfarin+aspirin AND statins AND monitoring)"
+          ]
+        },
+        {
+          "step": 2,
+          "action": "Decompose a simple question — should return 1-2 sub-questions",
+          "command": "curl -s -X POST http://localhost:8003/decompose -H 'Content-Type: application/json' -d $'{\"query\": \"What is the half-life of warfarin?\"}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8003/decompose' --header 'Content-Type: application/json' --data '{\"query\": \"What is the half-life of warfarin?\"}'",
+          "expected_status": 200,
+          "notes": "Simple question — LLM may return a 1-2 element list"
+        }
+      ]
+    },
+
+    {
+      "id": "4.5",
+      "title": "Query Processor — /triage (routing for RARE-RAG)",
+      "status": "TODO",
+      "description": "POST /triage classifies a question by complexity and conflict_risk, returns a route decision. Instructor + structured output guarantees correct fields.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Triage a simple question — expected route: vanilla or query_rewriting",
+          "command": "curl -s -X POST http://localhost:8003/triage -H 'Content-Type: application/json' -d $'{\"query\": \"What is the standard dose of aspirin for pain relief?\"}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8003/triage' --header 'Content-Type: application/json' --data '{\"query\": \"What is the standard dose of aspirin for pain relief?\"}'",
+          "expected_status": 200,
+          "expected_response_shape": {
+            "complexity": "simple",
+            "conflict_risk": "low",
+            "route": "vanilla"
+          },
+          "checks": [
+            "complexity is one of: simple, standard, complex, multi_hop",
+            "conflict_risk is one of: low, medium, high",
+            "route is one of the 8 available modes"
+          ]
+        },
+        {
+          "step": 2,
+          "action": "Triage a complex multi-hop question — expected route: iterative_multihop",
+          "command": "curl -s -X POST http://localhost:8003/triage -H 'Content-Type: application/json' -d $'{\"query\": \"How does CYP3A4 inhibition by clarithromycin affect statin dosing in a patient also taking warfarin?\"}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8003/triage' --header 'Content-Type: application/json' --data '{\"query\": \"How does CYP3A4 inhibition by clarithromycin affect statin dosing in a patient also taking warfarin?\"}'",
+          "expected_status": 200,
+          "checks": [
+            "complexity is 'complex' or 'multi_hop'",
+            "route is iterative_multihop or multi_agent (high complexity)"
+          ]
+        },
+        {
+          "step": 3,
+          "action": "Triage a high conflict-risk question — expected route: madam_rag",
+          "command": "curl -s -X POST http://localhost:8003/triage -H 'Content-Type: application/json' -d $'{\"query\": \"Is clopidogrel with aspirin safe after recent stent implantation given conflicting guideline recommendations?\"}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8003/triage' --header 'Content-Type: application/json' --data '{\"query\": \"Is clopidogrel with aspirin safe after recent stent implantation given conflicting guideline recommendations?\"}'",
+          "expected_status": 200,
+          "checks": [
+            "conflict_risk is 'high' or 'medium'",
+            "route is madam_rag or self_reflection"
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "4.6",
+      "title": "Generation — /detect_conflict (conflicting evidence detection)",
+      "status": "TODO",
+      "description": "POST /detect_conflict accepts a list of chunks and returns has_conflict (bool), confidence (float) and reasoning. Instructor + structured output, max_retries=2.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Chunks without conflict — has_conflict should be false",
+          "command": "curl -s -X POST http://localhost:8006/detect_conflict -H 'Content-Type: application/json' -d $'{\"chunks\": [{\"chunk_id\": \"c1\", \"content\": \"Warfarin is a vitamin K antagonist used as anticoagulant.\", \"score\": 0.9, \"document_id\": \"d1\"}, {\"chunk_id\": \"c2\", \"content\": \"Warfarin inhibits VKORC1 enzyme, reducing clotting factors II, VII, IX, X.\", \"score\": 0.8, \"document_id\": \"d1\"}]}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8006/detect_conflict' --header 'Content-Type: application/json' --data '{\"chunks\": [{\"chunk_id\": \"c1\", \"content\": \"Warfarin is a vitamin K antagonist used as anticoagulant.\", \"score\": 0.9, \"document_id\": \"d1\"}, {\"chunk_id\": \"c2\", \"content\": \"Warfarin inhibits VKORC1 enzyme, reducing clotting factors II, VII, IX, X.\", \"score\": 0.8, \"document_id\": \"d1\"}]}'",
+          "expected_status": 200,
+          "expected_response_shape": {
+            "has_conflict": false,
+            "confidence": "<float 0.0-1.0>",
+            "reasoning": "<one sentence>"
+          },
+          "checks": [
+            "has_conflict == false (both chunks describe the same mechanism consistently)",
+            "confidence > 0.5"
+          ]
+        },
+        {
+          "step": 2,
+          "action": "Chunks with conflicting recommendations — has_conflict should be true",
+          "command": "curl -s -X POST http://localhost:8006/detect_conflict -H 'Content-Type: application/json' -d $'{\"chunks\": [{\"chunk_id\": \"c1\", \"content\": \"Low-dose aspirin (81mg) combined with warfarin is generally safe and recommended for patients with mechanical heart valves.\", \"score\": 0.9, \"document_id\": \"d1\"}, {\"chunk_id\": \"c2\", \"content\": \"Concurrent use of aspirin and warfarin significantly increases the risk of major bleeding and should be avoided in most patients.\", \"score\": 0.85, \"document_id\": \"d2\"}]}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8006/detect_conflict' --header 'Content-Type: application/json' --data '{\"chunks\": [{\"chunk_id\": \"c1\", \"content\": \"Low-dose aspirin (81mg) combined with warfarin is generally safe and recommended for patients with mechanical heart valves.\", \"score\": 0.9, \"document_id\": \"d1\"}, {\"chunk_id\": \"c2\", \"content\": \"Concurrent use of aspirin and warfarin significantly increases the risk of major bleeding and should be avoided in most patients.\", \"score\": 0.85, \"document_id\": \"d2\"}]}'",
+          "expected_status": 200,
+          "checks": [
+            "has_conflict == true",
+            "confidence > 0.5",
+            "reasoning mentions the contradiction between recommendations (recommended vs should be avoided)"
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "4.7",
+      "title": "Generation — /evaluate (answer grounding evaluation)",
+      "status": "TODO",
+      "description": "POST /evaluate accepts query + answer + chunks and returns score (0.0-1.0) + reasoning. Instructor + structured output. Used by SelfReflection and RARE-RAG.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Evaluate a well-grounded answer — expected score > 0.7",
+          "command": "curl -s -X POST http://localhost:8006/evaluate -H 'Content-Type: application/json' -d $'{\"query\": \"Does aspirin interact with warfarin?\", \"answer\": \"Yes, aspirin significantly increases bleeding risk when combined with warfarin by inhibiting platelet function [SOURCE_1].\", \"chunks\": [{\"chunk_id\": \"c1\", \"content\": \"Aspirin inhibits platelet aggregation via COX inhibition. Combined with warfarin, it significantly increases bleeding risk.\", \"score\": 0.9, \"document_id\": \"d1\"}]}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8006/evaluate' --header 'Content-Type: application/json' --data '{\"query\": \"Does aspirin interact with warfarin?\", \"answer\": \"Yes, aspirin significantly increases bleeding risk when combined with warfarin by inhibiting platelet function [SOURCE_1].\", \"chunks\": [{\"chunk_id\": \"c1\", \"content\": \"Aspirin inhibits platelet aggregation via COX inhibition. Combined with warfarin, it significantly increases bleeding risk.\", \"score\": 0.9, \"document_id\": \"d1\"}]}'",
+          "expected_status": 200,
+          "expected_response_shape": {
+            "score": "<float 0.7-1.0>",
+            "reasoning": "<one sentence>"
+          },
+          "checks": [
+            "score > 0.7 — answer is well grounded in context",
+            "reasoning explains why the score is high"
+          ]
+        },
+        {
+          "step": 2,
+          "action": "Evaluate a hallucinated answer — expected score < 0.4",
+          "command": "curl -s -X POST http://localhost:8006/evaluate -H 'Content-Type: application/json' -d $'{\"query\": \"Does aspirin interact with warfarin?\", \"answer\": \"Aspirin is completely safe to combine with warfarin with no risk of interaction whatsoever.\", \"chunks\": [{\"chunk_id\": \"c1\", \"content\": \"Aspirin combined with warfarin significantly increases bleeding risk and requires careful monitoring.\", \"score\": 0.9, \"document_id\": \"d1\"}]}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8006/evaluate' --header 'Content-Type: application/json' --data '{\"query\": \"Does aspirin interact with warfarin?\", \"answer\": \"Aspirin is completely safe to combine with warfarin with no risk of interaction whatsoever.\", \"chunks\": [{\"chunk_id\": \"c1\", \"content\": \"Aspirin combined with warfarin significantly increases bleeding risk and requires careful monitoring.\", \"score\": 0.9, \"document_id\": \"d1\"}]}'",
+          "expected_status": 200,
+          "checks": [
+            "score < 0.4 — answer contradicts the context",
+            "reasoning indicates lack of grounding or contradiction"
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "4.8",
+      "title": "Pipeline — vanilla E2E (baseline)",
+      "status": "TODO",
+      "description": "Set rag_mode=vanilla and send a query through the gateway. Simplest pipeline: retrieve → rerank → generate. Benchmark for comparison with other modes.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Set rag_mode=vanilla",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"vanilla\"}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"rag_mode\": \"vanilla\"}'",
+          "expected_status": 200
+        },
+        {
+          "step": 2,
+          "action": "Query — vanilla pipeline",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the risks of combining aspirin and warfarin?\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the risks of combining aspirin and warfarin?\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "rag_mode == 'vanilla'",
+            "answer is non-empty",
+            "citations is a list (may be empty if LLM did not use [SOURCE_N])",
+            "conversation_id is a non-empty string"
+          ],
+          "save_to_variable": "$CONVERSATION_ID"
+        }
+      ]
+    },
+
+    {
+      "id": "4.9",
+      "title": "Pipeline — query_rewriting E2E",
+      "status": "TODO",
+      "description": "Pipeline rewrites the query via /rewrite before retrieval. Response should be comparable to vanilla but potentially better for ambiguous queries.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Change rag_mode to query_rewriting",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"query_rewriting\"}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"rag_mode\": \"query_rewriting\"}'",
+          "expected_status": 200
+        },
+        {
+          "step": 2,
+          "action": "Informal query — pipeline will rewrite it to medical terminology",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"can I take blood thinners with pain killers?\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"can I take blood thinners with pain killers?\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "rag_mode == 'query_rewriting'",
+            "answer contains medical terminology (anticoagulant, NSAID, etc.) despite the informal query"
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "4.10",
+      "title": "Pipeline — self_reflection E2E (Self-RAG)",
+      "status": "TODO",
+      "description": "Self-Reflection performs 1-2 iterations: generates an answer, evaluates grounding score via /evaluate, retries retrieval if score < 0.7. May be slower than vanilla.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Change rag_mode to self_reflection",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"self_reflection\"}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"rag_mode\": \"self_reflection\"}'",
+          "expected_status": 200
+        },
+        {
+          "step": 2,
+          "action": "Query — observe orchestrator logs (iteration + score)",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the risks of combining aspirin and warfarin?\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the risks of combining aspirin and warfarin?\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "rag_mode == 'self_reflection'",
+            "answer is non-empty"
+          ],
+          "notes": "Check orchestrator logs: docker logs medrag-orchestrator-1 --tail 20. You should see 'self_reflection iteration' with score and sufficient=True/False. If score >= 0.7 on first iteration — only 1 retrieval."
+        }
+      ]
+    },
+
+    {
+      "id": "4.11",
+      "title": "Pipeline — multi_agent E2E (MA-RAG)",
+      "status": "TODO",
+      "description": "Multi-Agent runs 3 parallel retrievals with different perspectives (mechanism, risks, dosing), deduplicates chunks and reranks everything. Typically returns more diverse citations than vanilla.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Change rag_mode to multi_agent",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"multi_agent\"}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"rag_mode\": \"multi_agent\"}'",
+          "expected_status": 200
+        },
+        {
+          "step": 2,
+          "action": "Query — 3 retrieval perspectives in parallel",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the risks of combining aspirin and warfarin?\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the risks of combining aspirin and warfarin?\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "rag_mode == 'multi_agent'",
+            "answer is non-empty"
+          ],
+          "notes": "Logs: docker logs medrag-orchestrator-1 --tail 20. You should see 'multi_agent aggregation total_unique_chunks=N'. May be ~30% slower than vanilla due to 3 parallel retrievals."
+        }
+      ]
+    },
+
+    {
+      "id": "4.12",
+      "title": "Pipeline — corrective_rag E2E",
+      "status": "TODO",
+      "description": "Corrective RAG checks chunk scores after retrieval — if < 30% have score >= 0.3, it triggers fallback retrieval with alpha=0.3 and top_k*2. Fallback is visible in logs.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Change rag_mode to corrective_rag",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"corrective_rag\"}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"rag_mode\": \"corrective_rag\"}'",
+          "expected_status": 200
+        },
+        {
+          "step": 2,
+          "action": "Well-matched query — fallback should NOT be triggered",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"warfarin aspirin interaction bleeding risk\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"warfarin aspirin interaction bleeding risk\", \"stream\": false}'",
+          "expected_status": 200,
+          "notes": "Check logs — there should NOT be 'corrective_rag triggering fallback retrieval'. Chunks about warfarin interaction are in the database."
+        },
+        {
+          "step": 3,
+          "action": "Unrelated query — fallback MAY be triggered",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"treatment of tuberculosis with rifampicin\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"treatment of tuberculosis with rifampicin\", \"stream\": false}'",
+          "expected_status": 200,
+          "notes": "If documents don't contain rifampicin information — retrieval will return low scores → BM25 fallback. Check logs: 'corrective_rag low relevance'."
+        }
+      ]
+    },
+
+    {
+      "id": "4.13",
+      "title": "Pipeline — iterative_multihop E2E",
+      "status": "TODO",
+      "description": "Iterative Multi-Hop decomposes the query via /decompose, performs retrieval for each sub-question in parallel, deduplicates and reranks. Better for questions requiring multiple facts to be combined.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Change rag_mode to iterative_multihop",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"iterative_multihop\", \"top_k\": 20}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"rag_mode\": \"iterative_multihop\", \"top_k\": 20}'",
+          "expected_status": 200
+        },
+        {
+          "step": 2,
+          "action": "Complex multi-hop question",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the combined risks for a patient taking warfarin, aspirin, and a statin, and what INR monitoring schedule should be followed?\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the combined risks for a patient taking warfarin, aspirin, and a statin, and what INR monitoring schedule should be followed?\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "rag_mode == 'iterative_multihop'",
+            "answer addresses multiple aspects of the question (warfarin+aspirin AND statins AND INR)"
+          ],
+          "notes": "Logs: 'iterative_multihop decomposed n_sub_questions=N' and 'iterative_multihop aggregated unique_chunks=N'."
+        }
+      ]
+    },
+
+    {
+      "id": "4.14",
+      "title": "Pipeline — madam_rag E2E (MADAM-RAG)",
+      "status": "TODO",
+      "description": "MADAM-RAG detects conflicts via /detect_conflict — when has_conflict=true, adds an instruction to the query to present multiple perspectives. Response should be cautious and balanced.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Change rag_mode to madam_rag",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"madam_rag\"}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"rag_mode\": \"madam_rag\"}'",
+          "expected_status": 200
+        },
+        {
+          "step": 2,
+          "action": "Question where documents may contain conflicting recommendations",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"Is aspirin with warfarin recommended or should it be avoided?\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"Is aspirin with warfarin recommended or should it be avoided?\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "rag_mode == 'madam_rag'",
+            "if conflict detected: answer contains keywords like 'however', 'on the other hand', 'conflicting', 'consult', 'specialist' or similar"
+          ],
+          "notes": "Logs: 'madam_rag conflict detection has_conflict=True/False confidence=0.X'. If the document base is consistent — has_conflict may be False and the response will be normal."
+        }
+      ]
+    },
+
+    {
+      "id": "4.15",
+      "title": "Pipeline — rare_rag E2E (RARE-RAG auto-router)",
+      "status": "TODO",
+      "description": "RARE-RAG triages the question via /triage, delegates to the appropriate sub-pipeline, evaluates grounding. If score < 0.5, retries with self_reflection. If score < 0.3, abstains.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Change rag_mode to rare_rag",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"rare_rag\"}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"rag_mode\": \"rare_rag\"}'",
+          "expected_status": 200
+        },
+        {
+          "step": 2,
+          "action": "Simple question — should be routed to vanilla/query_rewriting",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is warfarin used for?\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is warfarin used for?\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "rag_mode == 'rare_rag'",
+            "abstained == false (simple question — should answer)",
+            "answer is non-empty"
+          ],
+          "notes": "Logs: 'rare_rag triage result route=vanilla' (or another simple mode)"
+        },
+        {
+          "step": 3,
+          "action": "Complex question — RARE-RAG will select an advanced pipeline",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the combined risks for a patient on warfarin, aspirin, and a CYP3A4 inhibitor, considering conflicting guideline recommendations?\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What are the combined risks for a patient on warfarin, aspirin, and a CYP3A4 inhibitor, considering conflicting guideline recommendations?\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "abstained == false (document contains relevant information)",
+            "answer is extensive and multi-perspective"
+          ],
+          "notes": "Logs: 'rare_rag triage result route=iterative_multihop' or 'madam_rag'. Grounding score visible."
+        },
+        {
+          "step": 4,
+          "action": "Verify the abstained field in the response schema",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is the cure for all diseases?\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is the cure for all diseases?\", \"stream\": false}'",
+          "expected_status": 200,
+          "notes": "Question with no answer in the database. May abstain (abstained: true) or respond 'cannot provide reliable answer'. Check the abstained field in the response."
+        }
+      ]
+    },
+
+    {
+      "id": "4.16",
+      "title": "Prompt override — runtime use of overridden template",
+      "status": "TODO",
+      "description": "Verifies end-to-end that the prompt override saved in Mongo is actually used during generation. Uses a very specific override with a unique keyword that should appear in the response.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Set rag_mode=vanilla",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"vanilla\"}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"rag_mode\": \"vanilla\"}'",
+          "expected_status": 200
+        },
+        {
+          "step": 2,
+          "action": "Add prompt override with a unique marker",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"prompt_overrides\": {\"generate_system\": \"You are a medical assistant. ALWAYS start your response with the word MEDRAG_TEST_MARKER. Use sources [SOURCE_N] inline.\"}}'",
+          "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"prompt_overrides\": {\"generate_system\": \"You are a medical assistant. ALWAYS start your response with the word MEDRAG_TEST_MARKER. Use sources [SOURCE_N] inline.\"}}'",
+          "expected_status": 200
+        },
+        {
+          "step": 3,
+          "action": "Send query — check if MEDRAG_TEST_MARKER appears in the response",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is warfarin?\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is warfarin?\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "answer starts with 'MEDRAG_TEST_MARKER' — override prompt is being used"
+          ],
+          "notes": "If MEDRAG_TEST_MARKER is missing — the prompt override is not being passed to the generation service. Check orchestrator_service.py and pipeline base._generate()."
+        },
+        {
+          "step": 4,
+          "action": "Delete override — prompt reverts to default",
+          "command": "curl -s -X DELETE http://localhost:8000/admin/projects/$PROJECT_ID/settings/prompts/generate_system -H 'Authorization: Bearer $ADMIN_TOKEN'",
+          "postman_command": "curl --location --request DELETE 'http://localhost:8000/admin/projects/$PROJECT_ID/settings/prompts/generate_system' --header 'Authorization: Bearer $ADMIN_TOKEN'",
+          "expected_status": 200
+        },
+        {
+          "step": 5,
+          "action": "Query after deleting override — MEDRAG_TEST_MARKER should NOT appear",
+          "command": "curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is warfarin?\", \"stream\": false}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is warfarin?\", \"stream\": false}'",
+          "expected_status": 200,
+          "checks": [
+            "answer does NOT contain 'MEDRAG_TEST_MARKER' — default template is being used"
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "4.17",
+      "title": "Streaming — all pipelines via SSE",
+      "status": "TODO",
+      "description": "Verifies that streaming works for 3 selected pipelines. RARE-RAG and Self-Reflection have special logic: grounding check before streaming (non-stream first, then stream).",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Set vanilla and test streaming",
+          "command": "curl -s -N -X POST http://localhost:8000/chat/query/stream -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -H 'Accept: text/event-stream' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is warfarin?\", \"stream\": true}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query/stream' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --header 'Accept: text/event-stream' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is warfarin?\", \"stream\": true}'",
+          "checks": [
+            "tokens visible: data: {\"type\": \"token\", \"content\": \"...\"}",
+            "last event: data: {\"type\": \"citations\", ...}",
+            "final: data: [DONE]"
+          ]
+        },
+        {
+          "step": 2,
+          "action": "Change to iterative_multihop and test streaming",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"iterative_multihop\"}' && curl -s -N -X POST http://localhost:8000/chat/query/stream -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -H 'Accept: text/event-stream' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is warfarin?\", \"stream\": true}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query/stream' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --header 'Accept: text/event-stream' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is warfarin?\", \"stream\": true}'",
+          "notes": "Multi-hop streaming: decomposition + retrieval per sub-question happens before streaming. Possible delay before first token. Run the PATCH from step 1 first to set the mode."
+        },
+        {
+          "step": 3,
+          "action": "Change to rare_rag and test streaming",
+          "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"rare_rag\"}' && curl -s -N -X POST http://localhost:8000/chat/query/stream -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -H 'Accept: text/event-stream' -d $'{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is warfarin?\", \"stream\": true}'",
+          "postman_command": "curl --location --request POST 'http://localhost:8000/chat/query/stream' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --header 'Accept: text/event-stream' --data '{\"project_id\": \"$PROJECT_ID\", \"query\": \"What is warfarin?\", \"stream\": true}'",
+          "notes": "RARE-RAG: triage + grounding check (non-stream) before streaming. Significant delay before first token — this is expected behavior. Run the PATCH from step 1 first to set the mode."
+        }
+      ]
+    },
+
+    {
+      "id": "4.18",
+      "title": "Comparison of all 9 modes on the same query",
+      "status": "TODO",
+      "description": "Run the same query for each rag_mode and compare: answer length, number of citations, latency. Collect as a table. This is a preview of the Phase 7 experiment.",
+      "test_query": "What are the risks of combining aspirin and warfarin?",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Run comparison script (save to file)",
+          "command": "for MODE in vanilla hyde query_rewriting self_reflection multi_agent corrective_rag iterative_multihop madam_rag rare_rag; do echo \"=== $MODE ===\"; curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d \"{\\\"rag_mode\\\": \\\"$MODE\\\"}\" > /dev/null; time curl -s -X POST http://localhost:8000/chat/query -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d \"{\\\"project_id\\\": \\\"$PROJECT_ID\\\", \\\"query\\\": \\\"What are the risks of combining aspirin and warfarin?\\\", \\\"stream\\\": false}\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(f'answer_len={len(d[\\\"answer\\\"])} citations={len(d[\\\"citations\\\"])}')\"; done",
+          "notes": "Bash script — run in terminal. Expected table: rag_mode | answer_len | citations | time. self_reflection and rare_rag will be slowest (additional LLM calls). iterative_multihop may produce the longest answers."
+        }
+      ]
+    }
+  ],
+
+  "cleanup": {
+    "description": "Restore project to default settings after testing",
+    "command": "curl -s -X PATCH http://localhost:8000/admin/projects/$PROJECT_ID/settings -H 'Authorization: Bearer $ADMIN_TOKEN' -H 'Content-Type: application/json' -d $'{\"rag_mode\": \"vanilla\", \"hybrid_alpha\": 0.5, \"top_k\": 20, \"rerank_top_n\": 5, \"prompt_overrides\": {}}'",
+    "postman_command": "curl --location --request PATCH 'http://localhost:8000/admin/projects/$PROJECT_ID/settings' --header 'Authorization: Bearer $ADMIN_TOKEN' --header 'Content-Type: application/json' --data '{\"rag_mode\": \"vanilla\", \"hybrid_alpha\": 0.5, \"top_k\": 20, \"rerank_top_n\": 5, \"prompt_overrides\": {}}'"
+  }
+}

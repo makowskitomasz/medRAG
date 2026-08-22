@@ -1,0 +1,114 @@
+# Development overrides — mount source code and enable hot reload.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# First run still requires a build: DEV=1 ./scripts/build.sh
+# After that, code changes are picked up automatically via uvicorn --reload.
+
+services:
+  api-gateway:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./shared:/app/shared
+      - ./services/api-gateway/app:/app/app
+
+  auth:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./shared:/app/shared
+      - ./services/auth/app:/app/app
+
+  admin:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./shared:/app/shared
+      - ./services/admin/app:/app/app
+
+  ingestion:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - uploads_data:/app/uploads
+      - ./shared:/app/shared
+      - ./services/ingestion/app:/app/app
+
+  parser:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - uploads_data:/app/uploads
+      - ./shared:/app/shared
+      - ./services/parser/app:/app/app
+
+  chunking:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./shared:/app/shared
+      - ./services/chunking/app:/app/app
+
+  embedding:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - embedding_cache:/app/.cache/huggingface
+      - ./shared:/app/shared
+      - ./services/embedding/app:/app/app
+
+  indexing:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./shared:/app/shared
+      - ./services/indexing/app:/app/app
+
+  retrieval:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./shared:/app/shared
+      - ./services/retrieval/app:/app/app
+
+  reranker:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - reranker_cache:/app/.cache/huggingface
+      - ./shared:/app/shared
+      - ./services/reranker/app:/app/app
+
+  query-processor:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./shared:/app/shared
+      - ./services/query-processor/app:/app/app
+
+  generation:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./shared:/app/shared
+      - ./services/generation/app:/app/app
+
+  orchestrator:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./shared:/app/shared
+      - ./services/orchestrator/app:/app/app
+
+  eval:
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./shared:/app/shared
+      - ./services/eval/app:/app/app
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      target: deps
+    image: medrag-frontend-dev
+    command: ["sh", "-c", "corepack enable pnpm && pnpm dev"]
+    ports:
+      - "3000:3000"
+    environment:
+      API_GATEWAY_URL: http://api-gateway:8000
+      CI: "true"
+      # development server doesn't need NEXT_OUTPUT=standalone
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      api-gateway: { condition: service_healthy }

@@ -1,0 +1,40 @@
+@startuml context
+title System RAG — diagram kontekstowy
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 12
+
+skinparam actor {
+  BackgroundColor #08427B
+  BorderColor #073B6F
+  FontColor white
+}
+
+skinparam rectangle {
+  BackgroundColor<<system>> #1168BD
+  BorderColor<<system>> #0B4884
+  FontColor<<system>> white
+  FontStyle<<system>> bold
+
+  BackgroundColor<<external>> #999999
+  BorderColor<<external>> #6B6B6B
+  FontColor<<external>> white
+}
+
+actor "Użytkownik" as user
+actor "Administrator" as admin
+
+rectangle "**System RAG**\n[Software System]\n\nRetrieval-Augmented Generation\nz architekturą mikroserwisową" as rag <<system>>
+
+rectangle "**LLM Provider**\n[External System]\n\nAnthropic Claude /\nOpenAI GPT" as llm <<external>>
+
+rectangle "**Embedding API**\n[External System]\n\nCohere / OpenAI /\nlokalny BGE" as emb <<external>>
+
+user --> rag : Zadaje pytania,\notrzymuje odpowiedzi\n[HTTPS / SSE]
+admin --> rag : Wgrywa dokumenty,\nzarządza projektami\n[HTTPS]
+rag --> llm : Wywołuje LLM\nz kontekstem [HTTPS]
+rag --> emb : Generuje embeddingi\n[HTTPS]
+
+@enduml

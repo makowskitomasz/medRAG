@@ -1,0 +1,56 @@
+@startuml seq_ingestion
+title RAG Ingestion Flow — diagram sekwencji (event-driven)
+
+skinparam sequenceArrowThickness 1.5
+
+actor Admin
+participant "Ingestion API" as Ing
+database "MongoDB" as Mongo
+participant "/tmp/uploads\n(shared volume)" as TMP
+queue "RabbitMQ" as MQ
+participant "Parser" as Parser
+participant "Chunking" as Chunk
+participant "Embedding" as Emb
+participant "Indexing" as Idx
+database "Weaviate" as Weav
+
+== Upload ==
+Admin -> Ing: POST /projects/{id}/documents\n(multipart PDF)
+Ing -> TMP: zapis pliku\n/tmp/uploads/{uuid}.pdf
+Ing -> Mongo: insert document\nstatus=uploaded
+Ing ->> MQ: document.uploaded\n{document_id, tmp_path, project_id}
+Ing --> Admin: 202 Accepted\n{document_id}
+
+== Parsing ==
+MQ ->> Parser: consume document.uploaded
+Parser -> TMP: read /tmp/uploads/{uuid}.pdf
+Parser -> Parser: ekstrakcja tekstu\n(pypdf / docling)
+Parser -> Mongo: update extracted_text\nstatus=parsed
+Parser -> TMP: usuń plik (cleanup)
+Parser ->> MQ: document.parsed\n{document_id}
+
+== Chunking ==
+MQ ->> Chunk: consume document.parsed
+Chunk -> Mongo: read extracted_text\nread project.settings.chunking
+Chunk -> Chunk: podziel tekst\n(strategia z settings)
+Chunk -> Mongo: insert chunks[]\nstatus=chunked
+Chunk ->> MQ: document.chunked\n{document_id, chunk_ids[]}
+
+== Embedding ==
+MQ ->> Emb: consume document.chunked
+Emb -> Mongo: read chunks (batch)
+Emb -> Emb: generuj embeddingi\n(batch processing)
+Emb ->> MQ: chunks.embedded\n{[{chunk_id, vector}]}
+
+== Indexing ==
+MQ ->> Idx: consume chunks.embedded
+Idx -> Weav: insert vectors + properties\n(document_id, chunk_index,\nproject_id, content, page)
+Idx -> Mongo: status=indexed\nupdate stats
+
+note over Admin, Weav
+  W każdym kroku: status_history dopisywany w MongoDB
+  z trace_id (z nagłówka X-Trace-Id w eventach AMQP).
+  W razie błędu: status=failed + error message.
+end note
+
+@enduml

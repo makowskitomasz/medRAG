@@ -1,0 +1,103 @@
+name: CD — Build & Smoke Test
+
+on:
+  push:
+    branches: [develop]
+
+jobs:
+  build-and-smoke:
+    name: Build & smoke test
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      JWT_SECRET: ci-test-secret
+      ADMIN_EMAIL: admin@medrag-ci.example.com
+      ADMIN_PASSWORD: testpassword
+      MONGODB_URI: mongodb://mongo:27017/medrag
+      WEAVIATE_URL: http://weaviate:8080
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      LLM_MODEL: openai/gpt-oss-120b
+      # Use OpenAI-compatible provider so embedding service starts without downloading BGE model
+      EMBEDDING_PROVIDER: openai
+      OPENAI_API_KEY: ci-dummy-key
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build all images
+        run: docker compose build
+
+      - name: Create .env for compose
+        run: |
+          cp .env.example .env
+          echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> .env
+          echo "JWT_SECRET=${JWT_SECRET}" >> .env
+          echo "JWT_ALGORITHM=HS256" >> .env
+          echo "JWT_EXPIRE_MINUTES=1440" >> .env
+          echo "ADMIN_EMAIL=${ADMIN_EMAIL}" >> .env
+          echo "ADMIN_PASSWORD=${ADMIN_PASSWORD}" >> .env
+          echo "LLM_MODEL=${LLM_MODEL}" >> .env
+          echo "EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER}" >> .env
+          echo "OPENAI_API_KEY=${OPENAI_API_KEY}" >> .env
+
+      - name: Start services
+        run: docker compose up -d --no-build
+        timeout-minutes: 2
+
+      - name: Wait for healthchecks
+        run: |
+          echo "Waiting for all services to be healthy..."
+          for i in $(seq 1 42); do
+            unhealthy=$(docker compose ps | grep -c "unhealthy\|starting" || true)
+            if [ "$unhealthy" = "0" ]; then
+              echo "All services healthy."
+              break
+            fi
+            echo "Attempt $i/42 — $unhealthy service(s) not yet healthy, waiting 10s..."
+            sleep 10
+          done
+          if [ "$unhealthy" != "0" ]; then
+            echo "ERROR: $unhealthy service(s) never became healthy after 420s"
+            docker compose ps
+            docker compose logs --tail=50
+            exit 1
+          fi
+        timeout-minutes: 8
+
+      - name: Check service /health endpoints
+        run: |
+          declare -A ports=(
+            [api-gateway]=8000
+            [auth]=8001
+            [orchestrator]=8002
+            [query-processor]=8003
+            [retrieval]=8004
+            [reranker]=8005
+            [generation]=8006
+            [ingestion]=8007
+            [parser]=8008
+            [chunking]=8009
+            [embedding]=8010
+            [indexing]=8011
+            [admin]=8012
+            [eval]=8013
+          )
+          failed=0
+          for svc in "${!ports[@]}"; do
+            port="${ports[$svc]}"
+            if docker compose ps "$svc" 2>/dev/null | grep -q "Up"; then
+              status=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$port/health" || echo "000")
+              if [ "$status" = "200" ]; then
+                echo "✓ $svc :$port → $status"
+              else
+                echo "✗ $svc :$port → $status"
+                failed=$((failed + 1))
+              fi
+            else
+              echo "- $svc not running (skipped)"
+            fi
+          done
+          exit $failed
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

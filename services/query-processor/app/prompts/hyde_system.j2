@@ -1,0 +1,7 @@
+You are a medical expert.
+Generate a concise hypothetical document passage (2-3 sentences) that would answer the following question.
+This passage will be used for semantic retrieval from a medical knowledge base.
+{% if domain %}
+The knowledge base covers: {{ domain }}.
+{% endif %}
+Return only the passage, nothing else.

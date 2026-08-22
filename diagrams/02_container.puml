@@ -1,0 +1,108 @@
+@startuml container
+title System RAG — diagram kontenerów
+
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam defaultFontSize 11
+skinparam linetype ortho
+
+skinparam actor {
+  BackgroundColor #08427B
+  BorderColor #073B6F
+  FontColor white
+}
+
+skinparam rectangle {
+  BackgroundColor<<frontend>> #438DD5
+  BorderColor<<frontend>> #2E6295
+  FontColor<<frontend>> white
+
+  BackgroundColor<<gateway>> #438DD5
+  BorderColor<<gateway>> #2E6295
+  FontColor<<gateway>> white
+
+  BackgroundColor<<service>> #438DD5
+  BorderColor<<service>> #2E6295
+  FontColor<<service>> white
+
+  BackgroundColor<<db>> #438DD5
+  BorderColor<<db>> #2E6295
+  FontColor<<db>> white
+
+  BackgroundColor<<queue>> #438DD5
+  BorderColor<<queue>> #2E6295
+  FontColor<<queue>> white
+
+  BackgroundColor<<external>> #999999
+  BorderColor<<external>> #6B6B6B
+  FontColor<<external>> white
+}
+
+actor "Użytkownik" as user
+actor "Administrator" as admin
+
+rectangle "Frontend\n[Next.js 15 + TS]\nChat UI + admin panel" as fe <<frontend>>
+
+rectangle "API Gateway\n[FastAPI]\nRouting + JWT" as gw <<gateway>>
+rectangle "Auth Service\n[FastAPI + JWT]\nLogin, role admin/user" as auth <<service>>
+
+package "Query pipeline (sync REST + SSE)" {
+  rectangle "Orchestrator\n[FastAPI]" as orch <<service>>
+  rectangle "Query Processor\n[FastAPI]\nRewrite, HyDE" as qp <<service>>
+  rectangle "Retrieval\n[FastAPI]\nHybrid search" as retr <<service>>
+  rectangle "Reranker\n[FastAPI + cross-enc.]" as rr <<service>>
+  rectangle "Generation\n[FastAPI + SSE]" as gen <<service>>
+}
+
+package "Ingestion pipeline (async event-driven)" {
+  rectangle "Ingestion API\n[FastAPI]\nUpload" as ing <<service>>
+  rectangle "Parser\n[FastAPI + pypdf]" as parser <<service>>
+  rectangle "Chunking\n[FastAPI]\nStrategie" as chunk <<service>>
+  rectangle "Embedding\n[FastAPI]" as emb <<service>>
+  rectangle "Indexing\n[FastAPI]" as idx <<service>>
+}
+
+rectangle "Admin Service\n[FastAPI]\nProjekty, statusy" as adm <<service>>
+rectangle "Eval Service\n[FastAPI + RAGAS]\nasync consumer" as eval <<service>>
+
+database "MongoDB 7\nusers, projects,\ndocuments, chunks,\nconversations, eval" as mongo <<db>>
+database "Weaviate 1.27\nVectors + BM25" as weav <<db>>
+queue "RabbitMQ 3.13\nEventy ingestion +\nquery.completed" as rmq <<queue>>
+
+rectangle "LLM Provider\nAnthropic / OpenAI" as llm <<external>>
+rectangle "Embedding API\nCohere / BGE" as emb_api <<external>>
+
+user --> fe
+admin --> fe
+fe --> gw : REST + SSE
+gw --> auth : validate JWT
+gw --> orch : POST /chat
+gw --> ing : POST /upload
+gw --> adm : admin ops
+
+orch --> qp
+orch --> retr
+retr --> rr
+orch --> gen
+
+ing --> rmq : doc.uploaded
+rmq --> parser
+parser --> rmq : doc.parsed
+rmq --> chunk
+chunk --> rmq : doc.chunked
+rmq --> emb
+emb --> rmq : chunks.embedded
+rmq --> idx
+
+retr --> weav : hybrid search
+idx --> weav : insert vectors
+orch --> mongo : metadata
+gen --> rmq : query.completed
+rmq --> eval : async
+eval --> mongo
+
+gen --> llm
+emb --> emb_api
+
+@enduml
