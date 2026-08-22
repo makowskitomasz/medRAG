@@ -26,6 +26,7 @@ class UpdateSettingsRequest(BaseModel):
     top_k: int | None = Field(default=None, ge=1, le=100)
     rerank_top_n: int | None = Field(default=None, ge=1, le=20)
     prompt_overrides: dict[str, str] | None = None
+    sample_questions: list[str] | None = Field(default=None, max_length=6)
 
 
 class CreateProjectRequest(BaseModel):

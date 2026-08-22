@@ -108,12 +108,23 @@ async def generate_stream(
         max_tokens=max_tokens,
         temperature=temperature,
         stream=True,
+        # Without this the streamed response carries no usage at all, so every
+        # streamed answer was recorded with a token count of zero.
+        stream_options={"include_usage": True},
     )
 
     reasoning_parts: list[str] = []
     reasoning_emitted = 0
+    input_tokens = 0
+    output_tokens = 0
 
     async for chunk in stream:  # type: ignore[assignment]
+        # The usage-bearing chunk arrives last and has no choices, so read it
+        # before the guard below skips the chunk.
+        usage = getattr(chunk, "usage", None)
+        if usage:
+            input_tokens = usage.prompt_tokens or 0
+            output_tokens = usage.completion_tokens or 0
         if not chunk.choices:
             continue
         delta = chunk.choices[0].delta
@@ -149,7 +160,18 @@ async def generate_stream(
     answer = "".join(full_answer)
     citations = extract_citations(answer, request.chunks)
     citations_payload = [c.model_dump() for c in citations]
-    yield f"data: {json.dumps({'type': 'citations', 'citations': citations_payload})}\n\n"
+    yield (
+        "data: "
+        + json.dumps(
+            {
+                "type": "citations",
+                "citations": citations_payload,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            }
+        )
+        + "\n\n"
+    )
     yield "data: [DONE]\n\n"
 
 

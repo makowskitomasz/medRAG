@@ -9,7 +9,13 @@ from medrag_shared.models.project import RagMode
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.pipelines.factory import get_pipeline
-from app.schemas.orchestrator_schemas import QueryRequest, QueryResponse
+from app.schemas.orchestrator_schemas import (
+    Citation as CitationSchema,
+)
+from app.schemas.orchestrator_schemas import (
+    QueryRequest,
+    QueryResponse,
+)
 from app.services.conversation_service import (
     append_messages,
     build_history,
@@ -115,6 +121,7 @@ async def handle_query_stream(
     async def _stream() -> AsyncGenerator[str, None]:
         import json
 
+        t0 = time.monotonic()
         stream = pipeline.run_stream(
             query=request.query,
             project_id=request.project_id,
@@ -138,9 +145,36 @@ async def handle_query_stream(
                 pass
             yield chunk
 
+        latency_ms = int((time.monotonic() - t0) * 1000)
         answer = "".join(answer_parts)
         await append_messages(
             conversation.id, request.query, answer, db, citations=captured_citations
+        )
+
+        # Streamed queries used to skip evaluation entirely, so every answer produced
+        # through the UI was invisible to the eval service. Publish the same event the
+        # non-streaming path does, so per-answer metrics exist for the chat view.
+        result = QueryResponse(
+            conversation_id=conversation.id,
+            answer=answer,
+            citations=[CitationSchema(**c) for c in captured_citations],
+            rag_mode=rag_mode.value,
+            retrieved_filenames=list(
+                dict.fromkeys(
+                    c.get("filename", "") for c in pipeline._last_chunks if c.get("filename")
+                )
+            ),
+        )
+        await _publish_query_completed(
+            result,
+            request,
+            trace_id,
+            latency_ms,
+            project_settings.top_k,
+            all_chunks=pipeline._last_chunks,
+            input_tokens=pipeline._last_input_tokens,
+            output_tokens=pipeline._last_output_tokens,
+            llm_model=project_settings.llm_model or None,
         )
 
     return _stream()

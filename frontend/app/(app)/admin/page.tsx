@@ -9,7 +9,7 @@ import {
   Layers, Brain, MessageSquare, Trash2, User, Settings, Check, X as XIcon, Users,
   ChevronDown, ChevronUp, RotateCcw,
 } from "lucide-react";
-import { projects, documents, auth, Project, Document, DocumentsPage, CreateProjectInput, User as UserType, PromptSlot } from "@/lib/api";
+import { projects, documents, auth, Project, DocumentsPage, CreateProjectInput, User as UserType, PromptSlot } from "@/lib/api";
 import { useUIStore } from "@/store";
 import { useSettingsOptions, useUpdateSettings, useUpdateProject } from "@/hooks/useProjects";
 
@@ -184,6 +184,10 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
   const [hybridAlpha, setHybridAlpha] = useState(project.settings.hybrid_alpha);
   const [topK, setTopK] = useState(project.settings.top_k);
   const [rerankTopN, setRerankTopN] = useState(project.settings.rerank_top_n);
+  // Edited as one question per line — a list is friendlier than JSON here.
+  const [sampleQuestions, setSampleQuestions] = useState(
+    (project.settings.sample_questions ?? []).join("\n")
+  );
 
   const { data: options } = useSettingsOptions();
   const updateSettings = useUpdateSettings(project.id);
@@ -236,6 +240,11 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
         hybrid_alpha: hybridAlpha,
         top_k: topK,
         rerank_top_n: rerankTopN,
+        sample_questions: sampleQuestions
+          .split("\n")
+          .map((q) => q.trim())
+          .filter(Boolean)
+          .slice(0, 6),
       }),
     ]);
     setSaved(true);
@@ -393,6 +402,18 @@ function SettingsModal({ project, onClose }: { project: Project; onClose: () => 
                   onChange={(e) => setRerankTopN(parseInt(e.target.value))} />
                 <span style={hintStyle}>{t("hint_rerank_top_n")}</span>
               </div>
+
+              <div style={{ ...fieldStyle, gridColumn: "1 / -1" }}>
+                <label style={labelStyle}>{t("field_sample_questions")}</label>
+                <textarea
+                  style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }}
+                  rows={4}
+                  value={sampleQuestions}
+                  onChange={(e) => setSampleQuestions(e.target.value)}
+                  placeholder={t("placeholder_sample_questions")}
+                />
+                <span style={hintStyle}>{t("hint_sample_questions")}</span>
+              </div>
             </div>
           </div>
         )}
@@ -508,6 +529,7 @@ export default function AdminPage() {
   const t = useTranslations("admin");
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dragHover, setDragHover] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
   const [docSearch, setDocSearch] = useState("");
   const [docPage, setDocPage] = useState(1);
   const [showNewForm, setShowNewForm] = useState(false);
@@ -566,9 +588,21 @@ export default function AdminPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["projects"] }),
   });
 
+  // The drop zone always looked multi-file; it silently uploaded only the first.
+  // Files go up one at a time so a large batch does not open dozens of sockets.
   const uploadDoc = useMutation({
-    mutationFn: (file: File) => documents.upload(active!.project_id, file),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents", active?.project_id] }),
+    mutationFn: async (files: File[]) => {
+      for (const file of files) {
+        setUploadProgress({ done: files.indexOf(file), total: files.length });
+        await documents.upload(active!.project_id, file);
+      }
+      setUploadProgress(null);
+    },
+    onSettled: () => {
+      setUploadProgress(null);
+      qc.invalidateQueries({ queryKey: ["documents", active?.project_id] });
+      qc.invalidateQueries({ queryKey: ["project-stats", active?.project_id] });
+    },
   });
 
   const deleteDoc = useMutation({
@@ -580,13 +614,13 @@ export default function AdminPage() {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragHover(false);
-    const file = e.dataTransfer.files[0];
-    if (file) uploadDoc.mutate(file);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) uploadDoc.mutate(files);
   }, [uploadDoc]);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) uploadDoc.mutate(file);
+    const files = Array.from(e.target.files ?? []);
+    if (files.length) uploadDoc.mutate(files);
     e.target.value = "";
   };
 
@@ -746,7 +780,7 @@ export default function AdminPage() {
                 <button className="btn btn-primary" onClick={() => fileInputRef.current?.click()}>
                   <Upload size={14} /> {t("uploadPDF")}
                 </button>
-                <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt,.md" style={{ display: "none" }} onChange={handleFileInput} />
+                <input ref={fileInputRef} type="file" multiple accept=".pdf,.docx,.txt,.md" style={{ display: "none" }} onChange={handleFileInput} />
               </div>
             </div>
 
@@ -800,6 +834,7 @@ export default function AdminPage() {
             {uploadDoc.isPending && (
               <div style={{ margin: "-8px 32px 12px", padding: "8px 12px", background: "var(--accent-soft)", borderRadius: "var(--r-md)", fontSize: 13, color: "var(--text-2)", display: "flex", alignItems: "center", gap: 8 }}>
                 <div className="search-spinner search-spinner-sm" /> {t("uploading")}
+                {uploadProgress && uploadProgress.total > 1 && ` ${uploadProgress.done + 1} / ${uploadProgress.total}`}
               </div>
             )}
             {uploadDoc.isError && (

@@ -6,8 +6,23 @@ import string
 # ── Text normalisation ────────────────────────────────────────────────────────
 
 
+# Kept in sync with generation's citation_extractor.CITATION_RX — models pad the
+# marker with markdown emphasis or zero-width characters and group several
+# references into one bracket; a leftover marker would otherwise be scored as
+# answer content.
+_PAD = r"[\s*_~`​‌‍⁠﻿]*"
+# Models translate the marker when answering in another language ("[ŹRÓDŁO 3]").
+_KEYWORD = r"(?:SOURCE|ŹRÓDŁO|ZRODLO|ŹRODLO|QUELLE|FUENTE)"
+_ONE = rf"{_KEYWORD}{_PAD}[-_\s]?{_PAD}\d+"
+_SEP = rf"{_PAD}(?:[,;&+/]|and)?{_PAD}"
+_CITATION_RX = re.compile(
+    rf"[\[(【]{_PAD}{_ONE}(?:{_SEP}(?:{_ONE}|\d+))*{_PAD}[\])】]",
+    re.IGNORECASE,
+)
+
+
 def _normalise(text: str) -> str:
-    text = re.sub(r"\[SOURCE_\d+\]", "", text, flags=re.IGNORECASE)
+    text = _CITATION_RX.sub("", text)
     text = text.lower()
     text = text.translate(str.maketrans("", "", string.punctuation))
     return " ".join(text.split())

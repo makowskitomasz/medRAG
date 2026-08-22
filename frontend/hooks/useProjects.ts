@@ -1,6 +1,6 @@
 "use client";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { projects, Project, SettingsOptions, UpdateSettingsInput, UpdateProjectInput } from "@/lib/api";
+import { useQuery, useQueries, useMutation, useQueryClient } from "@tanstack/react-query";
+import { projects, documents, Project, SettingsOptions, UpdateSettingsInput, UpdateProjectInput } from "@/lib/api";
 
 export function useProjects() {
   return useQuery<Project[]>({
@@ -8,6 +8,37 @@ export function useProjects() {
     queryFn: projects.list,
     staleTime: 60_000,
   });
+}
+
+export function useProjectStats(projectId: string | null) {
+  return useQuery({
+    queryKey: ["project-stats", projectId],
+    queryFn: () => documents.projectStats(projectId!),
+    enabled: !!projectId,
+    staleTime: 60_000,
+  });
+}
+
+/**
+ * Indexed-document count per project id.
+ *
+ * Used to warn before a user asks an empty project a question, and to avoid
+ * defaulting to one — the first project in the list is not necessarily usable.
+ */
+export function useProjectDocCounts(projectList: Project[]): Record<string, number> {
+  const results = useQueries({
+    queries: projectList.map((p) => ({
+      queryKey: ["project-stats", p.project_id],
+      queryFn: () => documents.projectStats(p.project_id),
+      staleTime: 60_000,
+    })),
+  });
+  const counts: Record<string, number> = {};
+  projectList.forEach((p, i) => {
+    const data = results[i]?.data;
+    if (data) counts[p.project_id] = data.indexed_count ?? data.total_documents ?? 0;
+  });
+  return counts;
 }
 
 export function useProject(id: string | null) {

@@ -99,6 +99,8 @@ export interface ProjectSettings {
   top_k: number;
   rerank_top_n: number;
   prompt_overrides: Record<string, string>;
+  /** Starter questions for the empty chat screen, curated per corpus. */
+  sample_questions: string[];
 }
 export interface Project {
   id: string;
@@ -132,6 +134,7 @@ export interface UpdateSettingsInput {
   top_k?: number;
   rerank_top_n?: number;
   prompt_overrides?: Record<string, string>;
+  sample_questions?: string[];
 }
 
 export interface EnumOption {
@@ -321,6 +324,8 @@ export interface StreamEvent {
   citations?: Citation[];
   conversation_id?: string;
   rag_mode?: string;
+  input_tokens?: number;
+  output_tokens?: number;
   // search (mock: progress+docs, backend: status+files/filenames)
   progress?: number;
   docs?: ScannedDoc[];
@@ -413,19 +418,63 @@ export interface ConversationSummary {
   project_id: string;
   user_id: string | null;
   rag_mode: string;
+  title: string | null;
   message_count: number;
   first_user_message: string | null;
+  last_message_preview: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface ConversationDetail extends ConversationSummary {
   messages: ConversationMessage[];
+  total_messages: number;
+}
+
+export interface ConversationPage {
+  items: ConversationSummary[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+export interface ListConversationsParams {
+  projectId?: string | null;
+  q?: string;
+  ragMode?: string;
+  page?: number;
+  limit?: number;
+}
+
+/** Display name for a conversation: explicit title, else first question, else id. */
+export function conversationLabel(c: {
+  title?: string | null;
+  first_user_message?: string | null;
+  id: string;
+}): string {
+  return c.title || c.first_user_message || `Conversation ${c.id.slice(-6)}`;
 }
 
 export const conversations = {
-  list: (projectId: string, limit = 50) =>
-    request<ConversationSummary[]>(`/chat/conversations?project_id=${encodeURIComponent(projectId)}&limit=${limit}`),
-  get: (id: string) =>
-    request<ConversationDetail>(`/chat/conversations/${id}`),
+  list: ({ projectId, q, ragMode, page = 1, limit = 25 }: ListConversationsParams = {}) => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (projectId) params.set("project_id", projectId);
+    if (q) params.set("q", q);
+    if (ragMode && ragMode !== "all") params.set("rag_mode", ragMode);
+    return request<ConversationPage>(`/chat/conversations?${params}`);
+  },
+  /** `limit` caps how many of the newest messages come back; 0 loads the whole thread. */
+  get: (id: string, limit = 0) =>
+    request<ConversationDetail>(
+      `/chat/conversations/${id}${limit ? `?limit=${limit}` : ""}`
+    ),
+  rename: (id: string, title: string) =>
+    request<ConversationSummary>(`/chat/conversations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+  remove: (id: string) =>
+    request<void>(`/chat/conversations/${id}`, { method: "DELETE" }),
 };
+

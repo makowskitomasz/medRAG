@@ -14,6 +14,7 @@ from app.connectors import (
     disconnect_mongo,
 )
 from app.routers.orchestrator_router import router
+from app.services.conversation_service import ensure_conversation_indexes
 
 logger = get_logger(__name__)
 
@@ -21,6 +22,7 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await connect_mongo(settings.mongodb_uri)
+    await ensure_conversation_indexes()
     await amqp_connect(settings.rabbitmq_url)
     await create_http_client()
     logger.info("orchestrator service ready")

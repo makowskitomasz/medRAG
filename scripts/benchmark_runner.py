@@ -40,8 +40,11 @@ RAG_MODES = [
     "rare_rag",
 ]
 
-# Approximate cost per 1k tokens in USD (claude-haiku-4-5 estimate)
-_COST_PER_1K_TOKENS = 0.003
+# Approximate USD per 1M tokens for openai/gpt-5-nano, the model the benchmarks run on.
+# Input and output are priced an order of magnitude apart, so they are counted separately;
+# these pipelines emit far more output (reasoning) than input.
+_COST_PER_1M_INPUT = 0.05
+_COST_PER_1M_OUTPUT = 0.40
 _DRY_RUN_LIMIT = 10
 
 
@@ -303,12 +306,16 @@ def _enrich_from_mongo(results: list[dict], mongo_uri: str, project_id: str) -> 
         return results
 
     db = client["medrag"]
-    # Build lookup: (question, rag_mode) → eval_result
+    # Build lookup: (question, rag_mode) → eval_result.
+    # A re-run leaves older eval_results for the same (question, rag_mode) in place, so sort
+    # ascending by timestamp and let the last (newest) document win the dict comprehension.
     eval_docs = list(
-        db["eval_results"].find(
+        db["eval_results"]
+        .find(
             {"project_id": project_id},
-            {"_id": 1, "question": 1, "rag_mode": 1, "metrics": 1},
+            {"_id": 1, "question": 1, "rag_mode": 1, "metrics": 1, "timestamp": 1},
         )
+        .sort("timestamp", 1)
     )
     lookup: dict[tuple[str, str], dict] = {
         (d["question"].strip(), d["rag_mode"]): d for d in eval_docs
@@ -365,11 +372,13 @@ def _print_summary(
     print(sep)
 
     total_queries = sum(len(v) for v in by_mode.values())
-    total_tokens = sum(r.get("token_count", 0) for r in results if "error" not in r)
-    est_cost = total_tokens / 1000 * _COST_PER_1K_TOKENS
+    ok = [r for r in results if "error" not in r]
+    in_tokens = sum(r.get("input_tokens") or 0 for r in ok)
+    out_tokens = sum(r.get("output_tokens") or 0 for r in ok)
+    est_cost = in_tokens / 1e6 * _COST_PER_1M_INPUT + out_tokens / 1e6 * _COST_PER_1M_OUTPUT
     footer = (
         f"\nSummary: {total_queries} queries across {len(by_mode)} modes "
-        f"in {total_seconds:.1f}s | tokens: {total_tokens} | "
+        f"in {total_seconds:.1f}s | tokens: {in_tokens} in / {out_tokens} out | "
         f"est. cost: ${est_cost:.4f}"
     )
     print(footer)
@@ -469,10 +478,16 @@ async def async_main() -> None:
         await asyncio.sleep(eval_wait)
         print("Fetching eval metrics from MongoDB…")
         all_results = _enrich_from_mongo(all_results, args.mongo_uri, args.project_id)
-        # Overwrite output file with enriched results
-        output_path.write_text(
-            json.dumps(all_results, indent=2, ensure_ascii=False), encoding="utf-8"
+        # Rewrite the output file with enriched results. `all_results` only holds what this
+        # session processed, so a resumed run must merge back the results it skipped —
+        # overwriting with `all_results` alone would discard every earlier record.
+        on_disk: list[dict] = (
+            json.loads(output_path.read_text(encoding="utf-8")) if output_path.exists() else []
         )
+        fresh = {(r["rag_mode"], r["question"]) for r in all_results}
+        merged = [r for r in on_disk if (r["rag_mode"], r["question"]) not in fresh] + all_results
+        output_path.write_text(json.dumps(merged, indent=2, ensure_ascii=False), encoding="utf-8")
+        all_results = merged
 
     print(f"\nAll results saved → {output_path}")
     _print_summary(all_results, total_seconds, output_path)

@@ -20,8 +20,9 @@ shift 2
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
-DATASET="$REPO_ROOT/data/ddi_qa.json"
-OUTPUT="$REPO_ROOT/results/ddi_results.json"
+DATASET="${DATASET:-$REPO_ROOT/data/ddi_qa.json}"
+# Overridable so a re-run does not clobber the previous results file.
+OUTPUT="${OUTPUT:-$REPO_ROOT/results/ddi_results.json}"
 GATEWAY="${GATEWAY_URL:-http://localhost:8000}"
 
 if [[ ! -f "$DATASET" ]]; then
@@ -30,7 +31,7 @@ if [[ ! -f "$DATASET" ]]; then
   exit 1
 fi
 
-QA_COUNT=$(python3 -c "import json; d=json.load(open('$DATASET')); print(len(d))")
+QA_COUNT=$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1]))))" "$DATASET")
 echo "Dataset:    $DATASET  ($QA_COUNT questions)"
 echo "Project ID: $PROJECT_ID"
 echo "Output:     $OUTPUT"
@@ -40,7 +41,8 @@ echo ""
 mkdir -p "$REPO_ROOT/results"
 
 cd "$SCRIPT_DIR"
-python3 benchmark_runner.py \
+# Dependencies (httpx, pymongo) live in the uv environment, not in the system python3.
+uv run python benchmark_runner.py \
   --dataset "$DATASET" \
   --project-id "$PROJECT_ID" \
   --token "$TOKEN" \
@@ -51,4 +53,4 @@ python3 benchmark_runner.py \
 
 echo ""
 echo "Benchmark done. Run analysis:"
-echo "  python scripts/analyze_ddi.py --input $OUTPUT --project-id $PROJECT_ID"
+echo "  cd scripts && uv run python analyze_ddi.py --input $OUTPUT --project-id $PROJECT_ID"

@@ -115,11 +115,15 @@ def _enrich_from_mongo(results: list[dict], mongo_uri: str, project_id: str | No
     if project_id:
         query["project_id"] = project_id
 
+    # Sorted ascending by timestamp so that, when a re-run has produced a second
+    # eval_result for the same (question, rag_mode), the newest one wins the lookup below.
     eval_docs = list(
-        db["eval_results"].find(
+        db["eval_results"]
+        .find(
             query,
-            {"_id": 1, "question": 1, "rag_mode": 1, "metrics": 1},
+            {"_id": 1, "question": 1, "rag_mode": 1, "metrics": 1, "timestamp": 1},
         )
+        .sort("timestamp", 1)
     )
     client.close()
 

@@ -16,8 +16,9 @@ function LoginForm() {
   const returnTo = params.get("returnTo") || "/chat/new";
   const t = useTranslations("login");
 
-  const [email, setEmail] = useState("admin@mail.com");
-  const [password, setPassword] = useState("admin");
+  // Demo credentials are opt-in via env so they never ship pre-filled by default.
+  const [email, setEmail] = useState(process.env.NEXT_PUBLIC_DEMO_EMAIL ?? "");
+  const [password, setPassword] = useState(process.env.NEXT_PUBLIC_DEMO_PASSWORD ?? "");
   const [showPw, setShowPw] = useState(false);
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -25,12 +26,12 @@ function LoginForm() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) { setError("Podaj email i hasło."); return; }
+    if (!email || !password) { setError(t("errorMissing")); return; }
     setLoading(true);
     setError(null);
     try {
       const { access_token, refresh_token } = await auth.login(email, password);
-      saveToken(access_token, refresh_token);
+      saveToken(access_token, refresh_token, remember);
       const user = await auth.me();
       saveUser(user);
       router.replace(returnTo);
@@ -148,7 +149,10 @@ function LoginForm() {
               <span className="login-check-box">{remember && <Check size={11} />}</span>
               <span>{t("remember")}</span>
             </label>
-            <a href="#" className="login-link">{t("forgot")}</a>
+            {/* No password-reset flow exists yet; say so rather than linking nowhere. */}
+            <span className="login-link login-link-muted" title={t("forgotHint")}>
+              {t("forgot")}
+            </span>
           </div>
 
           <button type="submit" className="btn btn-primary login-submit" disabled={loading}>

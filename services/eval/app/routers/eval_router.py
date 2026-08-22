@@ -44,6 +44,34 @@ async def list_results(
     }
 
 
+@router.get("/by-conversation/{conversation_id}")
+async def by_conversation(conversation_id: str) -> dict:
+    """Metrics for every answer in one conversation, oldest first.
+
+    The chat view pairs these with assistant messages by position, so ordering
+    matches the order the answers were produced.
+    """
+    docs = (
+        await get_db()
+        .eval_results.find({"conversation_id": conversation_id})
+        .sort("timestamp", 1)
+        .to_list(200)
+    )
+    items = []
+    for d in docs:
+        ts = d.get("timestamp")
+        items.append(
+            {
+                "id": str(d.pop("_id")),
+                "rag_mode": d.get("rag_mode"),
+                "question": d.get("question"),
+                "metrics": d.get("metrics", {}),
+                "timestamp": ts.isoformat() if isinstance(ts, datetime) else ts,
+            }
+        )
+    return {"items": items}
+
+
 @router.get("/summary")
 async def summary(
     project_id: str | None = Query(default=None),

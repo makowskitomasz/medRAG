@@ -325,6 +325,10 @@ class RagPipeline(ABC):
                 "citations": [c.model_dump() for c in citations],
                 "conversation_id": conversation_id,
                 "rag_mode": rag_mode,
+                # The answer was produced non-streaming by a sub-pipeline, so the
+                # usage is already accumulated on this pipeline.
+                "input_tokens": self._last_input_tokens,
+                "output_tokens": self._last_output_tokens,
             }
         )
         yield "data: [DONE]\n\n"
@@ -368,6 +372,12 @@ class RagPipeline(ABC):
                     if event.get("type") == "citations":
                         event["conversation_id"] = conversation_id
                         event["rag_mode"] = rag_mode
+                        # Usage rides along on the final event; without recording
+                        # it here every streamed answer was billed as zero tokens.
+                        # It stays on the event too, so the UI can show the cost
+                        # straight away instead of waiting on async evaluation.
+                        self._last_input_tokens += event.get("input_tokens", 0)
+                        self._last_output_tokens += event.get("output_tokens", 0)
                     elif event.get("type") == "think":
                         event["step"] = generation_step
                     yield f"data: {json.dumps(event)}\n\n"

@@ -9,7 +9,7 @@ from app.services.proxy_service import proxy
 router = APIRouter()
 
 
-@router.api_route("/chat/{path:path}", methods=["GET", "POST"])
+@router.api_route("/chat/{path:path}", methods=["GET", "POST", "PATCH", "DELETE"])
 async def proxy_chat(
     path: str,
     request: Request,
