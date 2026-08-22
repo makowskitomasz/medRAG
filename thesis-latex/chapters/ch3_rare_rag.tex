@@ -56,7 +56,7 @@ a~consulting pharmacist; model belief cannot.
 A~confident but only partially grounded response is more dangerous than an
 acknowledged uncertainty.
 The appropriate behaviour when evidence is absent or insufficient is to
-\emph{abstain} --- to inform the user that the system cannot reliably answer
+\emph{abstain}: to inform the user that the system cannot reliably answer
 from available data rather than deliver a~plausible-sounding but unsupported claim.
 
 \rarerag{} is built around these two observations: (i)~query complexity
@@ -105,8 +105,8 @@ the architecture is explicitly designed to fail safely in the presence of
 missing or contradictory evidence.
 \emph{Routed} refers to the complexity router that selects the execution path.
 \emph{Evidence-Graph} reflects the set-wise selection step, which treats the
-evidence shortlist as a~set of nodes with implicit semantic relationships ---
-complementarity and redundancy --- rather than as an independently scored list.
+evidence shortlist as a~set of nodes with implicit semantic relationships
+(complementarity and redundancy) rather than as an independently scored list.
 The set-wise scoring function thus implicitly reasons over the graph structure
 of the evidence, even though no explicit graph data structure is maintained.
 
@@ -121,9 +121,9 @@ fields: a~\emph{complexity} class
 $c \in \{\textit{simple}, \textit{standard}, \textit{complex}, \textit{multi-hop}\}$,
 a~\emph{conflict risk} level $r \in \{\textit{low}, \textit{medium}, \textit{high}\}$,
 and the \emph{route}: the execution mode that should handle the query.
-The route is drawn from the eight modes the platform implements --- vanilla, HyDE,
+The route is drawn from the eight modes the platform implements (vanilla, HyDE,
 query rewriting, self-reflection, corrective RAG, multi-agent, iterative multi-hop,
-and MADAM-RAG --- and the pipeline for that mode is then instantiated and run.
+and MADAM-RAG), and the pipeline for that mode is then instantiated and run.
 
 Two fields rather than one is a~deliberate choice.
 Complexity alone does not determine the right pipeline, because two queries of
@@ -133,15 +133,15 @@ The first calls for a~retrieval chain, the second for a~debate between agents th
 can surface the disagreement instead of silently averaging over it.
 Separating conflict risk from complexity is what lets the router distinguish them.
 
-A~rule-based classifier --- for instance, one that counts drug names or detects
-conditional modifiers such as ``in a~patient with'' --- would be fast but brittle:
+A~rule-based classifier (for instance, one that counts drug names or detects
+conditional modifiers such as ``in a~patient with'') would be fast but brittle:
 it misclassifies paraphrased complex queries and flags simple queries that
 happen to mention multiple drug names in a~lookup context.
 A~fine-tuned transformer classifier would require labelled training data that
 is expensive to obtain in the medical domain.
 \rarerag{} instead uses a~short structured LLM call with few-shot examples,
 constrained to emit the three fields above as structured output.
-The call is deliberately small --- the prompt is under 800~tokens --- keeping
+The call is deliberately small (the prompt is under 800~tokens), keeping
 classification latency below one second under typical API conditions.
 
 \subsection{Routing Criteria}
@@ -150,17 +150,17 @@ The routing policy the prompt encodes is, in outline: single-fact lookups go to
 vanilla; questions whose phrasing is a~poor match for the corpus vocabulary go to
 HyDE or query rewriting; questions requiring evidence chained across documents go
 to iterative multi-hop; questions decomposable into independent sub-questions go
-to multi-agent; and any query with high conflict risk --- sources likely to
-disagree, as with off-label or contested interactions --- goes to MADAM-RAG,
+to multi-agent; and any query with high conflict risk (sources likely to
+disagree, as with off-label or contested interactions) goes to MADAM-RAG,
 regardless of its complexity class.
 The router defaults to a~more thorough pipeline when uncertain, trading latency
 for the safety of the extra reasoning.
 
 Whether that policy is \emph{good} is a~separate question from whether routing is
 the right structure, and this thesis answers only the second.
-The evaluation in \cref{cha:evaluation} supports the structure --- the best mode
+The evaluation in \cref{cha:evaluation} supports the structure (the best mode
 genuinely does depend on the difficulty of the question, which is exactly the
-premise routing rests on --- while showing that the pipeline the router feeds into
+premise routing rests on) while showing that the pipeline the router feeds into
 needs work.
 An ablation isolating the router's own contribution, by comparing it against both
 a~fixed pipeline and an oracle that always picks the best mode per query, is the
@@ -191,7 +191,7 @@ DDI-specific query set is identified as future work (\cref{cha:conclusions}).
 Drug-interaction queries pull retrieval in two opposing directions.
 Drug names and dosage thresholds are \emph{exact strings}: ``warfarin 5\,mg'' and
 ``Coumadin'' are synonyms that BM25 will not associate unless the index includes
-synonym expansion, but ``warfarin'' and ``wafarin'' are not --- a~single character
+synonym expansion, but ``warfarin'' and ``wafarin'' are not: a~single character
 difference denotes a~different substance.
 BM25 is well suited to exact-string matching because it rewards term overlap
 without semantic generalisation.
@@ -229,8 +229,8 @@ Documents absent from one engine's list contribute zero on that side.
 
 The alternative, Reciprocal Rank Fusion~\cite{cormack2009rrf}, discards the scores
 and combines rank positions instead.
-RRF is the more conservative choice --- being rank-based, it cannot be distorted
-by an outlier score --- but it also throws away the \emph{margin} between a
+RRF is the more conservative choice (being rank-based, it cannot be distorted
+by an outlier score), but it also throws away the \emph{margin} between a
 strongly matching passage and a~marginal one, which relative-score fusion
 preserves.
 Since the downstream cross-encoder reranks the fused list anyway, and $\alpha$ is
@@ -316,8 +316,8 @@ different from what is already in the set.
 The greedy procedure runs for $m = 3$ iterations by default, producing a
 three-passage evidence set.
 The design rationale was that a~complete drug-interaction answer needs three
-evidence types --- the pharmacological mechanism, the severity classification, and
-the clinical management recommendation --- which often appear in distinct passages
+evidence types (the pharmacological mechanism, the severity classification, and
+the clinical management recommendation), which often appear in distinct passages
 of a~drug information database.
 
 That rationale holds for a~\emph{two-drug} question and breaks down for anything
@@ -339,8 +339,8 @@ Goldstein~\cite{carbonell1998mmr} for document summarisation.
 The contribution of \rarerag{} is not a~novel selection algorithm but rather the
 application of complementarity-aware selection as an explicit pipeline stage after
 hybrid retrieval and cross-encoder reranking.
-Both parameters are left at neutral defaults --- $\lambda = 0.5$, weighting
-relevance and complementarity equally, and $m = 3$ --- and neither was tuned on
+Both parameters are left at neutral defaults ($\lambda = 0.5$, weighting
+relevance and complementarity equally, and $m = 3$), and neither was tuned on
 held-out data.
 Given how badly the fixed $m$ turns out to perform on multi-drug questions, a
 sweep over $\lambda$ and $m$ is an obvious and cheap experiment, and it is
@@ -363,7 +363,7 @@ Once the LLM generates a~response conditioned on the selected evidence,
 there is no guarantee that every claim in the response is actually supported
 by that evidence.
 The model may fill gaps from parametric knowledge or extrapolate beyond what the
-passages say --- and, as argued in \cref{sec:rarerag_motivation}, a~claim that
+passages say, and, as argued in \cref{sec:rarerag_motivation}, a~claim that
 cannot be traced to a~retrieved passage cannot be verified by a~consulting
 pharmacist.
 
@@ -371,8 +371,8 @@ The grounding verifier addresses this by treating the retrieved passages as the
 authoritative source of truth for the generated response and auditing each
 claim before delivery.
 
-The general shape of this mechanism --- decompose a~response into individually
-checkable claims, then verify each one strictly against the retrieved context ---
+The general shape of this mechanism (decompose a~response into individually
+checkable claims, then verify each one strictly against the retrieved context)
 has since been developed independently and in considerably more depth by Yu
 \etal~\cite{yu2026retromorphic}, who separate the verdict into entailed,
 contradicted and baseless claims rather than the binary judgement used here, and
@@ -388,7 +388,7 @@ the coarsest usable form of the idea.
 
 The verifier operates in two steps.
 
-\paragraph{Step 1 --- Claim extraction.}
+\paragraph{Step 1: Claim extraction.}
 A~structured LLM prompt decomposes the generated response into a~list of
 atomic claims.
 An atomic claim is a~single proposition that can be independently evaluated
@@ -400,7 +400,7 @@ IX, and~X''} is split into two claims:
 \textit{``Vitamin~K epoxide reductase is required for the synthesis of clotting
 factors~II, VII, IX, and~X''}.
 
-\paragraph{Step 2 --- Per-claim grounding check.}
+\paragraph{Step 2: Per-claim grounding check.}
 For each extracted claim $c_i$, the verifier asks whether any passage in
 $\mathcal{S}$ contains sufficient evidence to support $c_i$.
 This is implemented as an LLM call with binary output
@@ -443,21 +443,21 @@ A~lower threshold ($\tau \to 0$) approaches vanilla RAG behaviour (always
 respond); $\tau = 1$ would require every claim to be grounded, which in practice
 rejects any response that includes background pharmacological context not covered
 by the indexed corpus.
-The value is deliberately permissive because it does not act alone --- it gates a
+The value is deliberately permissive because it does not act alone: it gates a
 retry, not a~refusal, and a~claim-level score below 0.3 after a~second attempt is
 strong evidence that the corpus simply does not contain the answer.
 
 \paragraph{The abstention path never executed.}
-Across both benchmarks reported in \cref{cha:evaluation} --- 1{,}000 HotpotQA
-queries and 100 DDI queries --- the system abstained \emph{zero} times.
+Across both benchmarks reported in \cref{cha:evaluation} (1{,}000 HotpotQA
+queries and 100 DDI queries), the system abstained \emph{zero} times.
 The reason is straightforward: every question in both benchmarks was answerable
 from the indexed corpus.
 HotpotQA questions were drawn from the same Wikipedia dump that was indexed, and
 the DDI questions were generated from the OpenFDA and DrugBank passages that were
 also indexed, so the relevant evidence was always present to be retrieved.
-Abstention is designed to fire on a~different situation --- a~question whose
+Abstention is designed to fire on a~different situation (a~question whose
 answer is genuinely absent from the corpus, such as an interaction between two
-drugs that were never indexed --- and neither benchmark contains such questions.
+drugs that were never indexed), and neither benchmark contains such questions.
 Individual first-pass answers did dip below $\tau$ (per-claim scores ranged from
 0.20 to 1.00), but in every case the self-reflection retry lifted the second
 attempt back over the threshold.
@@ -477,7 +477,7 @@ Both were stated before the final evaluation and both were ultimately rejected b
 it; they are kept here as originally posed, and the way they fail is discussed in
 \cref{sec:hypothesis_eval}.
 
-\paragraph{H1 --- Faithfulness.}
+\paragraph{H1: Faithfulness.}
 The grounding verifier suppresses claims not supported by retrieved context,
 directly reducing the hallucination rate captured by the RAGAS faithfulness metric.
 Compared to Self-RAG (which reflects on passages during generation but
@@ -490,7 +490,7 @@ performs no post-generation audit) and vanilla RAG (no grounding control),
   as measured by the RAGAS faithfulness metric on the HotpotQA benchmark.
 \end{hypothesis}
 
-\paragraph{H2 --- Competitive accuracy.}
+\paragraph{H2: Competitive accuracy.}
 The abstention mechanism could in principle reduce Token~F1 if the system
 suppresses answerable queries.
 However, the permissive threshold $\tau = 0.3$ and the complementary evidence
@@ -512,7 +512,7 @@ Corrective RAG~\cite{yan2024crag}.
 Self-RAG also employs reflection tokens to assess retrieved passages and
 generated segments, but operates token by token during generation rather than
 as a~post-generation audit, and requires fine-tuning the language model to emit
-reflection tokens --- a~training requirement that \rarerag{} avoids by
+reflection tokens, a~training requirement that \rarerag{} avoids by
 using prompting only.
 Corrective RAG validates retrieved passages before generation and triggers
 re-retrieval if relevance is low, but does not perform a~post-generation
@@ -533,7 +533,7 @@ downstream evidence-quality components that Adaptive-RAG does not address.
     comparison of selected RAG architectures \emph{as originally proposed}, not as
     deployed here.  A~checkmark means the architecture's own definition includes
     the feature.  Hybrid retrieval is marked $\sim$ for every prior method because
-    none of them mandates it, yet all are compatible with it --- and in the
+    none of them mandates it, yet all are compatible with it, and in the
     \medrag{} platform all modes in fact share one hybrid backend
     (\cref{cha:system_design}).
     \checkmark~=~feature present; ---~=~absent; $\sim$~=~partial or implicit.}

@@ -27,7 +27,7 @@ faithfulness, and cost between three and nine times as much latency to be so.
 
 On the hardest DDI questions the ordering inverts.
 Multi-Agent gains 18.8 points of faithfulness over vanilla ($p = 0.010$) and
-Query Rewriting 17.8 ($p = 0.005$) --- on the same code that lost on HotpotQA.
+Query Rewriting 17.8 ($p = 0.005$), on the same code that lost on HotpotQA.
 The effects are larger on the hard subset ($n = 40$) than over the full DDI set
 ($n = 100$), which is the signature of a~real effect rather than a~sampling
 artefact: shrinking the sample did not dissolve the gains, it sharpened them.
@@ -63,8 +63,8 @@ On a~polypharmacy question involving four drugs, three passages cannot cover fou
 drug profiles plus their pairwise interactions: the selector optimises for
 diversity when the binding constraint is coverage, and starves the generator
 exactly when it needs the most evidence.
-The diagnosis points straight at the repair --- make $m$ a~function of the
-complexity class the router already computes --- which is the first item of future
+The diagnosis points straight at the repair (make $m$ a~function of the
+complexity class the router already computes), which is the first item of future
 work below.
 
 One component of \rarerag{} does survive, and it is the one the whole design rests
@@ -76,13 +76,13 @@ pipeline built on it does not.
 \paragraph{RQ3: Can the system serve as a~reliable technology demonstrator?}
 Yes, with the emphasis on \emph{demonstrator}.
 The platform retrieves, reranks, and grounds answers against OpenFDA and DrugBank
-corpora, and every claim in a~generated answer is traceable to a~cited passage ---
+corpora, and every claim in a~generated answer is traceable to a~cited passage,
 which is the property that makes the output checkable by a~pharmacist and is why
 faithfulness, not fluency, was the metric of record throughout.
 
 Two honest qualifications belong here.
-First, the abstention safeguard never fired --- zero abstentions across 1{,}100
-benchmark queries --- because a~self-reflection retry rescued every weakly
+First, the abstention safeguard never fired (zero abstentions across 1{,}100
+benchmark queries) because a~self-reflection retry rescued every weakly
 grounded answer before the abstention branch was reached
 (\cref{subsec:abstention_reality}).
 The safety property exists in the code; these benchmarks never exercised it, and
@@ -101,7 +101,7 @@ The correctness ceiling here is set by the deliberately small generator
 possible versions of their component.
 A~stronger generator that hallucinates less at baseline, and a~richer,
 professionally curated interaction corpus, address the correctness gap directly,
-where more pipeline machinery did not --- and closing it is a~matter of better
+where more pipeline machinery did not, and closing it is a~matter of better
 resources rather than a~different architecture.
 
 % ------------------------------------------------------------
@@ -117,7 +117,7 @@ The thesis makes four contributions:
     knowledge) and a~purpose-built DDI benchmark ($9 \times 100$ queries,
     five clinical difficulty levels).
     Every comparison is a~paired, per-question contrast against a~vanilla control
-    with a~Wilcoxon signed-rank test and bootstrap confidence intervals --- which
+    with a~Wilcoxon signed-rank test and bootstrap confidence intervals, which
     matters, because several differences that dominate the mode-level averages do
     not survive testing, and reading the averages alone would have drawn
     conclusions from exactly those.
@@ -130,7 +130,7 @@ The thesis makes four contributions:
     The gain appears in grounding, not in accuracy.
     This is a~claim about \emph{when} to reach for a~complex pipeline, and it is
     more useful than a~ranking of architectures precisely because it does not
-    generalise across benchmarks --- which the ranking, presented alone, would have
+    generalise across benchmarks, which the ranking, presented alone, would have
     silently implied.
 
   \item \textbf{RARE-RAG architecture, reported as a~partial negative result.}
@@ -144,7 +144,7 @@ The thesis makes four contributions:
     which is a~more solid contribution than an unqualified claim of superiority.
     Its value rests on the localisation rather than on the honesty: because the
     modes differ only in the pipeline under test, the shortfall is attributable to
-    a~named component and an identified design error --- and
+    a~named component and an identified design error, and
     that is a~reusable finding for anyone assembling a~comparable pipeline, in a
     literature where unsuccessful configurations are rarely reported at all.
 
@@ -193,8 +193,8 @@ brought to the gold answers.
 \emph{No ablation study of \rarerag{} components.}
 The evaluation treats \rarerag{} as a~whole and cannot attribute its failure to
 one component with certainty.
-Set-wise selection is the prime suspect --- the per-level collapse at L4 is exactly
-what over-pruning would produce --- but the router and grounding verifier were
+Set-wise selection is the prime suspect (the per-level collapse at L4 is exactly
+what over-pruning would produce), but the router and grounding verifier were
 active in the same runs, and only an ablation can separate them
 (\cref{subsec:future_ablation}).
 
@@ -218,8 +218,8 @@ The diagnosis in \cref{subsec:rare_verdict} is that set-wise selection starves t
 generator on polypharmacy questions, where four drug profiles and their pairwise
 interactions cannot fit into three passages however complementary they are.
 The router already computes a~complexity class for every query, so the fix is
-nearly free: let $m$ be a~function of that class --- three passages for a
-single-drug lookup, eight or more for an L4--L5 regimen question --- and re-run the
+nearly free: let $m$ be a~function of that class (three passages for a
+single-drug lookup, eight or more for an L4--L5 regimen question), and re-run the
 DDI benchmark.
 This is a~single-parameter change to a~component whose failure mode is understood,
 and it is the first experiment worth running.
@@ -248,8 +248,8 @@ approximated.
 \subsection{Graph-Enhanced Evidence Selection}
 \rarerag{}'s set-wise selection currently treats retrieved chunks as an
 unstructured set.
-Replacing this with a~knowledge-graph expansion step --- mapping drug mentions
-to nodes in a~drug--interaction graph and retrieving neighbourhood subgraphs ---
+Replacing this with a~knowledge-graph expansion step (mapping drug mentions
+to nodes in a~drug--interaction graph and retrieving neighbourhood subgraphs)
 could improve multi-hop reasoning on L3--L5 questions by surfacing mechanistically
 related evidence that keyword or vector search misses.
 
@@ -274,8 +274,8 @@ The Model Context Protocol (MCP)~\cite{anthropic2024mcp} defines a~standard
 interface through which LLM assistants can invoke external tools and data
 sources at inference time.
 Re-implementing \rarerag{} as an MCP server would allow any MCP-compatible
-model to call the full pipeline --- triage, retrieval, reranking, grounding
-verification --- as a~single tool invocation, without requiring the host
+model to call the full pipeline (triage, retrieval, reranking, grounding
+verification) as a~single tool invocation, without requiring the host
 application to manage pipeline orchestration.
 This would shift \medrag{} from a~standalone advisory system to a~reusable
 RAG capability that can be composed into larger clinical workflows: an
@@ -306,8 +306,8 @@ architecture that can be recommended over a~plain retrieve-then-generate pass on
 the strength of these experiments alone.
 The scientific thread ends somewhere more interesting.
 The finding that the value of architectural complexity depends on how hard the
-questions are --- and that what complexity buys is traceability rather than
-accuracy --- suggests that the question ``which RAG architecture is best?'' may be
+questions are (and that what complexity buys is traceability rather than
+accuracy) suggests that the question ``which RAG architecture is best?'' may be
 badly posed, and that ``which architecture for which query?'' is the one worth
 asking.
 That reframing is what motivates routing, and it is why the routing premise is the
@@ -330,8 +330,8 @@ Developing that interpretation properly is beyond the scope of this thesis, but 
 appears to be the natural direction in which the present work extends.
 
 Beyond the specific medical application, the architecture presented here suggests
-that adaptive retrieval pipelines --- ones that select their own depth of reasoning
-per query, and that treat abstention as a~legitimate output rather than a~failure
---- may constitute a~promising direction for trustworthy LLM-based advisory systems
+that adaptive retrieval pipelines (ones that select their own depth of reasoning
+per query, and that treat abstention as a~legitimate output rather than a~failure)
+may constitute a~promising direction for trustworthy LLM-based advisory systems
 in other high-risk domains, wherever an answer must be defensible to a~human expert
 before it can be acted upon.

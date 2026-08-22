@@ -10,7 +10,7 @@
 
 Consider a~patient in their sixties managing three chronic conditions: atrial fibrillation,
 type~2 diabetes, and chronic kidney disease.
-Three separate specialists --- a~cardiologist, an endocrinologist, and a~nephrologist ---
+Three separate specialists (a~cardiologist, an endocrinologist, and a~nephrologist)
 each prescribe their own regimen.
 The result is a~daily combination of seven or more drugs, often without any single
 physician having reviewed the complete medication list for cross-drug interactions.
@@ -139,7 +139,7 @@ HotpotQA ($9 \times 1{,}000$ questions) and a~purpose-built DDI benchmark
 (Token~F1, EM, ROUGE-L), RAGAS-based indicators (faithfulness, answer correctness,
 answer relevance) and latency.
 Every comparison is a~paired, per-question contrast against a~vanilla control,
-tested for significance --- which turns out to matter, because several differences
+tested for significance, which turns out to matter, because several differences
 that look decisive in the mode-level averages do not survive the test.
 
 The central empirical finding: \textbf{the benefit of architectural complexity scales
@@ -151,7 +151,7 @@ Crucially, this gain shows up in faithfulness and not in answer correctness:
 across both benchmarks, no architecture makes the system measurably more likely to
 be \emph{right}, only measurably more likely to be traceable to its sources.
 
-The \textbf{\rarerag{} architecture} --- a~RAG pipeline combining query complexity
+The \textbf{\rarerag{} architecture} is a~RAG pipeline combining query complexity
 routing, hybrid BM25+vector retrieval, set-wise evidence selection, and a~grounding
 verifier with abstention.
 It is reported here as a~partially negative result: the complexity router is
@@ -163,9 +163,9 @@ That negative result is treated here as a~contribution in its own right rather
 than as a~shortfall to be minimised, and it is worth being explicit about why.
 A~result of the form ``the proposed architecture wins'' is only as informative as
 the baseline it was measured against.
-What is reported instead is a~specific design error --- optimising selected
+What is reported instead is a~specific design error: optimising selected
 evidence for diversity when the binding constraint on polypharmacy questions is
-coverage --- which is actionable for anyone building a~similar pipeline.
+coverage, which is actionable for anyone building a~similar pipeline.
 That precision is possible only because all nine modes run on one controlled
 platform sharing a~single retrieval backend, embedding model and generator, so the
 shortfall can be traced to the stage responsible instead of disappearing into an
@@ -173,7 +173,7 @@ end-to-end number.
 Given how rarely unsuccessful configurations are reported at all, such localised
 negative findings are correspondingly scarce.
 
-The \textbf{open-source \medrag{} platform} --- a~microservice system comprising
+The \textbf{open-source \medrag{} platform} is a~microservice system comprising
 14 services with configurable chunking strategies, embedding providers, and RAG modes,
 backed by a~full CI/CD pipeline and Docker deployment.
 

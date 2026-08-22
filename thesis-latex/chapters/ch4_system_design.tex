@@ -20,7 +20,7 @@ Three levels of description are kept deliberately separate across
 why, independently of any particular system.
 The present chapter specifies the \emph{architecture} that realises it: how
 responsibilities are divided between services, what contracts hold between them,
-and how data and control flow through the two runtime pipelines --- all of which
+and how data and control flow through the two runtime pipelines, all of which
 would survive a~change of programming language or vendor.
 \cref{cha:implementation} then covers \emph{implementation}: the concrete
 technologies, libraries and engineering trade-offs chosen to build that
@@ -55,7 +55,7 @@ practice this means that switching an ablation experiment from one RAG
 architecture to another is a~single database field change.
 
 \paragraph{Decoupled, event-driven ingestion.}
-Document ingestion --- parsing, chunking, embedding, and indexing --- is an
+Document ingestion (parsing, chunking, embedding, and indexing) is an
 inherently long-running, batch-oriented workload.  Coupling it to the HTTP
 request cycle would impose unacceptable latency on the upload endpoint and
 prevent independent scaling of compute-heavy stages such as embedding.
@@ -63,8 +63,8 @@ The system therefore implements ingestion as an \emph{asynchronous,
 event-driven pipeline}: the \texttt{ingestion} service accepts the file
 upload, computes a~content hash for deduplication, writes a~pending record
 to MongoDB, and immediately publishes a~message to RabbitMQ.  Downstream
-stages consume that message in sequence --- each consuming one queue, doing
-its work, and publishing to the next --- without any direct coupling between
+stages consume that message in sequence (each consuming one queue, doing
+its work, and publishing to the next) without any direct coupling between
 services.  This mirrors the \emph{pipes-and-filters} pattern
 described by Hohpe and Woolf~\cite{hohpe2003enterprise} and allows each
 stage to be scaled or replaced independently.
@@ -99,7 +99,7 @@ Every service also exposes a~\texttt{GET /health} endpoint that returns a
 fixed JSON body \texttt{\{"status": "ok", "service": "<name>"\}}.  Together,
 these two mechanisms make it possible to trace a~single user request through
 fourteen services and to verify the health of the entire cluster with a
-simple scripted loop --- a~capability that is heavily used by the
+simple scripted loop, a~capability that is heavily used by the
 GitHub Actions CI smoke test described in \cref{cha:implementation}.
 
 \paragraph{Minimal operational footprint.}
@@ -128,7 +128,7 @@ identify the actors and external systems that interact with it.
 \end{figure}
 
 Two human actors interact with \medrag{}.  The first is the
-\emph{end user} --- in the motivating scenario, a~physician or pharmacist ---
+\emph{end user} (in the motivating scenario, a~physician or pharmacist),
 who submits natural-language questions about potential drug interactions and
 receives annotated, citation-backed answers via a~Next.js web interface.
 The second is the \emph{administrator}, who manages the knowledge base:
@@ -254,13 +254,13 @@ benchmark gold answers and are reported in \cref{cha:evaluation}.  Results are p
 that the evaluation scripts described in \cref{cha:evaluation} can
 retrieve them in bulk.
 
-The two persistent stores --- MongoDB and Weaviate --- are physically shared, but
+The two persistent stores (MongoDB and Weaviate) are physically shared, but
 each collection has a~single owning service that is the only one allowed to write
 to it.  Weaviate is written only by \texttt{indexing} and queried only by
 \texttt{retrieval}.  In MongoDB, \texttt{admin} owns the \texttt{projects}
 collection, \texttt{orchestrator} owns \texttt{conversations}, and \texttt{eval}
 owns \texttt{eval\_results}.  Other services may \emph{read} these collections
---- the orchestrator reads a~project's settings, for instance --- but never write
+(the orchestrator reads a~project's settings, for instance) but never write
 outside their own.  So when the orchestrator persists a~conversation it is writing
 to its own collection, not reaching into another service's.  This ownership rule
 keeps the shared database from silently becoming a~coupling point through which
@@ -285,8 +285,8 @@ question into a~streamed, citation-annotated answer.
 When the client submits a~query, the browser sends a~\texttt{POST} request
 to the \texttt{api-gateway} accompanied by a~\texttt{Bearer} token in the
 \texttt{Authorization} header.  The gateway decodes and verifies the JWT
-without contacting the \texttt{auth} service --- verification is performed
-locally using the shared \texttt{JWT\_SECRET} --- and attaches the decoded
+without contacting the \texttt{auth} service (verification is performed
+locally using the shared \texttt{JWT\_SECRET}) and attaches the decoded
 user identity to the forwarded request.  If the token is absent or invalid,
 the gateway returns \texttt{401 Unauthorized} immediately and the request
 does not proceed.  A~fresh \texttt{X-Trace-Id} value is generated (or
@@ -301,9 +301,9 @@ query is passed directly to retrieval.  In \texttt{hyde} mode the
 orchestrator first calls the \texttt{query-processor} service, which asks the
 LLM to produce a~hypothetical answer document~\cite{gao2022hyde}; that
 synthetic document is then encoded and used as the retrieval query instead of
---- or concatenated with --- the original question.  In \texttt{self\_reflection}
+(or concatenated with) the original question.  In \texttt{self\_reflection}
 mode the orchestrator drafts a~full answer, scores its own sufficiency with a
-separate LLM call, and --- if the score falls below a~fixed threshold ---
+separate LLM call, and, if the score falls below a~fixed threshold,
 appends a~refinement instruction to the query and re-retrieves before drafting
 again, for at most two iterations.  This is a~deliberately simplified,
 prompt-based approximation of Self-RAG~\cite{asai2024selfrag}: it operates on the
@@ -315,7 +315,7 @@ The three agentic modes each run a~multi-stage exchange rather than a~single
 retrieval pass.  In \texttt{multi\_agent} mode a~planner agent decomposes the
 question into sub-tasks; one executor agent per sub-task retrieves
 independently and returns a~focused finding; and a~QA agent synthesises those
-findings into the final answer.  No voting takes place --- the agents divide the
+findings into the final answer.  No voting takes place: the agents divide the
 work, they do not compete on it.  In \texttt{iterative\_multihop} mode the
 orchestrator runs a~sequential chain of retrieval hops (two by default, three on
 the DDI corpus), each hop formulated from what the previous hops established, so
@@ -347,7 +347,7 @@ user can never retrieve chunks that belong to a~different project.
 
 The query text is first converted to a~dense vector by calling the
 \texttt{embedding} service using the same provider and model that was used
-during ingestion --- a~consistency requirement enforced by reading the
+during ingestion, a~consistency requirement enforced by reading the
 project's \texttt{embedding\_provider} setting from MongoDB before issuing
 the request.  Mismatches between ingestion-time and query-time embedding
 models are therefore impossible within a~single project, though the
@@ -359,8 +359,8 @@ After retrieval, the ranked list of candidate chunks is passed to the
 \texttt{reranker} service.  The reranker loads the
 \texttt{BAAI/bge-reranker-v2-m3} cross-encoder model, which jointly encodes
 each (query, passage) pair to produce a~relevance score.  Unlike the
-bi-encoder used during retrieval --- which embeds query and passage
-independently --- the cross-encoder is aware of the interaction between
+bi-encoder used during retrieval (which embeds query and passage
+independently), the cross-encoder is aware of the interaction between
 query tokens and passage tokens, leading to more accurate relevance scores
 at the cost of higher computational latency.  The reranker returns the
 top-$n$ chunks (default $n = 5$) sorted by cross-encoder score.
@@ -383,8 +383,8 @@ Once the full response has been assembled, the generation service runs a
 citation-extraction step: it identifies bracketed numeric references in the
 generated text and maps them to the corresponding chunk identifiers, building
 a~\texttt{sources} list that is appended to the SSE stream as a~final JSON
-event.  The orchestrator persists the completed exchange --- user message,
-assistant message, and sources --- as a~new entry in the conversation document
+event.  The orchestrator persists the completed exchange (user message,
+assistant message, and sources) as a~new entry in the conversation document
 in MongoDB.
 
 \paragraph{Post-query evaluation event.}
@@ -434,7 +434,7 @@ with routing keys \texttt{parse}, \texttt{chunk}, \texttt{embed}, and
 \texttt{index}.  Each stage of the pipeline binds to one queue, processes
 the message, and publishes to the next routing key.  Using a~topic exchange
 rather than direct point-to-point connections means that additional
-processing stages --- for example, language detection or quality filtering ---
+processing stages (for example, language detection or quality filtering)
 can be introduced by binding a~new queue and consumer to the exchange without
 modifying existing services.
 
@@ -508,8 +508,8 @@ and Weaviate for the vector index that powers semantic retrieval.
 \subsection{MongoDB Collections}
 
 MongoDB was chosen over a~relational database for three reasons.
-The schema of key documents --- particularly \texttt{projects.settings}
-and \texttt{conversations.messages} --- is intentionally variable; adding a
+The schema of key documents (particularly \texttt{projects.settings}
+and \texttt{conversations.messages}) is intentionally variable; adding a
 new RAG mode or metric field requires no migration.
 The document model also maps naturally onto the JSON payloads exchanged
 between services, reducing serialisation overhead.
@@ -607,14 +607,14 @@ of \texttt{efConstruction=64}.  These values produce a~compact index whose
 approximate-nearest-neighbour search offers high recall (typically above 95\%
 at \texttt{ef=128} query time) with sub-millisecond latency for corpora of
 up to several hundred thousand vectors~\cite{malkov2018hnsw}.  For the
-experimental datasets used in \cref{cha:evaluation} --- a~few tens
-of thousands of drug-interaction chunks --- the index operates well within
+experimental datasets used in \cref{cha:evaluation} (a~few tens
+of thousands of drug-interaction chunks), the index operates well within
 these limits.
 
 The \texttt{project\_id} filter applied to every query does double duty.
 Weaviate's \texttt{where} filter is evaluated at the index
 level before distance computation, so documents from other
-projects incur no scoring overhead --- and cannot leak into the result
+projects incur no scoring overhead, and cannot leak into the result
 set, a~property the security model in \cref{sec:security} depends on.
 
 \subsection{Rationale for the Hybrid Store Architecture}
@@ -660,7 +660,7 @@ level to allow initial credential establishment.  JWTs are signed with
 HMAC-SHA256 using a~secret read from the \texttt{JWT\_SECRET} environment
 variable.  The default expiry is 1440 minutes (24 hours), configurable
 through \texttt{JWT\_EXPIRE\_MINUTES}.  The gateway validates the signature
-and expiry locally --- without a~network call to the \texttt{auth} service ---
+and expiry locally (without a~network call to the \texttt{auth} service)
 by sharing the same \texttt{JWT\_SECRET}.  This design keeps the \texttt{auth}
 service off the hot path and ensures that authentication adds negligible
 latency.
@@ -668,7 +668,7 @@ latency.
 The user record's \texttt{role} field is embedded in the JWT payload at
 issuance time.  The gateway reads this field and attaches it to the
 forwarded request as the \texttt{X-User-Role} header.  Services that
-implement role-based endpoints --- primarily \texttt{admin} --- inspect this
+implement role-based endpoints (primarily \texttt{admin}) inspect this
 header through a~FastAPI dependency and return \texttt{403 Forbidden} if
 the role is insufficient, without issuing any additional database query.
 
@@ -697,7 +697,7 @@ At the data level, the \texttt{retrieval} service passes a
   \texttt{project\_id} = \langle \text{authenticated project id} \rangle.
 \end{equation*}
 Because this filter is encoded inside the service and derived from the
-validated JWT payload --- never from user-supplied input --- it cannot be
+validated JWT payload (never from user-supplied input), it cannot be
 bypassed by a~malicious query.  Even if an attacker could forge a~valid
 project identifier for a~project they do not own, the orchestrator-level
 ownership check would catch it first.  The combination of the two checks
@@ -712,8 +712,8 @@ any one service that incorrectly assembles a~Weaviate filter would not
 leak metadata through the MongoDB layer.
 
 \paragraph{Secrets management.}
-All secrets --- \texttt{JWT\_SECRET}, \texttt{OPENROUTER\_API\_KEY},
-\texttt{COHERE\_API\_KEY}, database passwords --- are supplied exclusively
+All secrets (\texttt{JWT\_SECRET}, \texttt{OPENROUTER\_API\_KEY},
+\texttt{COHERE\_API\_KEY}, database passwords) are supplied exclusively
 through environment variables read at startup by \texttt{pydantic-settings}.
 No secret appears in source code, Docker images, or version control.
 The \texttt{.env.example} file in the repository root contains placeholder

@@ -8,7 +8,7 @@ This chapter discusses implementation decisions rather than architectural
 concepts.  The service decomposition, the contracts between services, and the two
 runtime pipelines are specified in \cref{cha:system_design}; what follows is how
 that design was actually built.  Rather than walking through the code exhaustively,
-the focus is on the non-trivial choices --- ones that required a~genuine trade-off
+the focus is on the non-trivial choices: ones that required a~genuine trade-off
 or that differ from a~textbook solution.  Six topics are covered: the technology
 stack and its rationale~(\cref{sec:tech_stack}), the provider abstraction for
 dense embeddings~(\cref{sec:embedding_abstraction}), the hybrid retrieval
@@ -38,7 +38,7 @@ coupling callers to concrete types.
 Package management is handled exclusively by \textbf{uv}, the Rust-based
 package resolver and installer.  Compared with the traditional
 \texttt{pip}+\texttt{venv} toolchain, \texttt{uv} resolves and installs a
-typical service's dependency graph in under three seconds --- an order of
+typical service's dependency graph in under three seconds, an order of
 magnitude faster than \texttt{pip}, which makes a~noticeable difference in CI
 build times and iterative development.  Each service carries its own
 \texttt{pyproject.toml} and \texttt{uv.lock} file; lock files are committed
@@ -46,8 +46,8 @@ to the repository to guarantee reproducible builds.
 
 Service configuration is declared through \textbf{pydantic-settings}: a~typed
 \texttt{Settings} class reads values from environment variables and from an
-optional \texttt{.env} file.  This gives strong validation --- a~malformed
-integer or missing mandatory variable fails fast at startup --- while remaining
+optional \texttt{.env} file.  This gives strong validation (a~malformed
+integer or missing mandatory variable fails fast at startup) while remaining
 fully compatible with twelve-factor conventions.
 
 Observability is provided by \emph{structured JSON logging} implemented in the
@@ -60,8 +60,8 @@ end-to-end correlation of a~single user query across the entire call graph.
 
 \paragraph{Front-end.}
 The web client is a~\textbf{Next.js~15} application written in TypeScript.
-UI components are drawn from the \textbf{shadcn/ui} library --- a~collection of
-accessible, unstyled primitives built on top of Radix UI --- styled with
+UI components are drawn from the \textbf{shadcn/ui} library (a~collection of
+accessible, unstyled primitives built on top of Radix UI), styled with
 \textbf{Tailwind CSS}.  The App Router is used throughout; streaming responses
 from the generation service are consumed via the browser's native
 \texttt{EventSource} API (see \cref{sec:sse_streaming}).
@@ -117,7 +117,7 @@ providers to exploit vectorised inference efficiently.
 
 \begin{lstlisting}[language=Python,
   caption={Embedding provider strategy: abstract interface with three concrete
-    implementations --- local BGE-M3, OpenAI, and OpenRouter (signatures simplified).},
+    implementations: local BGE-M3, OpenAI, and OpenRouter (signatures simplified).},
   label={lst:embedding_abc}]
 from abc import ABC, abstractmethod
 
@@ -153,15 +153,15 @@ weights for \texttt{LocalBGEProvider}, or initialising the SDK client for the
 API-based providers), and stores the instance in the FastAPI application state.
 All endpoints that require embeddings declare a~\texttt{Depends(get\_provider)}
 parameter; FastAPI resolves this dependency automatically.  No
-business-logic code imports a~concrete provider class --- only the abstract base
-class --- so changing the provider is an environment variable change,
+business-logic code imports a~concrete provider class (only the abstract base
+class), so changing the provider is an environment variable change,
 nothing more.
 
 This is the one axis of the strategy pattern (\cref{cha:system_design}) that is
 bound per service deployment rather than per project.  The reason is practical:
-an embedding model must be the same for indexing a~corpus and for querying it ---
-mixing a~1{,}024-dimensional and a~1{,}536-dimensional space in one Weaviate
-collection is not meaningful --- so the provider is fixed for the whole
+an embedding model must be the same for indexing a~corpus and for querying it
+(mixing a~1{,}024-dimensional and a~1{,}536-dimensional space in one Weaviate
+collection is not meaningful), so the provider is fixed for the whole
 service and its indexed data, not switched per query the way \texttt{rag\_mode}
 is.  Comparing embedding providers therefore means re-indexing under each, which
 is exactly how the provider table below was produced.
@@ -206,7 +206,7 @@ this thesis.)
 \label{sec:hybrid_search}
 
 Retrieval quality is central to the performance of any RAG system, and a~hybrid
-search strategy --- combining dense vector similarity with sparse lexical matching ---
+search strategy (combining dense vector similarity with sparse lexical matching)
 consistently outperforms either mode alone across diverse question
 types~\cite{thakur2021beir}.  This section describes how hybrid search is
 implemented in \medrag{} and how the blending parameter was tuned.
@@ -287,7 +287,7 @@ drug-interaction domain.  \cref{tab:alpha_grid} reports the results.
 
 The equal-weight blend (\(\alpha = 0.5\)) produced the highest scores on both
 metrics.  This makes sense given the mix of question types.  HotpotQA questions
-frequently hinge on named entities --- people, places, titles, dates --- for which
+frequently hinge on named entities (people, places, titles, dates) for which
 BM25's exact-match signal is valuable, since pure vector retrieval tends to surface
 thematically related passages that omit the specific entity the question turns on.
 At the same time, many questions are paraphrased rather than quoting the source
@@ -309,8 +309,8 @@ re-ranking cost: scoring 20 query--passage pairs with the BGE-reranker-v2-m3
 cross-encoder takes on the order of a~few hundred milliseconds on the experiment
 hardware, small relative to the multi-second LLM generation that follows and
 therefore acceptable for interactive use.
-The reranker selects its compute device at start-up --- Apple Metal (MPS) where
-available, CUDA on an NVIDIA host, CPU otherwise --- so on the Apple Silicon
+The reranker selects its compute device at start-up (Apple Metal/MPS where
+available, CUDA on an NVIDIA host, CPU otherwise), so on the Apple Silicon
 machine used for the experiments it runs on the integrated GPU rather than on the
 CPU.
 The re-ranker produces a~calibrated relevance score for each (query, passage)
@@ -323,8 +323,8 @@ level, ensuring strict multi-tenancy.
 \label{sec:sse_streaming}
 
 In a~conversational advisory system, perceived latency matters as much as actual
-latency.  Displaying the first tokens of an answer within a~second of submission ---
-even though the full answer may take five to ten seconds to generate --- substantially
+latency.  Displaying the first tokens of an answer within a~second of submission
+(even though the full answer may take five to ten seconds to generate) substantially
 improves the user experience.  \medrag{} implements \emph{Server-Sent Events} (SSE)
 streaming end-to-end: from the OpenAI SDK to the browser, without accumulating the
 full response in memory at any intermediate service.
@@ -484,8 +484,8 @@ interactive query load.
 Results are stored as documents in the MongoDB \texttt{eval\_results} collection.
 Each document records the metric scores, the per-query input and output token
 counts and measured latency, the timestamp, and the identifiers required to join
-back to the conversation and the project settings, enabling post-hoc analysis ---
-including the token-usage figures the cost estimate above is based on --- across
+back to the conversation and the project settings, enabling post-hoc analysis
+(including the token-usage figures the cost estimate above is based on) across
 experimental conditions.
 
 % ------------------------------------------------------------

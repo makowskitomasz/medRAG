@@ -5,7 +5,7 @@
 \label{cha:background}
 
 To understand where RAG systems stand today, it helps to look at how they got there.
-This chapter follows that path --- from the limitations of purely parametric language
+This chapter follows that path: from the limitations of purely parametric language
 models through the retrieval techniques that make RAG tick, to the range of
 architectural families that have emerged between 2020 and 2026.
 \cref{fig:rag_timeline} marks the key milestones along the way.
@@ -33,8 +33,8 @@ Large language models trained on web-scale datasets have shown remarkable
 competence across a~surprisingly wide range of natural language tasks: translation,
 summarisation, factual question answering, code generation, and multi-step
 reasoning~\cite{ji2023hallucination}.
-These capabilities come from parametric knowledge --- patterns encoded into billions of
-weights during training --- and they scale, roughly predictably, with model size
+These capabilities come from parametric knowledge (patterns encoded into billions of
+weights during training), and they scale, roughly predictably, with model size
 and training data volume.
 
 The same training process that confers this breadth also imposes real constraints
@@ -44,8 +44,8 @@ training data collection ends is simply absent from the model.
 For rapidly evolving fields like pharmacology or clinical guidelines, a~six-month
 knowledge lag can be clinically significant.
 Then there is hallucination.
-The term covers a~wide range of failure modes --- confabulation of specific figures,
-citation of non-existent papers, confident statement of incorrect facts --- but
+The term covers a~wide range of failure modes (confabulation of specific figures,
+citation of non-existent papers, confident statement of incorrect facts), but
 the underlying cause is consistent: the model generates the most probable
 continuation of a~prompt, not the most faithful one~\cite{ji2023hallucination}.
 On open-domain question-answering benchmarks, even state-of-the-art models without
@@ -86,15 +86,15 @@ The use of a~dense retriever (specifically DPR~\cite{karpukhin2020dpr}) rather
 than BM25 enabled retrieval based on semantic similarity rather than lexical overlap,
 which turned out to be critical for multi-hop and paraphrased queries.
 The end-to-end training setup also allowed retriever and generator to be
-jointly optimised --- though this joint training proved difficult to scale
+jointly optimised, though this joint training proved difficult to scale
 and was largely abandoned in later work in favour of fixed retrievers
 paired with larger generators.
 
 On Natural Questions and TriviaQA, the RAG model outperformed parametric-only
 models of comparable size by 5--10 points of Exact Match, establishing retrieval
 augmentation as a~reliable lever for factual accuracy.
-The core insight --- that non-parametric memory can substitute for parametric
-memorisation of facts --- appears to have remained largely unchallenged since,
+The core insight, that non-parametric memory can substitute for parametric
+memorisation of facts, appears to have remained largely unchallenged since,
 and underpins the architectures surveyed in the remainder of this chapter.
 
 % ------------------------------------------------------------
@@ -169,7 +169,7 @@ producing an encoder that transfers better across domains.
 Both DPR and Contriever share a~representation bottleneck: each passage is compressed
 into a~single embedding, which inevitably loses detail.
 For passages containing multiple facts, the embedding essentially reflects their
-centroid --- a~problematic average that may not accurately represent any individual
+centroid, a~problematic average that may not accurately represent any individual
 claim.
 
 \subsection{Late Interaction: ColBERT}
@@ -223,7 +223,7 @@ producing a~relevance score that captures fine-grained interaction.
 This is computationally expensive at scale but considerably more accurate than
 bi-encoder approaches.
 In practice, cross-encoders are applied only to the top-$k$ candidates from a
-first-stage retriever --- a~pattern known as retrieve-then-rerank.
+first-stage retriever, a~pattern known as retrieve-then-rerank.
 The \medrag{} system uses BGE-reranker-v2-m3, a~multilingual cross-encoder
 from the BAAI general embedding family that performs well on the BEIR benchmark.
 
@@ -334,8 +334,8 @@ retrieval-specific fine-tuning.
 Gao \etal~\cite{gao2022hyde} proposed Hypothetical Document Embeddings (HyDE) as a
 solution.
 Rather than embedding the query directly, the system uses an LLM to generate a
-\emph{hypothetical} document that would answer the query --- a~plausible but
-not necessarily accurate passage --- and embeds that hypothetical document instead.
+\emph{hypothetical} document that would answer the query (a~plausible but
+not necessarily accurate passage), and embeds that hypothetical document instead.
 The intuition is that the hypothetical document lives in the same embedding space as
 real corpus passages, even if the facts it contains are wrong.
 Retrieval then finds real passages that are semantically similar to the hypothetical one.
@@ -390,7 +390,7 @@ long-form generation tasks, especially on questions that require synthesising
 information from multiple sources.
 The explicit reasoning about evidence quality improves factual accuracy, but at the
 cost of higher latency from interleaved retrieval calls and the requirement for a
-fine-tuned model --- vanilla decoder models do not produce the reflection tokens
+fine-tuned model: vanilla decoder models do not produce the reflection tokens
 needed for the mechanism to operate.
 That fine-tuning requirement is the reason the \texttt{self\_reflection} mode
 evaluated in this thesis is a~simplified, prompt-based approximation rather than a
@@ -419,7 +419,7 @@ The \texttt{corrective\_rag} mode evaluated in \cref{cha:evaluation} replaces th
 fine-tuned evaluator with a~threshold on the raw hybrid retrieval score, and
 replaces the web-search fallback with a~broadened re-query of the same corpus.
 A~closed-corpus advisory system cannot responsibly cite the open web on a
-drug-safety question, so the omission is deliberate --- but it means the mode as
+drug-safety question, so the omission is deliberate, but it means the mode as
 evaluated here tests a~relevance-gated re-retrieval strategy rather than CRAG's
 central claim.
 
@@ -457,14 +457,14 @@ extraction pipeline.
 At query time, it performs graph traversal to find relevant communities of entities,
 then generates summaries of those communities as retrieval context.
 GraphRAG showed substantial improvements over flat RAG on global summarisation
-tasks --- questions that require synthesising information spread across an entire
+tasks, questions that require synthesising information spread across an entire
 corpus rather than retrieving specific passages.
 
 RAPTOR~\cite{sarthi2024raptor} takes a~complementary approach: rather than building
 a~graph, it recursively summarises clusters of related documents into a~tree
 structure, then retrieves from both leaf nodes (raw passages) and internal nodes
 (summaries).
-This allows retrieval at multiple levels of abstraction --- broad questions from
+This allows retrieval at multiple levels of abstraction: broad questions from
 summaries, narrow questions from raw passages.
 
 Both approaches share a~significant practical drawback: the indexing pipeline is
@@ -511,10 +511,10 @@ agentic RAG as a~partially observable sequential decision process and classifies
 systems by planning mechanism, retrieval orchestration, memory paradigm and tool
 behaviour.
 Among the systemic risks they identify in autonomous retrieval loops is the
-propagation of hallucinated content between steps --- the failure mode that
+propagation of hallucinated content between steps, the failure mode that
 motivates the post-generation grounding check proposed in \cref{cha:rare_rag}.
 At the high end, systems such as A-RAG~\cite{du2026arag} expose three distinct
-retrieval interfaces --- keyword search, semantic search, and chunk read --- directly
+retrieval interfaces (keyword search, semantic search, and chunk read) directly
 to the LLM as callable tools, allowing the model to compose retrieval strategies
 rather than following a~predetermined pipeline.
 
@@ -530,7 +530,7 @@ for questions with ambiguous or conflicting evidence.
 Multiple agents retrieve evidence independently and argue for different candidate
 answers, with a~judge agent synthesising the debate into a~final response.
 While compelling for disambiguation tasks, the debate mechanism adds substantial
-overhead without benefit when the question has a~unique, retrievable answer ---
+overhead without benefit when the question has a~unique, retrievable answer,
 making it better suited to open-ended tasks than factoid retrieval.
 Well-designed agentic architectures that exploit parallel tool calls can achieve
 competitive latency despite higher total token counts, since the wall-clock cost
@@ -543,7 +543,7 @@ is determined by the critical path rather than total compute.
 Evaluating RAG systems is harder than evaluating either retrieval or generation
 in isolation, because quality depends on how the two components interact.
 A~system that retrieves perfect evidence but generates a~garbled answer, or one that
-generates a~fluent response from irrelevant passages, will both fail --- in different
+generates a~fluent response from irrelevant passages, will both fail, in different
 ways that aggregate metrics may obscure.
 
 \subsection{Lexical Overlap Metrics}
@@ -722,7 +722,7 @@ selecting a~retrieval strategy: Adaptive-RAG routes by linguistic complexity,
 but not by domain-specific risk.
 All surveyed architectures rank retrieved evidence individually, while evaluating
 evidence complementarity as a~set is absent from the standard RAG toolbox.
-And abstention mechanisms --- declining to answer when evidence is insufficient ---
+And abstention mechanisms (declining to answer when evidence is insufficient)
 are treated as optional features rather than first-class design goals, despite
 being central to high-stakes advisory.
 \rarerag{} addresses all three gaps in a~single architecture.
