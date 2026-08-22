@@ -30,7 +30,7 @@ made later in the thesis.
 \subsection{The Promise and Limits of Large Language Models}
 
 Large language models trained on web-scale datasets have shown remarkable
-competence across a surprisingly wide range of natural language tasks: translation,
+competence across a~surprisingly wide range of natural language tasks: translation,
 summarisation, factual question answering, code generation, and multi-step
 reasoning~\cite{ji2023hallucination}.
 These capabilities come from parametric knowledge --- patterns encoded into billions of
@@ -39,20 +39,20 @@ and training data volume.
 
 The same training process that confers this breadth also imposes real constraints
 for knowledge-intensive applications.
-To begin with, parametric knowledge has a fixed cutoff: anything published after
+To begin with, parametric knowledge has a~fixed cutoff: anything published after
 training data collection ends is simply absent from the model.
-For rapidly evolving fields like pharmacology or clinical guidelines, a six-month
+For rapidly evolving fields like pharmacology or clinical guidelines, a~six-month
 knowledge lag can be clinically significant.
 Then there is hallucination.
-The term covers a wide range of failure modes --- confabulation of specific figures,
+The term covers a~wide range of failure modes --- confabulation of specific figures,
 citation of non-existent papers, confident statement of incorrect facts --- but
 the underlying cause is consistent: the model generates the most probable
-continuation of a prompt, not the most faithful one~\cite{ji2023hallucination}.
+continuation of a~prompt, not the most faithful one~\cite{ji2023hallucination}.
 On open-domain question-answering benchmarks, even state-of-the-art models without
 retrieval still produce incorrect answers in 20--40\% of cases depending on
 question difficulty.
-A third issue is traceability: even when a parametric model is correct,
-it cannot tell a user which document or source supports which claim,
+A~third issue is traceability: even when a~parametric model is correct,
+it cannot tell a~user which document or source supports which claim,
 which makes verification and trust calibration difficult in practice.
 
 \subsection{Non-Parametric Knowledge and the Retrieval Hypothesis}
@@ -60,7 +60,7 @@ which makes verification and trust calibration difficult in practice.
 One natural response to these limitations is to decouple knowledge storage from
 model parameters.
 Rather than encoding facts into weights at training time, the idea is to store them
-in a searchable index and retrieve the relevant subset at inference time.
+in a~searchable index and retrieve the relevant subset at inference time.
 This is what might be called the \emph{retrieval hypothesis}: language models can
 be substantially more accurate and more transparent when conditioned on retrieved
 evidence, even if that evidence was never seen during training.
@@ -76,13 +76,13 @@ different from anything earlier sparse-retrieval systems had achieved.
 
 Lewis \etal~\cite{lewis2020rag} formalised this combination as Retrieval-Augmented
 Generation and demonstrated it on knowledge-intensive NLP tasks.
-Their architecture is conceptually simple: given a query~$q$, retrieve the
-top-$k$ documents $\{d_1, \ldots, d_k\}$ from a non-parametric memory using a dense
-retriever, concatenate them with the query into a context window, and generate the
-answer with a sequence-to-sequence model conditioned on that context.
+Their architecture is conceptually simple: given a~query~$q$, retrieve the
+top-$k$ documents $\{d_1, \ldots, d_k\}$ from a~non-parametric memory using a~dense
+retriever, concatenate them with the query into a~context window, and generate the
+answer with a~sequence-to-sequence model conditioned on that context.
 
 Two key design choices in the RAG framework shaped much of the subsequent work.
-The use of a dense retriever (specifically DPR~\cite{karpukhin2020dpr}) rather
+The use of a~dense retriever (specifically DPR~\cite{karpukhin2020dpr}) rather
 than BM25 enabled retrieval based on semantic similarity rather than lexical overlap,
 which turned out to be critical for multi-hop and paraphrased queries.
 The end-to-end training setup also allowed retriever and generator to be
@@ -92,7 +92,7 @@ paired with larger generators.
 
 On Natural Questions and TriviaQA, the RAG model outperformed parametric-only
 models of comparable size by 5--10 points of Exact Match, establishing retrieval
-augmentation as a reliable lever for factual accuracy.
+augmentation as a~reliable lever for factual accuracy.
 The core insight --- that non-parametric memory can substitute for parametric
 memorisation of facts --- appears to have remained largely unchallenged since,
 and underpins the architectures surveyed in the remainder of this chapter.
@@ -101,8 +101,8 @@ and underpins the architectures surveyed in the remainder of this chapter.
 \section{Retrieval Foundations}
 \label{sec:retrieval_foundations}
 
-The quality of a RAG system's answers is fundamentally bounded by the quality of
-its retrieval: a generator conditioned on irrelevant or incorrect passages cannot
+The quality of a~RAG system's answers is fundamentally bounded by the quality of
+its retrieval: a~generator conditioned on irrelevant or incorrect passages cannot
 recover the right answer.
 Getting the retrieval layer right is therefore central to understanding why different
 RAG architectures perform differently.
@@ -110,10 +110,10 @@ RAG architectures perform differently.
 \subsection{Sparse Retrieval}
 
 The oldest and most practically robust retrieval approach is sparse term matching.
-BM25~\cite{robertson2009bm25}, a probabilistic extension of TF-IDF, scores document--query
-relevance as a weighted sum of inverse document frequency terms,
-with a saturation function that limits the impact of very high term frequencies.
-Given a query $Q = \{q_1, \ldots, q_n\}$ and a document $D$, the BM25 score is:
+BM25~\cite{robertson2009bm25}, a~probabilistic extension of TF-IDF, scores document--query
+relevance as a~weighted sum of inverse document frequency terms,
+with a~saturation function that limits the impact of very high term frequencies.
+Given a~query $Q = \{q_1, \ldots, q_n\}$ and a~document $D$, the BM25 score is:
 
 \begin{equation}
   \text{BM25}(D, Q) = \sum_{i=1}^{n} \text{IDF}(q_i)
@@ -131,14 +131,14 @@ BEIR heterogeneous retrieval benchmark~\cite{thakur2021beir}, it actually outper
 many neural retrievers on out-of-domain corpora.
 
 SPLADE~v2 extended the sparse paradigm to learned sparse representations,
-where a BERT encoder produces a sparse vector over the vocabulary rather than
-a dense embedding.
+where a~BERT encoder produces a~sparse vector over the vocabulary rather than
+a~dense embedding.
 This combines the efficiency of inverted-index retrieval with the contextual
 understanding of transformers, achieving strong results on in-domain benchmarks
 while retaining interpretability through explicit vocabulary weights.
 
-The main limitation of sparse methods is lexical dependence: a query about
-``myocardial infarction'' will fail to retrieve a highly relevant passage that
+The main limitation of sparse methods is lexical dependence: a~query about
+``myocardial infarction'' will fail to retrieve a~highly relevant passage that
 uses only ``heart attack''.
 This is what motivated the dense retrieval line of work.
 
@@ -147,14 +147,14 @@ This is what motivated the dense retrieval line of work.
 Dense Passage Retrieval (DPR)~\cite{karpukhin2020dpr} encodes queries and passages
 into fixed-dimensional vectors using separate BERT encoders, and retrieves by
 approximate nearest-neighbour search in the embedding space.
-Given a query encoder $E_Q$ and a passage encoder $E_P$, relevance is scored as
+Given a~query encoder $E_Q$ and a~passage encoder $E_P$, relevance is scored as
 
 \begin{equation}
   \text{sim}(q, p) = E_Q(q)^\top E_P(p)
   \label{eq:dpr}
 \end{equation}
 
-\noindent and the top-$k$ passages are retrieved from a pre-built FAISS index using
+\noindent and the top-$k$ passages are retrieved from a~pre-built FAISS index using
 maximum inner product search.
 The encoders are fine-tuned on question--passage pairs so that relevant passages
 cluster near their questions in the embedding space.
@@ -162,21 +162,21 @@ cluster near their questions in the embedding space.
 DPR substantially outperforms BM25 on in-domain benchmarks such as Natural Questions,
 but these gains proved fragile: the model generalises poorly to new domains without
 fine-tuning.
-Contriever~\cite{izacard2021contriever} addressed this by using a contrastive
+Contriever~\cite{izacard2021contriever} addressed this by using a~contrastive
 self-supervised training objective that requires no labelled question--passage pairs,
 producing an encoder that transfers better across domains.
 
-Both DPR and Contriever share a representation bottleneck: each passage is compressed
-into a single embedding, which inevitably loses detail.
+Both DPR and Contriever share a~representation bottleneck: each passage is compressed
+into a~single embedding, which inevitably loses detail.
 For passages containing multiple facts, the embedding essentially reflects their
-centroid --- a problematic average that may not accurately represent any individual
+centroid --- a~problematic average that may not accurately represent any individual
 claim.
 
 \subsection{Late Interaction: ColBERT}
 
-ColBERT~\cite{khattab2020colbert} proposed a compromise between the efficiency of
+ColBERT~\cite{khattab2020colbert} proposed a~compromise between the efficiency of
 single-vector retrieval and the expressiveness of cross-encoder reranking.
-Rather than encoding a passage into a single vector, ColBERT produces a sequence
+Rather than encoding a~passage into a~single vector, ColBERT produces a~sequence
 of token-level embeddings for both query ($\mathbf{q}_1,\ldots,\mathbf{q}_m$) and passage
 ($\mathbf{p}_1,\ldots,\mathbf{p}_n$).
 Relevance is computed as the \emph{MaxSim} score:
@@ -195,15 +195,15 @@ while still allowing passage embeddings to be pre-computed.
 ColBERTv2~\cite{santhanam2022colbertv2} improved on the original through
 residual compression and distillation, reducing index size by an order of magnitude
 while retaining most of the quality advantage.
-ColBERT-style retrieval has since become a standard component of high-quality
-RAG pipelines, used both as a first-stage retriever and as a reranker.
+ColBERT-style retrieval has since become a~standard component of high-quality
+RAG pipelines, used both as a~first-stage retriever and as a~reranker.
 
 \subsection{Hybrid Search and Cross-Encoder Reranking}
 
 In practice, the strongest retrieval systems combine sparse and dense retrieval
-through a fusion step.
+through a~fusion step.
 Reciprocal Rank Fusion (RRF) is the most common approach: documents are ranked
-separately by BM25 and a dense retriever, then the fused rank is computed as
+separately by BM25 and a~dense retriever, then the fused rank is computed as
 
 \begin{equation}
   \text{RRF}(d) = \sum_{r \in \{\text{BM25},\, \text{dense}\}} \frac{1}{k + r(d)}
@@ -218,20 +218,20 @@ The \medrag{} system uses $\alpha = 0.5$ as the default, which was found empiric
 to give the best results on the HotpotQA development split (\cref{sec:hybrid_search}).
 
 Cross-encoder rerankers work differently: rather than encoding query and passage
-independently, they process the query--passage pair together with a transformer,
-producing a relevance score that captures fine-grained interaction.
+independently, they process the query--passage pair together with a~transformer,
+producing a~relevance score that captures fine-grained interaction.
 This is computationally expensive at scale but considerably more accurate than
 bi-encoder approaches.
 In practice, cross-encoders are applied only to the top-$k$ candidates from a
-first-stage retriever --- a pattern known as retrieve-then-rerank.
-The \medrag{} system uses BGE-reranker-v2-m3, a multilingual cross-encoder
+first-stage retriever --- a~pattern known as retrieve-then-rerank.
+The \medrag{} system uses BGE-reranker-v2-m3, a~multilingual cross-encoder
 from the BAAI general embedding family that performs well on the BEIR benchmark.
 
 % ------------------------------------------------------------
 \section{RAG Architecture Families}
 \label{sec:rag_families}
 
-The six years since Lewis \etal~\cite{lewis2020rag} have seen a large number of
+The six years since Lewis \etal~\cite{lewis2020rag} have seen a~large number of
 architectural variants.
 \cref{tab:rag_families} organises them into eight families, ordered roughly by
 date of introduction.
@@ -264,6 +264,10 @@ date of introduction.
       & 2024
       & Correctness evaluation with web-search fallback
       & Depends on web availability; hard to control \\
+    Adaptive RAG
+      & 2024
+      & Complexity-based routing to per-query pipeline depth
+      & Classifier needs labelled complexity data \\
     Graph / Hierarchical RAG
       & 2024
       & Knowledge graphs or tree summaries over corpora
@@ -288,11 +292,11 @@ date of introduction.
 \label{subsec:vanilla_rag}
 
 The vanilla RAG pipeline, as introduced by Lewis \etal~\cite{lewis2020rag} and
-subsequently simplified into a widely used pattern, operates in three stages.
+subsequently simplified into a~widely used pattern, operates in three stages.
 First, the user's query is embedded and used to retrieve the top-$k$ passages
 from an indexed corpus.
-Second, the retrieved passages are concatenated with the query into a prompt.
-Third, a language model generates the answer conditioned on that prompt.
+Second, the retrieved passages are concatenated with the query into a~prompt.
+Third, a~language model generates the answer conditioned on that prompt.
 
 The appeal of this pipeline is its simplicity: each component can be independently
 swapped, and the only trainable interaction between them is through the prompt.
@@ -309,9 +313,9 @@ three stages of retrieval, augmentation, and generation.
 \label{fig:vanilla_rag}
 \end{figure}
 
-In practice, vanilla RAG with a capable retriever and a large generator achieves
+In practice, vanilla RAG with a~capable retriever and a~large generator achieves
 competitive results on many benchmarks while remaining fast and predictable.
-A single retrieval pass followed by a single generation call keeps latency low
+A~single retrieval pass followed by a~single generation call keeps latency low
 and makes the system easy to reason about and debug.
 
 The main weaknesses are the lack of self-correction and the fixed retrieval strategy.
@@ -322,7 +326,7 @@ Most subsequent architectures try to address exactly this failure mode.
 \subsection{HyDE and Query Rewriting}
 \label{subsec:hyde}
 
-A recurring problem in RAG is the mismatch between query and document embeddings:
+A~recurring problem in RAG is the mismatch between query and document embeddings:
 queries tend to be short and keyword-like, while passages are longer and more
 elaborated, and the embeddings of the two may not be well aligned even after
 retrieval-specific fine-tuning.
@@ -330,7 +334,7 @@ retrieval-specific fine-tuning.
 Gao \etal~\cite{gao2022hyde} proposed Hypothetical Document Embeddings (HyDE) as a
 solution.
 Rather than embedding the query directly, the system uses an LLM to generate a
-\emph{hypothetical} document that would answer the query --- a plausible but
+\emph{hypothetical} document that would answer the query --- a~plausible but
 not necessarily accurate passage --- and embeds that hypothetical document instead.
 The intuition is that the hypothetical document lives in the same embedding space as
 real corpus passages, even if the facts it contains are wrong.
@@ -341,13 +345,13 @@ The improved embedding alignment tends to produce more grounded retrieval contex
 at the cost of an additional LLM call before retrieval, which increases end-to-end
 latency compared to vanilla.
 
-Query rewriting pursues a related idea without the hypothetical document: a smaller
+Query rewriting pursues a~related idea without the hypothetical document: a~smaller
 or cheaper model rewrites the user's query into one better suited for retrieval,
 for instance by expanding acronyms, resolving coreferences, or decomposing complex
 questions into simpler sub-questions.
 In the Rewrite--Retrieve--Read formulation~\cite{ma2023rewrite} the rewriter is a
 small language model trained with reinforcement learning against downstream answer
-quality; in practice the rewriting step is often delegated to a prompted
+quality; in practice the rewriting step is often delegated to a~prompted
 general-purpose LLM instead, which is the variant implemented in this work
 (\cref{sec:exp_setup}).
 Query rewriting is widely used in production RAG systems and can be combined with
@@ -356,15 +360,15 @@ any retrieval backend.
 \subsection{Self-RAG}
 \label{subsec:self_rag}
 
-Self-RAG~\cite{asai2024selfrag} represents a qualitative shift from the
-retrieve-then-generate paradigm to a \emph{generate-with-retrieval-on-demand} paradigm.
-The core idea is a set of special reflection tokens injected into the
+Self-RAG~\cite{asai2024selfrag} represents a~qualitative shift from the
+retrieve-then-generate paradigm to a~\emph{generate-with-retrieval-on-demand} paradigm.
+The core idea is a~set of special reflection tokens injected into the
 generation vocabulary: \texttt{[Retrieve]} signals that additional retrieval is needed;
-\texttt{[IsRel]}/\texttt{[IsNotRel]} judges whether a retrieved passage is relevant;
+\texttt{[IsRel]}/\texttt{[IsNotRel]} judges whether a~retrieved passage is relevant;
 \texttt{[IsSup]}/\texttt{[IsNotSup]} judges whether the generated statement is
 supported by the retrieved passage; and \texttt{[IsUse]} rates the overall utility
-of a generated segment.
-A Self-RAG model is fine-tuned on data labelled with these tokens, learning when
+of a~generated segment.
+A~Self-RAG model is fine-tuned on data labelled with these tokens, learning when
 to retrieve, how to assess retrieved evidence, and whether its own output is grounded.
 At inference time, the model interleaves retrieval calls with generation, inserting
 passages where needed and backtracking when evidence is insufficient.
@@ -389,9 +393,9 @@ cost of higher latency from interleaved retrieval calls and the requirement for 
 fine-tuned model --- vanilla decoder models do not produce the reflection tokens
 needed for the mechanism to operate.
 That fine-tuning requirement is the reason the \texttt{self\_reflection} mode
-evaluated in this thesis is a simplified, prompt-based approximation rather than a
+evaluated in this thesis is a~simplified, prompt-based approximation rather than a
 faithful reproduction: it scores and re-drafts the whole answer with ordinary LLM
-calls instead of emitting per-token reflection tokens from a fine-tuned decoder
+calls instead of emitting per-token reflection tokens from a~fine-tuned decoder
 (\cref{sec:query_pipeline,cha:evaluation}).
 
 \subsection{Corrective RAG}
@@ -400,26 +404,24 @@ calls instead of emitting per-token reflection tokens from a fine-tuned decoder
 Corrective RAG (CRAG)~\cite{yan2024crag} takes the self-correction idea further by
 evaluating the quality of retrieved documents \emph{before} generation rather than
 during it.
-A lightweight evaluator model scores each retrieved document on a spectrum from
+A~lightweight evaluator model scores each retrieved document on a~spectrum from
 \emph{correct} (relevant and accurate) to \emph{ambiguous} to \emph{incorrect}.
 Based on these scores, the system chooses one of three actions:
 if documents are correct, proceed to generation;
 if ambiguous, refine the query and retrieve again;
-if incorrect, fall back to a web search for fresh evidence.
+if incorrect, fall back to a~web search for fresh evidence.
 
 The web-search fallback is the distinctive feature: CRAG can recover from corpus
 gaps that would silently mislead other architectures.
 
 It is also the feature this work does not implement.
 The \texttt{corrective\_rag} mode evaluated in \cref{cha:evaluation} replaces the
-fine-tuned evaluator with a threshold on the raw hybrid retrieval score, and
-replaces the web-search fallback with a broadened re-query of the same corpus.
-A closed-corpus advisory system cannot responsibly cite the open web on a
+fine-tuned evaluator with a~threshold on the raw hybrid retrieval score, and
+replaces the web-search fallback with a~broadened re-query of the same corpus.
+A~closed-corpus advisory system cannot responsibly cite the open web on a
 drug-safety question, so the omission is deliberate --- but it means the mode as
-evaluated here tests a relevance-gated re-retrieval strategy rather than CRAG's
+evaluated here tests a~relevance-gated re-retrieval strategy rather than CRAG's
 central claim.
-This makes it particularly useful for questions about recent events or narrow
-sub-domains not well represented in the static corpus.
 
 The re-retrieval mechanism adds moderate latency overhead compared to vanilla RAG,
 but the quality gain on queries where the initial retrieval fails can be substantial.
@@ -431,15 +433,15 @@ Adaptive-RAG~\cite{jeong2024adaptiverag} classifies queries by complexity before
 retrieval, routing them to different pipeline variants: no retrieval for simple
 factoid questions answerable from parametric memory, single-step retrieval for
 moderate queries, and multi-step retrieval for complex multi-hop questions.
-The classifier is a small model fine-tuned on query complexity labels derived
+The classifier is a~small model fine-tuned on query complexity labels derived
 from benchmark datasets.
 
 The key insight is that not all queries benefit equally from retrieval, and applying
-a heavyweight multi-step pipeline to simple questions wastes compute without improving
+a~heavyweight multi-step pipeline to simple questions wastes compute without improving
 quality.
 RARE-RAG (\cref{cha:rare_rag}) builds on this routing idea but extends it with
 domain-specific risk classification and integrates it with set-wise evidence
-selection and a grounding verifier.
+selection and a~grounding verifier.
 
 \subsection{Graph and Hierarchical RAG}
 \label{subsec:graph_rag}
@@ -447,7 +449,7 @@ selection and a grounding verifier.
 Standard RAG retrieves flat passages.
 For corpora where important information is distributed across many documents and
 where connections between entities matter, flat retrieval misses structure that
-a human expert would naturally use.
+a~human expert would naturally use.
 
 GraphRAG~\cite{edge2024graphrag}, developed at Microsoft Research, constructs a
 knowledge graph from the corpus using an LLM-driven entity and relationship
@@ -458,17 +460,17 @@ GraphRAG showed substantial improvements over flat RAG on global summarisation
 tasks --- questions that require synthesising information spread across an entire
 corpus rather than retrieving specific passages.
 
-RAPTOR~\cite{sarthi2024raptor} takes a complementary approach: rather than building
-a graph, it recursively summarises clusters of related documents into a tree
+RAPTOR~\cite{sarthi2024raptor} takes a~complementary approach: rather than building
+a~graph, it recursively summarises clusters of related documents into a~tree
 structure, then retrieves from both leaf nodes (raw passages) and internal nodes
 (summaries).
 This allows retrieval at multiple levels of abstraction --- broad questions from
 summaries, narrow questions from raw passages.
 
-Both approaches share a significant practical drawback: the indexing pipeline is
+Both approaches share a~significant practical drawback: the indexing pipeline is
 expensive and must be re-run when the corpus changes.
 For dynamic medical corpora where new drug interaction data is published regularly,
-this imposes a meaningful operational burden.
+this imposes a~meaningful operational burden.
 
 \subsection{Iterative Multi-Hop RAG}
 \label{subsec:multihop}
@@ -486,9 +488,9 @@ and retrieval queries, executing each retrieval call before continuing.
 The idea is similar to Self-RAG but focused specifically on the multi-hop evidence
 chain rather than general retrieval quality assessment.
 
-The latency cost is substantial because each hop requires a full retrieval and
+The latency cost is substantial because each hop requires a~full retrieval and
 generation call, and complex questions may require several hops.
-Empirically, the iterative process does not always recover evidence that a single
+Empirically, the iterative process does not always recover evidence that a~single
 broad retrieval pass would have found, since each sub-query narrows the search scope.
 
 \subsection{Agentic and Multi-Agent RAG}
@@ -496,7 +498,7 @@ broad retrieval pass would have found, since each sub-query narrows the search s
 
 The most recent and most flexible architectural family treats RAG as an agent
 planning problem.
-Rather than a fixed pipeline, an agentic RAG system consists of one or more LLM
+Rather than a~fixed pipeline, an agentic RAG system consists of one or more LLM
 agents that decide at each step whether to retrieve, which query to issue, whether
 the collected evidence is sufficient, and whether to involve specialised sub-agents
 for particular sub-tasks.
@@ -504,8 +506,8 @@ for particular sub-tasks.
 Singh \etal~\cite{singh2025agenticrag} survey this emerging landscape, organising
 it by number of agents (single vs.\ multi-agent), control structure (sequential,
 hierarchical, collaborative), and autonomy level.
-A more recent systematisation by Mishra \etal~\cite{mishra2026sokagentic} formalises
-agentic RAG as a partially observable sequential decision process and classifies
+A~more recent systematisation by Mishra \etal~\cite{mishra2026sokagentic} formalises
+agentic RAG as a~partially observable sequential decision process and classifies
 systems by planning mechanism, retrieval orchestration, memory paradigm and tool
 behaviour.
 Among the systemic risks they identify in autonomous retrieval loops is the
@@ -514,21 +516,21 @@ motivates the post-generation grounding check proposed in \cref{cha:rare_rag}.
 At the high end, systems such as A-RAG~\cite{du2026arag} expose three distinct
 retrieval interfaces --- keyword search, semantic search, and chunk read --- directly
 to the LLM as callable tools, allowing the model to compose retrieval strategies
-rather than following a predetermined pipeline.
+rather than following a~predetermined pipeline.
 
 MA-RAG~\cite{nguyen2025marag} decomposes the pipeline into specialised roles:
-a planner that decomposes the question, a step definer that specifies each retrieval
-action, an extractor that processes retrieved passages, and a QA agent that synthesises
+a~planner that decomposes the question, a~step definer that specifies each retrieval
+action, an extractor that processes retrieved passages, and a~QA agent that synthesises
 the final answer.
 This division of labour reduces the cognitive load on any single model and allows
 different components to be optimised independently.
 
-MADAM-RAG~\cite{wang2025madamrag} explores a different angle: multi-agent debate
+MADAM-RAG~\cite{wang2025madamrag} explores a~different angle: multi-agent debate
 for questions with ambiguous or conflicting evidence.
 Multiple agents retrieve evidence independently and argue for different candidate
-answers, with a judge agent synthesising the debate into a final response.
+answers, with a~judge agent synthesising the debate into a~final response.
 While compelling for disambiguation tasks, the debate mechanism adds substantial
-overhead without benefit when the question has a unique, retrievable answer ---
+overhead without benefit when the question has a~unique, retrievable answer ---
 making it better suited to open-ended tasks than factoid retrieval.
 Well-designed agentic architectures that exploit parallel tool calls can achieve
 competitive latency despite higher total token counts, since the wall-clock cost
@@ -540,20 +542,20 @@ is determined by the critical path rather than total compute.
 
 Evaluating RAG systems is harder than evaluating either retrieval or generation
 in isolation, because quality depends on how the two components interact.
-A system that retrieves perfect evidence but generates a garbled answer, or one that
-generates a fluent response from irrelevant passages, will both fail --- in different
+A~system that retrieves perfect evidence but generates a~garbled answer, or one that
+generates a~fluent response from irrelevant passages, will both fail --- in different
 ways that aggregate metrics may obscure.
 
 \subsection{Lexical Overlap Metrics}
 
 The earliest and most widely used answer-quality metrics are lexical overlap measures.
 
-\textbf{Exact Match (EM)} scores a prediction as correct only if it matches the
+\textbf{Exact Match (EM)} scores a~prediction as correct only if it matches the
 gold answer string exactly after normalisation (lowercasing, removing articles and
 punctuation).
-EM is strict: a correct but differently phrased answer scores zero.
+EM is strict: a~correct but differently phrased answer scores zero.
 
-\textbf{Token F1} relaxes this by computing a token-level F1 score between
+\textbf{Token F1} relaxes this by computing a~token-level F1 score between
 prediction and gold answer, treating both as bags of tokens.
 Token~F1 is more forgiving of paraphrase but still penalises missing content words.
 
@@ -561,9 +563,9 @@ Token~F1 is more forgiving of paraphrase but still penalises missing content wor
 prediction and reference, normalised by the lengths of both.
 ROUGE-L is commonly used for longer answer evaluation.
 
-All three metrics share a well-known limitation: they measure surface form rather
+All three metrics share a~well-known limitation: they measure surface form rather
 than semantic correctness.
-A prediction that says ``approximately 47 milligrams'' when the gold answer is ``47~mg''
+A~prediction that says ``approximately 47 milligrams'' when the gold answer is ``47~mg''
 will score poorly despite being correct.
 For medical advisory, where relevant answers are often drug names, doses, or
 interaction categories with specific canonical forms, this matters somewhat less
@@ -577,7 +579,7 @@ by introducing four metrics that capture different aspects of RAG quality:
 \textbf{Faithfulness} measures the fraction of claims in the generated answer that
 are supported by the retrieved context.
 Claims $C = \{c_1, \ldots, c_m\}$ are extracted from the answer by an LLM,
-and each claim is checked against the context by the same LLM acting as a natural
+and each claim is checked against the context by the same LLM acting as a~natural
 language inference judge.
 Formally:
 \begin{equation}
@@ -586,8 +588,8 @@ Formally:
   \label{eq:faithfulness}
 \end{equation}
 where $\mathcal{C} = \{d_1,\ldots,d_k\}$ is the set of retrieved passages.
-A score of 1.0 means every claim in the answer can be traced to a specific passage;
-a score below 0.8 suggests significant hallucination.
+A~score of 1.0 means every claim in the answer can be traced to a~specific passage;
+a~score below 0.8 suggests significant hallucination.
 Faithfulness is the metric most directly relevant to trustable medical advisory:
 an answer that contradicts its own supporting documents is dangerous regardless of
 whether it happens to be factually correct.
@@ -604,37 +606,37 @@ original query:
   \label{eq:answerrel}
 \end{equation}
 where $E(\cdot)$ denotes the sentence embedding.
-A high-relevance answer stays on-topic; a low-relevance one drifts into tangential
+A~high-relevance answer stays on-topic; a~low-relevance one drifts into tangential
 information.
 
 \textbf{Context Recall} measures how much of the information in the gold answer
 is covered by the retrieved context.
-It is the only RAGAS metric that requires a ground-truth answer, and it captures
+It is the only RAGAS metric that requires a~ground-truth answer, and it captures
 retrieval completeness rather than answer quality per se.
 
 \textbf{Context Precision} measures the fraction of retrieved chunks that are
 actually useful for answering the question.
-It captures retrieval noise: a system that retrieves many irrelevant passages alongside
+It captures retrieval noise: a~system that retrieves many irrelevant passages alongside
 the relevant ones will score low on context precision.
 
-RAGAS uses an LLM as a judge for faithfulness and answer relevance.
-This creates a subtle problem: systems evaluated with the same model family used for
-generation may benefit from a systematic consistency bias.
+RAGAS uses an LLM as a~judge for faithfulness and answer relevance.
+This creates a~subtle problem: systems evaluated with the same model family used for
+generation may benefit from a~systematic consistency bias.
 This limitation is discussed in \cref{sec:limitations}.
 
 \subsection{Benchmarks and Datasets}
 \label{subsec:benchmarks}
 
-\textbf{HotpotQA}~\cite{yang2018hotpotqa} is a multi-hop question-answering dataset
+\textbf{HotpotQA}~\cite{yang2018hotpotqa} is a~multi-hop question-answering dataset
 based on English Wikipedia.
 Each question requires synthesising information from exactly two supporting documents.
 The dataset contains approximately 113,000 question--answer pairs; this thesis uses
-a stratified sample of 1,000 questions per RAG mode in the main evaluation.
+a~stratified sample of 1,000 questions per RAG mode in the main evaluation.
 HotpotQA is well-suited for RAG evaluation because the multi-hop structure stresses
-the retrieval component: a system that retrieves only one of the two required documents
+the retrieval component: a~system that retrieves only one of the two required documents
 typically cannot answer correctly.
 
-\textbf{BEIR}~\cite{thakur2021beir} is a heterogeneous retrieval benchmark covering
+\textbf{BEIR}~\cite{thakur2021beir} is a~heterogeneous retrieval benchmark covering
 18 datasets from diverse domains, designed to evaluate retrieval generalisation.
 It is not used directly in this thesis but is referenced when discussing the
 relative strengths of individual retrieval models.
@@ -672,13 +674,13 @@ question-answering tasks from DrugBank, but the accuracy is inconsistent and
 the model frequently presents its answers with more confidence than is warranted.
 The hallucination problem is particularly acute for DDI: an LLM that
 confabulates an interaction between two drugs that are actually safe in combination
-could cause unnecessary treatment changes, while missing a real interaction could
+could cause unnecessary treatment changes, while missing a~real interaction could
 cause direct harm.
 
-RAG has been proposed as a mitigation: by grounding DDI answers in retrieved passages
+RAG has been proposed as a~mitigation: by grounding DDI answers in retrieved passages
 from authoritative sources (FDA drug labels, clinical pharmacology textbooks), the
 system's claims become traceable and its failures become detectable.
-The \medrag{} system implements this approach as a technology demonstrator,
+The \medrag{} system implements this approach as a~technology demonstrator,
 using the OpenFDA drug label corpus as the primary knowledge base for drug
 interaction queries.
 
@@ -691,13 +693,13 @@ The second requirement is often neglected in ML research but is central to real-
 clinical deployment~\cite{ji2023hallucination}.
 
 RAG contributes to trustability through citation: every answer can be linked to the
-specific passages that support it, allowing a clinician to verify the claim directly.
+specific passages that support it, allowing a~clinician to verify the claim directly.
 The \rarerag{} architecture (\cref{cha:rare_rag}) takes this further with an
 explicit grounding verifier that checks whether the generated answer is supported
 by the retrieved context, and abstains from answering when it cannot verify the claims.
 This abstention mechanism is particularly important in the DDI domain, where saying
-``I cannot reliably answer this question based on available evidence'' is safer
-than providing a plausible-sounding but unverified response.
+``I~cannot reliably answer this question based on available evidence'' is safer
+than providing a~plausible-sounding but unverified response.
 
 % ------------------------------------------------------------------
 % Figure 2.4 — Architecture Comparison: Retrieval Adaptivity vs. Generation Complexity
@@ -716,11 +718,11 @@ than providing a plausible-sounding but unverified response.
 Looking across the surveyed architectures, three gaps stand out that motivate the
 \rarerag{} design in \cref{cha:rare_rag}.
 No existing architecture routes queries by risk or clinical significance before
-selecting a retrieval strategy: Adaptive-RAG routes by linguistic complexity,
+selecting a~retrieval strategy: Adaptive-RAG routes by linguistic complexity,
 but not by domain-specific risk.
 All surveyed architectures rank retrieved evidence individually, while evaluating
-evidence complementarity as a set is absent from the standard RAG toolbox.
+evidence complementarity as a~set is absent from the standard RAG toolbox.
 And abstention mechanisms --- declining to answer when evidence is insufficient ---
 are treated as optional features rather than first-class design goals, despite
 being central to high-stakes advisory.
-\rarerag{} addresses all three gaps in a single architecture.
+\rarerag{} addresses all three gaps in a~single architecture.

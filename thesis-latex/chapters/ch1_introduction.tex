@@ -8,11 +8,11 @@
 \section{Motivation}
 \label{sec:motivation}
 
-Consider a patient in their sixties managing three chronic conditions: atrial fibrillation,
+Consider a~patient in their sixties managing three chronic conditions: atrial fibrillation,
 type~2 diabetes, and chronic kidney disease.
-Three separate specialists --- a cardiologist, an endocrinologist, and a nephrologist ---
+Three separate specialists --- a~cardiologist, an endocrinologist, and a~nephrologist ---
 each prescribe their own regimen.
-The result is a daily combination of seven or more drugs, often without any single
+The result is a~daily combination of seven or more drugs, often without any single
 physician having reviewed the complete medication list for cross-drug interactions.
 Polypharmacy of this kind affects an estimated 40\% of patients over 65 in developed
 countries~\cite{masnoon2017polypharmacy}, and drug--drug interactions (DDIs) contribute
@@ -21,15 +21,15 @@ to tens of thousands of preventable hospital admissions each year~\cite{lazarou1
 Modern large language models (LLMs) are impressively fluent and broad in their knowledge,
 and they can, in principle, answer clinical questions about drug safety reasonably well.
 But they are not safe for this task out of the box.
-They hallucinate, their training knowledge has a cutoff date, and they cannot
-explain \emph{why} a specific interaction exists or point to citable evidence for it.
+They hallucinate, their training knowledge has a~cutoff date, and they cannot
+explain \emph{why} a~specific interaction exists or point to citable evidence for it.
 Retrieval-Augmented Generation (RAG) was designed to address exactly these weaknesses:
 by grounding every response in retrieved source documents, answers become traceable
 and can be updated without retraining the model.
 
-This thesis investigates how different RAG architectures perform on a multi-hop
-question-answering benchmark, proposes a novel architecture tailored for high-stakes
-advisory tasks, and demonstrates the approach through a prototype drug interaction
+This thesis investigates how different RAG architectures perform on a~multi-hop
+question-answering benchmark, proposes a~novel architecture tailored for high-stakes
+advisory tasks, and demonstrates the approach through a~prototype drug interaction
 advisory system.
 
 % ------------------------------------------------------------
@@ -44,11 +44,11 @@ Three research questions guide this work:
     and latency, and does the answer depend on how hard the questions are?
 
   \item[RQ2] \label{rq:rare}
-    Does a routing-aware, set-wise evidence selection approach with a grounding
+    Does a~routing-aware, set-wise evidence selection approach with a~grounding
     verifier (\rarerag{}) achieve higher faithfulness than single-path RAG architectures?
 
   \item[RQ3] \label{rq:platform}
-    Can a configurable microservice RAG platform serve as a reliable technology
+    Can a~configurable microservice RAG platform serve as a~reliable technology
     demonstrator for drug interaction advisory, with results that are traceable to source
     documents?
 \end{description}
@@ -61,7 +61,7 @@ benchmark are the ones that win on hard clinical questions, using the same code.
 The dependence on task difficulty appears to be the finding itself rather than a
 complication of it.
 
-Each research question is answered by a specific experiment reported in a specific
+Each research question is answered by a~specific experiment reported in a~specific
 place, and \cref{tab:rq_map} states that mapping explicitly so that the empirical
 basis of every answer can be located directly.
 
@@ -69,8 +69,8 @@ basis of every answer can be located directly.
   \centering
   \caption[Mapping of research questions to experiments.]{Mapping of each research
     question to the experiment that verifies it, the section reporting it, and the
-    answer obtained.  Every quality comparison is a paired, per-question contrast
-    against a vanilla control, tested with a Wilcoxon signed-rank test
+    answer obtained.  Every quality comparison is a~paired, per-question contrast
+    against a~vanilla control, tested with a~Wilcoxon signed-rank test
     (\cref{subsec:stat_method}).}
   \label{tab:rq_map}
   \small
@@ -83,7 +83,7 @@ basis of every answer can be located directly.
     RQ1
       & Nine pipeline variants on HotpotQA ($9 \times 1{,}000$) and on the DDI
         benchmark ($9 \times 100$, five difficulty levels); quality metrics and
-        end-to-end latency, with a per-difficulty breakdown
+        end-to-end latency, with a~per-difficulty breakdown
       & Benchmark-dependent: the agentic modes lose on HotpotQA and win on the
         hardest clinical questions.  Complexity buys grounding, not accuracy
       & \cref{sec:results_quality},
@@ -92,7 +92,7 @@ basis of every answer can be located directly.
     \addlinespace
     RQ2
       & \rarerag{} contrasted against Vanilla and the single-path modes on both
-        benchmarks, with a component-level diagnosis of the shortfall
+        benchmarks, with a~component-level diagnosis of the shortfall
       & Partially negative: the routing premise is supported, set-wise selection
         prunes evidence too aggressively, and \rarerag{} does not beat the vanilla
         baseline on either benchmark
@@ -103,7 +103,7 @@ basis of every answer can be located directly.
       & End-to-end operation of the 14-service platform over the OpenFDA and
         DrugBank corpora, with citation traceability and production-mode metric
         collection; worked advisory queries
-      & Yes as a demonstrator: every claim is traceable to a cited passage, with
+      & Yes as a~demonstrator: every claim is traceable to a~cited passage, with
         correctness near 0.5 and abstention never exercised by these benchmarks
       & \cref{sec:ddi_demo},
         \cref{cha:implementation} \\
@@ -115,12 +115,12 @@ basis of every answer can be located directly.
 \section{Scope and Limitations}
 \label{sec:scope}
 
-The thesis covers a survey of eight RAG architecture families (\cref{cha:background})
-and the design of \rarerag{} as a four-component pipeline (\cref{cha:rare_rag}).
-A 14-service microservice platform with configurable RAG strategies is described
+The thesis covers a~survey of eight RAG architecture families (\cref{cha:background})
+and the design of \rarerag{} as a~four-component pipeline (\cref{cha:rare_rag}).
+A~14-service microservice platform with configurable RAG strategies is described
 in \cref{cha:system_design,cha:implementation}, and evaluated empirically on
 two benchmarks: HotpotQA ($9 \times 1{,}000$ questions for general multi-hop reasoning)
-and a purpose-built DDI benchmark ($9 \times 100$ questions at five clinical difficulty
+and a~purpose-built DDI benchmark ($9 \times 100$ questions at five clinical difficulty
 levels), as reported in \cref{cha:evaluation}.
 
 Several things are explicitly out of scope: clinical validation or patient-facing
@@ -133,49 +133,49 @@ of language models, and pharmacist-validated assessment of generated answers.
 
 The main contributions of this thesis are:
 
-A \textbf{comparative empirical study} of nine RAG pipeline variants on two benchmarks:
-HotpotQA ($9 \times 1{,}000$ questions) and a purpose-built DDI benchmark
+A~\textbf{comparative empirical study} of nine RAG pipeline variants on two benchmarks:
+HotpotQA ($9 \times 1{,}000$ questions) and a~purpose-built DDI benchmark
 ($9 \times 100$ questions at five clinical difficulty levels), using lexical metrics
 (Token~F1, EM, ROUGE-L), RAGAS-based indicators (faithfulness, answer correctness,
 answer relevance) and latency.
-Every comparison is a paired, per-question contrast against a vanilla control,
+Every comparison is a~paired, per-question contrast against a~vanilla control,
 tested for significance --- which turns out to matter, because several differences
 that look decisive in the mode-level averages do not survive the test.
 
 The central empirical finding: \textbf{the benefit of architectural complexity scales
 with task difficulty, and it is paid in grounding rather than in accuracy}.
-The four agentic architectures are significantly \emph{worse} than a plain
+The four agentic architectures are significantly \emph{worse} than a~plain
 retrieve-then-generate pass on HotpotQA, yet significantly better on the hardest
-clinical questions, where a single pass hallucinates on roughly one claim in two.
+clinical questions, where a~single pass hallucinates on roughly one claim in two.
 Crucially, this gain shows up in faithfulness and not in answer correctness:
 across both benchmarks, no architecture makes the system measurably more likely to
 be \emph{right}, only measurably more likely to be traceable to its sources.
 
-The \textbf{\rarerag{} architecture} --- a RAG pipeline combining query complexity
-routing, hybrid BM25+vector retrieval, set-wise evidence selection, and a grounding
+The \textbf{\rarerag{} architecture} --- a~RAG pipeline combining query complexity
+routing, hybrid BM25+vector retrieval, set-wise evidence selection, and a~grounding
 verifier with abstention.
-It is reported here as a partially negative result: the complexity router is
+It is reported here as a~partially negative result: the complexity router is
 supported by the difficulty-scaling finding above, but set-wise selection prunes
 evidence too aggressively on multi-drug questions, and \rarerag{} does not beat a
 vanilla baseline on either benchmark (\cref{cha:evaluation}).
 
-That negative result is treated here as a contribution in its own right rather
-than as a shortfall to be minimised, and it is worth being explicit about why.
-A result of the form ``the proposed architecture wins'' is only as informative as
+That negative result is treated here as a~contribution in its own right rather
+than as a~shortfall to be minimised, and it is worth being explicit about why.
+A~result of the form ``the proposed architecture wins'' is only as informative as
 the baseline it was measured against.
-What is reported instead is a specific design error --- optimising selected
+What is reported instead is a~specific design error --- optimising selected
 evidence for diversity when the binding constraint on polypharmacy questions is
-coverage --- which is actionable for anyone building a similar pipeline.
+coverage --- which is actionable for anyone building a~similar pipeline.
 That precision is possible only because all nine modes run on one controlled
-platform sharing a single retrieval backend, embedding model and generator, so the
+platform sharing a~single retrieval backend, embedding model and generator, so the
 shortfall can be traced to the stage responsible instead of disappearing into an
 end-to-end number.
 Given how rarely unsuccessful configurations are reported at all, such localised
 negative findings are correspondingly scarce.
 
-The \textbf{open-source \medrag{} platform} --- a microservice system comprising
+The \textbf{open-source \medrag{} platform} --- a~microservice system comprising
 14 services with configurable chunking strategies, embedding providers, and RAG modes,
-backed by a full CI/CD pipeline and Docker deployment.
+backed by a~full CI/CD pipeline and Docker deployment.
 
 % ------------------------------------------------------------
 \section{Thesis Organisation}

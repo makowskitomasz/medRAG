@@ -4,7 +4,7 @@
 \chapter{System Design}
 \label{cha:system_design}
 
-This chapter documents the architectural design of \medrag{}, a microservice-based
+This chapter documents the architectural design of \medrag{}, a~microservice-based
 platform built to support experimental evaluation of RAG strategies for the
 drug-interaction advisory use case introduced in \cref{cha:rare_rag}.
 The discussion moves from high-level context (\cref{sec:c4_context}), to the
@@ -21,17 +21,17 @@ why, independently of any particular system.
 The present chapter specifies the \emph{architecture} that realises it: how
 responsibilities are divided between services, what contracts hold between them,
 and how data and control flow through the two runtime pipelines --- all of which
-would survive a change of programming language or vendor.
+would survive a~change of programming language or vendor.
 \cref{cha:implementation} then covers \emph{implementation}: the concrete
 technologies, libraries and engineering trade-offs chosen to build that
-architecture, which would not survive such a change.
+architecture, which would not survive such a~change.
 
 % ------------------------------------------------------------
 \section{Design Principles}
 \label{sec:design_principles}
 
-The design of \medrag{} was shaped by a small set of guiding principles.
-Because the system is a research demonstrator rather than a production medical device,
+The design of \medrag{} was shaped by a~small set of guiding principles.
+Because the system is a~research demonstrator rather than a~production medical device,
 the emphasis lies on \emph{reproducibility}, \emph{configurability}, and
 \emph{separation of concerns} rather than on operational hardening.
 
@@ -50,9 +50,9 @@ modes: \texttt{vanilla}, \texttt{hyde}, \texttt{query\_rewriting},
 The orchestrator reads \texttt{rag\_mode} on each
 incoming request and instantiates the appropriate pipeline variant.  Adding a
 new strategy requires no changes to the caller: only the new implementation
-module and a mapping entry in the orchestrator's factory are needed.  In
+module and a~mapping entry in the orchestrator's factory are needed.  In
 practice this means that switching an ablation experiment from one RAG
-architecture to another is a single database field change.
+architecture to another is a~single database field change.
 
 \paragraph{Decoupled, event-driven ingestion.}
 Document ingestion --- parsing, chunking, embedding, and indexing --- is an
@@ -61,8 +61,8 @@ request cycle would impose unacceptable latency on the upload endpoint and
 prevent independent scaling of compute-heavy stages such as embedding.
 The system therefore implements ingestion as an \emph{asynchronous,
 event-driven pipeline}: the \texttt{ingestion} service accepts the file
-upload, computes a content hash for deduplication, writes a pending record
-to MongoDB, and immediately publishes a message to RabbitMQ.  Downstream
+upload, computes a~content hash for deduplication, writes a~pending record
+to MongoDB, and immediately publishes a~message to RabbitMQ.  Downstream
 stages consume that message in sequence --- each consuming one queue, doing
 its work, and publishing to the next --- without any direct coupling between
 services.  This mirrors the \emph{pipes-and-filters} pattern
@@ -73,11 +73,11 @@ stage to be scaled or replaced independently.
 The query path has very different characteristics from ingestion: latency
 is user-visible and the final answer must be streamed incrementally to give
 the impression of responsiveness.  The query pipeline is therefore
-implemented as a synchronous chain of REST calls, with the final generation
-step returning a \emph{Server-Sent Events} (SSE) stream so that partial
+implemented as a~synchronous chain of REST calls, with the final generation
+step returning a~\emph{Server-Sent Events} (SSE) stream so that partial
 tokens are flushed to the client as they are produced by the language model.
 The gateway, orchestrator, and all intermediate services participate in this
-chain and propagate a unique \texttt{X-Trace-Id} header so that the full
+chain and propagate a~unique \texttt{X-Trace-Id} header so that the full
 request can be reconstructed from distributed logs.
 
 \paragraph{Dependency injection and testability.}
@@ -90,23 +90,23 @@ tests substitute lightweight fakes for the injected dependencies without
 patching global state.  Settings are loaded exclusively through
 \texttt{pydantic-settings}, which reads values from environment variables
 and \texttt{.env} files, ensuring that no secrets are hardcoded and that
-all configuration is visible in a single place.
+all configuration is visible in a~single place.
 
 \paragraph{Observability from the ground up.}
 Every service emits structured JSON log records that include the
 \texttt{trace\_id} extracted from the incoming \texttt{X-Trace-Id} header.
-Every service also exposes a \texttt{GET /health} endpoint that returns a
+Every service also exposes a~\texttt{GET /health} endpoint that returns a
 fixed JSON body \texttt{\{"status": "ok", "service": "<name>"\}}.  Together,
-these two mechanisms make it possible to trace a single user request through
+these two mechanisms make it possible to trace a~single user request through
 fourteen services and to verify the health of the entire cluster with a
-simple scripted loop --- a capability that is heavily used by the
+simple scripted loop --- a~capability that is heavily used by the
 GitHub Actions CI smoke test described in \cref{cha:implementation}.
 
 \paragraph{Minimal operational footprint.}
-All containers are built from \texttt{python:3.12-slim} using a two-stage
+All containers are built from \texttt{python:3.12-slim} using a~two-stage
 Docker build.  The final image runs as non-root user \texttt{appuser}.
 Python dependencies are managed with \texttt{uv} rather than \texttt{pip}
-or \texttt{poetry}, which produces a deterministic lock file and
+or \texttt{poetry}, which produces a~deterministic lock file and
 significantly faster image builds.  These choices are not merely operational
 hygiene: they reduce the surface area for reproducibility problems that would
 complicate experimental comparisons.
@@ -117,36 +117,37 @@ complicate experimental comparisons.
 
 \cref{fig:c4_context} shows the outermost boundary of \medrag{} using the
 \emph{C4 model} notation of Brown~\cite{brown2018c4}.  At this level of abstraction,
-the system is treated as a single opaque block; the diagram's purpose is to
+the system is treated as a~single opaque block; the diagram's purpose is to
 identify the actors and external systems that interact with it.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\linewidth]{figures/c4_context.png}
-\caption[System context diagram (C4 level 1).]{C4 system context: user and administrator interact with \medrag{} via REST/SSE; external dependencies are the LLM provider (OpenAI API) and the embedding provider (OpenAI Embeddings API by default).}
+\caption[System context diagram (C4 level 1).]{C4 system context: user and administrator interact with \medrag{} via REST/SSE; external dependencies are the LLM provider and the embedding provider, both reached through the OpenAI-compatible OpenRouter gateway by default.}
 \label{fig:c4_context}
 \end{figure}
 
 Two human actors interact with \medrag{}.  The first is the
-\emph{end user} --- in the motivating scenario, a physician or pharmacist ---
+\emph{end user} --- in the motivating scenario, a~physician or pharmacist ---
 who submits natural-language questions about potential drug interactions and
-receives annotated, citation-backed answers via a Next.js web interface.
+receives annotated, citation-backed answers via a~Next.js web interface.
 The second is the \emph{administrator}, who manages the knowledge base:
 creating projects, uploading source documents (clinical guidelines, drug
 monographs, interaction datasets), and configuring per-project RAG settings.
 In the prototype both roles are supported through the same web frontend, with
-access differentiated by a role field stored in the user record.
+access differentiated by a~role field stored in the user record.
 
 On the external system side, \medrag{} depends on two cloud services.
-The \emph{LLM provider} --- OpenAI API, accessed through the
-\texttt{openai} Python SDK --- handles natural-language generation
-and, in advanced RAG modes, hypothesis-document synthesis (HyDE) and
-self-reflective re-reading.  The default model is \texttt{gpt-5-nano},
+The \emph{LLM provider} is OpenRouter, an OpenAI-compatible gateway used
+through the \texttt{openai} SDK; it handles generation and, in advanced RAG
+modes, hypothesis-document synthesis (HyDE) and self-reflective re-reading.
+The default model is \texttt{gpt-5-nano},
 but the provider and model identifier are configurable through the
 \texttt{LLM\_PROVIDER} and \texttt{LLM\_MODEL} environment variables.
 The second external dependency is the \emph{embedding provider}, which
-converts text into dense vectors.  The default choice is the OpenAI Embeddings API;
-the \texttt{EMBEDDING\_PROVIDER} variable switches this to Cohere or a locally-hosted
+converts text into dense vectors.  The default choice routes OpenAI's
+\texttt{text-embedding-3-large} through the same OpenRouter gateway;
+the \texttt{EMBEDDING\_PROVIDER} variable switches this to a~locally-hosted
 \texttt{BAAI/bge-m3} model without any code change, enabling fair comparison of
 embedding quality independently of generation quality.
 
@@ -162,7 +163,7 @@ gateway, which enforces authentication on every request.
 \label{sec:c4_container}
 
 Zooming one level deeper, \medrag{} decomposes into fourteen independently
-deployable containers, each implemented as a FastAPI service.
+deployable containers, each implemented as a~FastAPI service.
 \cref{tab:services} lists all services with their assigned ports and primary
 responsibilities; \cref{fig:c4_container} shows their communication topology.
 
@@ -208,7 +209,7 @@ validation, forwards the request to the appropriate downstream service.
 No service other than \texttt{auth} is reachable from outside the Docker network;
 all inter-service calls traverse the internal overlay network directly.
 The \texttt{auth} service handles user registration and login, hashing passwords
-with \texttt{bcrypt} and issuing short-lived JWTs signed with a configurable secret.
+with \texttt{bcrypt} and issuing short-lived JWTs signed with a~configurable secret.
 
 \paragraph{Query cluster.}
 Four services form the synchronous query path.  The \texttt{orchestrator}
@@ -216,9 +217,9 @@ is the logical hub: it reads the project's \texttt{rag\_mode} setting,
 assembles the pipeline, and coordinates the sequence of calls.  The optional
 \texttt{query-processor} service rewrites the user query (for query-rewriting
 and HyDE modes) before passing it to \texttt{retrieval}.  The
-\texttt{retrieval} service executes a hybrid BM25-plus-vector search against
-Weaviate and returns a ranked list of candidate chunks.  The \texttt{reranker}
-service applies a cross-encoder model (\texttt{BAAI/bge-reranker-v2-m3}) to
+\texttt{retrieval} service executes a~hybrid BM25-plus-vector search against
+Weaviate and returns a~ranked list of candidate chunks.  The \texttt{reranker}
+service applies a~cross-encoder model (\texttt{BAAI/bge-reranker-v2-m3}) to
 re-score the candidates and discard low-relevance passages before they reach
 the language model.  The \texttt{generation} service assembles the prompt,
 calls the LLM, streams tokens back to the orchestrator via SSE, and extracts
@@ -226,51 +227,51 @@ citation references from the completed response.
 
 \paragraph{Ingestion cluster.}
 Five services handle document ingestion asynchronously.  The
-\texttt{ingestion} service is the HTTP entry point; it writes a document
-record to MongoDB and publishes a \texttt{document.uploaded} message to
+\texttt{ingestion} service is the HTTP entry point; it writes a~document
+record to MongoDB and publishes a~\texttt{document.uploaded} message to
 RabbitMQ.  The \texttt{parser} service consumes that message and extracts
 raw text from the uploaded file using either \texttt{pypdf} for standard
 PDF documents or \texttt{docling} for more complex layouts.  The
 \texttt{chunking} service receives the extracted text and applies the
 strategy specified in the project settings.  The \texttt{embedding} service
-encodes each chunk into a dense vector using the configured provider.
+encodes each chunk into a~dense vector using the configured provider.
 Finally, the \texttt{indexing} service writes the vectors to Weaviate and
 updates the document status in MongoDB to \texttt{indexed}.
 
 \paragraph{Administration and evaluation.}
 The \texttt{admin} service provides authenticated endpoints for project
 management: creating and deleting projects, listing and deleting documents,
-and triggering re-indexation when a project's chunking or embedding settings
+and triggering re-indexation when a~project's chunking or embedding settings
 change.  The \texttt{eval} service operates entirely asynchronously: it
 subscribes to the \texttt{query.completed} exchange on RabbitMQ and, for
 every completed user query, computes RAGAS metrics (faithfulness, answer
-relevance, context recall, and answer correctness) plus a citation-precision
+relevance, context recall, and answer correctness) plus a~citation-precision
 score, by comparing the generated answer against the retrieved context.
 Faithfulness and citation precision need no gold answer and so can also run in
-production mode as a live quality signal; the remaining metrics require the
+production mode as a~live quality signal; the remaining metrics require the
 benchmark gold answers and are reported in \cref{cha:evaluation}.  Results are persisted in MongoDB's
-\texttt{eval\_results} collection and exposed through a REST endpoint so
+\texttt{eval\_results} collection and exposed through a~REST endpoint so
 that the evaluation scripts described in \cref{cha:evaluation} can
 retrieve them in bulk.
 
 The two persistent stores --- MongoDB and Weaviate --- are physically shared, but
-each collection has a single owning service that is the only one allowed to write
+each collection has a~single owning service that is the only one allowed to write
 to it.  Weaviate is written only by \texttt{indexing} and queried only by
 \texttt{retrieval}.  In MongoDB, \texttt{admin} owns the \texttt{projects}
 collection, \texttt{orchestrator} owns \texttt{conversations}, and \texttt{eval}
 owns \texttt{eval\_results}.  Other services may \emph{read} these collections
---- the orchestrator reads a project's settings, for instance --- but never write
-outside their own.  So when the orchestrator persists a conversation it is writing
+--- the orchestrator reads a~project's settings, for instance --- but never write
+outside their own.  So when the orchestrator persists a~conversation it is writing
 to its own collection, not reaching into another service's.  This ownership rule
-keeps the shared database from silently becoming a coupling point through which
+keeps the shared database from silently becoming a~coupling point through which
 one service's schema change breaks another.
 
 % ------------------------------------------------------------
 \section{Query Pipeline}
 \label{sec:query_pipeline}
 
-The query pipeline is the synchronous path that transforms a natural-language
-question into a streamed, citation-annotated answer.
+The query pipeline is the synchronous path that transforms a~natural-language
+question into a~streamed, citation-annotated answer.
 \cref{fig:seq_query} presents the end-to-end sequence.
 
 \begin{figure}[htbp]
@@ -281,14 +282,14 @@ question into a streamed, citation-annotated answer.
 \end{figure}
 
 \paragraph{Gateway and routing.}
-When the client submits a query, the browser sends a \texttt{POST} request
-to the \texttt{api-gateway} accompanied by a \texttt{Bearer} token in the
+When the client submits a~query, the browser sends a~\texttt{POST} request
+to the \texttt{api-gateway} accompanied by a~\texttt{Bearer} token in the
 \texttt{Authorization} header.  The gateway decodes and verifies the JWT
 without contacting the \texttt{auth} service --- verification is performed
 locally using the shared \texttt{JWT\_SECRET} --- and attaches the decoded
 user identity to the forwarded request.  If the token is absent or invalid,
 the gateway returns \texttt{401 Unauthorized} immediately and the request
-does not proceed.  A fresh \texttt{X-Trace-Id} value is generated (or
+does not proceed.  A~fresh \texttt{X-Trace-Id} value is generated (or
 propagated if already present) and appended to every outgoing request so
 that the full call tree can be correlated in the log stream.
 
@@ -298,58 +299,58 @@ to retrieve the project's current settings.  The \texttt{rag\_mode} field
 determines which pipeline variant is assembled.  In \texttt{vanilla} mode the
 query is passed directly to retrieval.  In \texttt{hyde} mode the
 orchestrator first calls the \texttt{query-processor} service, which asks the
-LLM to produce a hypothetical answer document~\cite{gao2022hyde}; that
+LLM to produce a~hypothetical answer document~\cite{gao2022hyde}; that
 synthetic document is then encoded and used as the retrieval query instead of
 --- or concatenated with --- the original question.  In \texttt{self\_reflection}
-mode the orchestrator drafts a full answer, scores its own sufficiency with a
-separate LLM call, and --- if the score falls below a fixed threshold ---
-appends a refinement instruction to the query and re-retrieves before drafting
-again, for at most two iterations.  This is a deliberately simplified,
+mode the orchestrator drafts a~full answer, scores its own sufficiency with a
+separate LLM call, and --- if the score falls below a~fixed threshold ---
+appends a~refinement instruction to the query and re-retrieves before drafting
+again, for at most two iterations.  This is a~deliberately simplified,
 prompt-based approximation of Self-RAG~\cite{asai2024selfrag}: it operates on the
 whole answer rather than emitting the per-segment reflection tokens
 (\cref{fig:selfrag}) that the original method requires, since those tokens
-depend on a fine-tuned decoder that is not used here.
+depend on a~fine-tuned decoder that is not used here.
 
-The three agentic modes each run a multi-stage exchange rather than a single
-retrieval pass.  In \texttt{multi\_agent} mode a planner agent decomposes the
+The three agentic modes each run a~multi-stage exchange rather than a~single
+retrieval pass.  In \texttt{multi\_agent} mode a~planner agent decomposes the
 question into sub-tasks; one executor agent per sub-task retrieves
-independently and returns a focused finding; and a QA agent synthesises those
+independently and returns a~focused finding; and a~QA agent synthesises those
 findings into the final answer.  No voting takes place --- the agents divide the
 work, they do not compete on it.  In \texttt{iterative\_multihop} mode the
-orchestrator runs a sequential chain of retrieval hops (two by default, three on
+orchestrator runs a~sequential chain of retrieval hops (two by default, three on
 the DDI corpus), each hop formulated from what the previous hops established, so
 that evidence accumulates along the chain; this is what distinguishes it from
 \texttt{multi\_agent}, whose sub-tasks are independent and could in principle run
 in parallel.  In \texttt{madam\_rag} mode two agents answer from deliberately
-opposing angles, each revises once after seeing the other's answer, and a judge
-agent synthesises the consensus, for a budget of roughly five LLM calls per query.
-Finally, \texttt{rare\_rag} does not implement a pipeline of its own: it triages
+opposing angles, each revises once after seeing the other's answer, and a~judge
+agent synthesises the consensus, for a~budget of roughly five LLM calls per query.
+Finally, \texttt{rare\_rag} does not implement a~pipeline of its own: it triages
 the query and delegates to one of the eight modes above, wrapping the result in
-set-wise evidence selection and a grounding check (\cref{cha:rare_rag}).
+set-wise evidence selection and a~grounding check (\cref{cha:rare_rag}).
 
 Because each mode is encapsulated behind the same pipeline interface, the
-orchestrator's branching logic reduces to a single factory call, keeping the
+orchestrator's branching logic reduces to a~single factory call, keeping the
 orchestrator itself independent of mode-specific implementation details.
-A mode can therefore be modified or added without touching the surrounding
+A~mode can therefore be modified or added without touching the surrounding
 services.
 
 \paragraph{Retrieval.}
 The \texttt{retrieval} service accepts the (possibly rewritten) query text
-and executes a \emph{hybrid search} against Weaviate, combining a sparse BM25
-term-matching score with a dense vector similarity score, weighted by the
+and executes a~\emph{hybrid search} against Weaviate, combining a~sparse BM25
+term-matching score with a~dense vector similarity score, weighted by the
 project's $\alpha$ parameter (default $0.5$).  The fusion is performed by
-Weaviate's native hybrid endpoint, so the service does not maintain a separate
+Weaviate's native hybrid endpoint, so the service does not maintain a~separate
 BM25 index; the exact fusion formula and the choice of $\alpha$ are covered in
 \cref{cha:implementation}.  The top-$k$ results (default $k = 20$) are filtered
-by \texttt{project\_id} using a Weaviate \texttt{where} filter, ensuring that a
-user can never retrieve chunks that belong to a different project.
+by \texttt{project\_id} using a~Weaviate \texttt{where} filter, ensuring that a
+user can never retrieve chunks that belong to a~different project.
 
-The query text is first converted to a dense vector by calling the
+The query text is first converted to a~dense vector by calling the
 \texttt{embedding} service using the same provider and model that was used
-during ingestion --- a consistency requirement enforced by reading the
+during ingestion --- a~consistency requirement enforced by reading the
 project's \texttt{embedding\_provider} setting from MongoDB before issuing
 the request.  Mismatches between ingestion-time and query-time embedding
-models are therefore impossible within a single project, though the
+models are therefore impossible within a~single project, though the
 per-project configurability means that different projects in the same cluster
 may use different embedding models.
 
@@ -357,7 +358,7 @@ may use different embedding models.
 After retrieval, the ranked list of candidate chunks is passed to the
 \texttt{reranker} service.  The reranker loads the
 \texttt{BAAI/bge-reranker-v2-m3} cross-encoder model, which jointly encodes
-each (query, passage) pair to produce a relevance score.  Unlike the
+each (query, passage) pair to produce a~relevance score.  Unlike the
 bi-encoder used during retrieval --- which embeds query and passage
 independently --- the cross-encoder is aware of the interaction between
 query tokens and passage tokens, leading to more accurate relevance scores
@@ -367,8 +368,8 @@ These $n$ passages constitute the \emph{context window} presented to the
 language model.
 
 \paragraph{Generation and streaming.}
-The \texttt{generation} service assembles a structured prompt consisting of
-a system preamble that instructs the model to act as a clinical decision
+The \texttt{generation} service assembles a~structured prompt consisting of
+a~system preamble that instructs the model to act as a~clinical decision
 support assistant, the reranked context passages with numeric citation keys,
 and the user's original question.  The prompt is submitted to the configured
 LLM provider using the provider's streaming API.  As tokens are received, the
@@ -381,9 +382,9 @@ additional buffering in the microservice chain.
 Once the full response has been assembled, the generation service runs a
 citation-extraction step: it identifies bracketed numeric references in the
 generated text and maps them to the corresponding chunk identifiers, building
-a \texttt{sources} list that is appended to the SSE stream as a final JSON
+a~\texttt{sources} list that is appended to the SSE stream as a~final JSON
 event.  The orchestrator persists the completed exchange --- user message,
-assistant message, and sources --- as a new entry in the conversation document
+assistant message, and sources --- as a~new entry in the conversation document
 in MongoDB.
 
 \paragraph{Post-query evaluation event.}
@@ -391,7 +392,7 @@ After persisting the conversation, the orchestrator publishes a
 \texttt{query.completed} message to the \texttt{medrag.queries} RabbitMQ
 exchange.  This message carries the conversation and message identifiers,
 the retrieved chunk texts, and the generated answer.  The \texttt{eval}
-service, which runs as a permanent RabbitMQ consumer, picks up this event
+service, which runs as a~permanent RabbitMQ consumer, picks up this event
 and computes RAGAS metrics asynchronously.  Because evaluation is decoupled
 from the query path, it imposes zero latency on the user and can be scaled
 or paused independently.
@@ -413,28 +414,28 @@ between services.
 \end{figure}
 
 \paragraph{Upload and deduplication.}
-The \texttt{ingestion} service exposes a \texttt{POST /documents/upload}
-endpoint that accepts a multipart form containing the file binary and the
+The \texttt{ingestion} service exposes a~\texttt{POST /documents/upload}
+endpoint that accepts a~multipart form containing the file binary and the
 target project identifier.  Before writing anything to storage, the service
-computes a SHA-256 hash of the file content and checks whether a document
+computes a~SHA-256 hash of the file content and checks whether a~document
 with that hash already exists in the \texttt{documents} collection for the
-same project.  If a match is found, the upload is rejected with
-\texttt{409 Conflict} and a reference to the existing document is returned,
+same project.  If a~match is found, the upload is rejected with
+\texttt{409 Conflict} and a~reference to the existing document is returned,
 preventing redundant computation in downstream stages.  If no match is found,
-a new document record is inserted with status \texttt{pending} and the file
+a~new document record is inserted with status \texttt{pending} and the file
 is written to shared storage.  The service then publishes a
 \texttt{document.uploaded} message to the \texttt{medrag.documents} topic
 exchange, carrying the document identifier, project settings, and storage path.
 
 \paragraph{RabbitMQ exchange topology.}
-The ingestion pipeline uses a single \emph{topic exchange} named
+The ingestion pipeline uses a~single \emph{topic exchange} named
 \texttt{medrag.documents}.  Four durable queues are bound to this exchange
 with routing keys \texttt{parse}, \texttt{chunk}, \texttt{embed}, and
 \texttt{index}.  Each stage of the pipeline binds to one queue, processes
-the message, and publishes to the next routing key.  Using a topic exchange
+the message, and publishes to the next routing key.  Using a~topic exchange
 rather than direct point-to-point connections means that additional
 processing stages --- for example, language detection or quality filtering ---
-can be introduced by binding a new queue and consumer to the exchange without
+can be introduced by binding a~new queue and consumer to the exchange without
 modifying existing services.
 
 \paragraph{Parsing.}
@@ -442,7 +443,7 @@ The \texttt{parser} service consumes from the \texttt{parse} queue.  For
 standard PDF documents it uses \texttt{pypdf}~\cite{pypdf}, which extracts
 text from the PDF content stream.  For documents with complex layouts
 (scanned pages, two-column academic papers, tables) it falls back to
-\texttt{docling}~\cite{docling2024}, which uses a layout analysis model to
+\texttt{docling}~\cite{docling2024}, which uses a~layout analysis model to
 preserve reading order.  The choice of parser is made heuristically based
 on file metadata; it can be overridden by an explicit \texttt{parser}
 field in the upload request.  The extracted plain text is embedded in the
@@ -450,15 +451,15 @@ outgoing \texttt{chunk} message.
 
 \paragraph{Chunking.}
 The \texttt{chunking} service applies one of three configurable strategies
-to the raw text, producing a list of overlapping text segments.  The
+to the raw text, producing a~list of overlapping text segments.  The
 \texttt{fixed\_512} strategy splits the text into windows of exactly 512
-tokens with a configurable overlap (default 64 tokens), using the tokenizer
+tokens with a~configurable overlap (default 64 tokens), using the tokenizer
 associated with the embedding model to count tokens rather than
 whitespace-delimited words.  The \texttt{recursive} strategy recursively
 splits on paragraph boundaries, then sentence boundaries, then words,
-targeting a maximum chunk length while trying to preserve complete sentences.
+targeting a~maximum chunk length while trying to preserve complete sentences.
 The \texttt{semantic} strategy encodes each sentence independently and then
-merges adjacent sentences whose cosine similarity exceeds a threshold,
+merges adjacent sentences whose cosine similarity exceeds a~threshold,
 producing variable-length chunks that respect semantic cohesion.  All three
 strategies store the chunk index and the strategy name alongside the text,
 enabling post-hoc comparisons within the same document corpus.
@@ -470,8 +471,8 @@ the \texttt{embed} message.
 \paragraph{Embedding.}
 The \texttt{embedding} service reads each chunk text from MongoDB, encodes
 it using the project's configured provider, and attaches the resulting
-vectors to the message payload.  The provider abstraction is a Python
-protocol with a single method \texttt{encode(texts: list[str]) -> list[list[float]]}.
+vectors to the message payload.  The provider abstraction is a~Python
+protocol with a~single method \texttt{encode(texts: list[str]) -> list[list[float]]}.
 The \texttt{local\_bge} implementation loads the
 \texttt{BAAI/bge-m3} model via \texttt{sentence-transformers} and runs
 inference locally (with MPS acceleration on Apple Silicon or CUDA on GPU
@@ -479,7 +480,7 @@ servers).  The \texttt{cohere} and \texttt{openai} implementations call
 the respective cloud APIs.  Because the provider is selected once per
 service startup from the \texttt{EMBEDDING\_PROVIDER} environment variable,
 the embedding service image is provider-agnostic; switching providers requires
-only an environment variable change and a service restart.
+only an environment variable change and a~service restart.
 
 \paragraph{Indexing.}
 The \texttt{indexing} service consumes the embedding output and writes each
@@ -491,9 +492,9 @@ values reflect commonly recommended defaults that balance index build time
 against query-time recall~\cite{malkov2018hnsw}.  One detail matters here:
 Weaviate is configured with \texttt{vectorizer: none}, meaning that it stores
 but does not compute vectors; all vectorisation is delegated to the
-\texttt{embedding} service.  After writing all vectors for a document, the indexing service
+\texttt{embedding} service.  After writing all vectors for a~document, the indexing service
 updates the document's status to \texttt{indexed} in MongoDB and publishes
-a \texttt{document.indexed} event that triggers a WebSocket notification
+a~\texttt{document.indexed} event that triggers a~WebSocket notification
 to any open admin console sessions.
 
 % ------------------------------------------------------------
@@ -506,22 +507,22 @@ and Weaviate for the vector index that powers semantic retrieval.
 
 \subsection{MongoDB Collections}
 
-MongoDB was chosen over a relational database for three reasons.
+MongoDB was chosen over a~relational database for three reasons.
 The schema of key documents --- particularly \texttt{projects.settings}
 and \texttt{conversations.messages} --- is intentionally variable; adding a
 new RAG mode or metric field requires no migration.
 The document model also maps naturally onto the JSON payloads exchanged
 between services, reducing serialisation overhead.
 And the horizontal scaling and replica set capabilities of MongoDB~7 provide
-a credible path to production deployment, even though the current prototype
-runs a single node.
+a~credible path to production deployment, even though the current prototype
+runs a~single node.
 
 \cref{tab:mongo_collections} summarises the six collections and their key fields.
 
 \begin{table}[htbp]
   \centering
   \caption[MongoDB collection schema summary.]{MongoDB collection schema summary. Field names are shown in
-    \texttt{monospace}; asterisked fields carry a unique index.}
+    \texttt{monospace}; asterisked fields carry a~unique index.}
   \label{tab:mongo_collections}
   \begin{tabularx}{\textwidth}{@{}lp{4.2cm}X@{}}
     \toprule
@@ -557,9 +558,9 @@ runs a single node.
         \texttt{text}, \texttt{chunk\_index}, \texttt{strategy},
         \texttt{metadata}
       & Stores the raw text of every chunk together with provenance
-        metadata. A compound index on (\texttt{project\_id},
+        metadata. A~compound index on (\texttt{project\_id},
         \texttt{document\_id}) supports bulk retrieval of all chunks
-        for a document during re-indexation. \\
+        for a~document during re-indexation. \\
     \addlinespace
     \texttt{conversations}
       & \texttt{\_id}, \texttt{project\_id}, \texttt{user\_id},
@@ -573,40 +574,40 @@ runs a single node.
       & \texttt{\_id}, \texttt{conversation\_id},
         \texttt{message\_id}, \texttt{metrics}, \texttt{created\_at}
       & Stores RAGAS evaluation output for each assistant turn.
-        \texttt{metrics} is a sub-document with fields
+        \texttt{metrics} is a~sub-document with fields
         \texttt{faithfulness}, \texttt{answer\_relevance},
         \texttt{context\_recall}, and \texttt{answer\_correctness}. \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-The collection design follows a principle of \emph{ownership by service}:
+The collection design follows a~principle of \emph{ownership by service}:
 each collection is written by exactly one service (for example, only the
 \texttt{indexing} service updates \texttt{documents.status} to
-\texttt{indexed}) and read by a small, fixed set of consumers.  Foreign
+\texttt{indexed}) and read by a~small, fixed set of consumers.  Foreign
 key relationships are expressed as \texttt{ObjectId} references rather
 than embedded documents, because the related entities (projects, documents,
 users) have independent lifecycles and are routinely fetched in isolation.
 
 \subsection{Weaviate Vector Index}
 
-Weaviate stores all chunk vectors in a single collection named
+Weaviate stores all chunk vectors in a~single collection named
 \texttt{MedRAGChunk}.  The collection carries six scalar properties that
-duplicate a subset of the MongoDB chunk record: \texttt{chunk\_id} (the
-MongoDB \texttt{\_id} as a string), \texttt{document\_id},
+duplicate a~subset of the MongoDB chunk record: \texttt{chunk\_id} (the
+MongoDB \texttt{\_id} as a~string), \texttt{document\_id},
 \texttt{project\_id}, \texttt{text}, \texttt{chunk\_index}, and
 \texttt{strategy}.  This denormalisation is deliberate: by embedding these
 fields directly in the Weaviate object, the \texttt{retrieval} service can
-return complete, self-contained chunk records from a single Weaviate query,
-without a subsequent MongoDB lookup that would add round-trip latency.
+return complete, self-contained chunk records from a~single Weaviate query,
+without a~subsequent MongoDB lookup that would add round-trip latency.
 
 The vector index is an HNSW graph with 16 bidirectional connections per node
-(\texttt{m=16}) and a construction-time neighbourhood exploration parameter
-of \texttt{efConstruction=64}.  These values produce a compact index whose
+(\texttt{m=16}) and a~construction-time neighbourhood exploration parameter
+of \texttt{efConstruction=64}.  These values produce a~compact index whose
 approximate-nearest-neighbour search offers high recall (typically above 95\%
 at \texttt{ef=128} query time) with sub-millisecond latency for corpora of
 up to several hundred thousand vectors~\cite{malkov2018hnsw}.  For the
-experimental datasets used in \cref{cha:evaluation} --- a few tens
+experimental datasets used in \cref{cha:evaluation} --- a~few tens
 of thousands of drug-interaction chunks --- the index operates well within
 these limits.
 
@@ -614,11 +615,11 @@ The \texttt{project\_id} filter applied to every query does double duty.
 Weaviate's \texttt{where} filter is evaluated at the index
 level before distance computation, so documents from other
 projects incur no scoring overhead --- and cannot leak into the result
-set, a property the security model in \cref{sec:security} depends on.
+set, a~property the security model in \cref{sec:security} depends on.
 
 \subsection{Rationale for the Hybrid Store Architecture}
 
-A natural question is why two separate data stores are needed at all.
+A~natural question is why two separate data stores are needed at all.
 Weaviate could, in principle, store the full chunk text and all metadata,
 making MongoDB redundant for the retrieval path.  Conversely, MongoDB's
 recent vector search extension (\texttt{\$vectorSearch}) could replace
@@ -626,7 +627,7 @@ Weaviate.  The decision to keep both stores reflects different optimisation
 targets: MongoDB is optimised for rich querying of structured metadata
 (aggregations, joins, partial updates, lifecycle state machines), while
 Weaviate is optimised for high-throughput approximate nearest-neighbour
-search with hardware-accelerated SIMD distance kernels and a purpose-built
+search with hardware-accelerated SIMD distance kernels and a~purpose-built
 HNSW index that outperforms MongoDB's vector search on corpora of this size.
 Keeping the stores separate also allows them to be scaled and backed up
 independently.
@@ -637,12 +638,12 @@ independently.
 
 Security in \medrag{} is implemented at three layers: network access control,
 authentication and authorisation, and data isolation.  Although the system
-is a research prototype rather than a production medical device, these
+is a~research prototype rather than a~production medical device, these
 measures are necessary to make the multi-user experimental setup credible and
 to prevent accidental data cross-contamination between projects.
 
 \paragraph{Network perimeter.}
-All fourteen containers communicate over a private Docker bridge network.
+All fourteen containers communicate over a~private Docker bridge network.
 Only the \texttt{api-gateway} port (8000) and the Next.js frontend port
 (3000) are published on the host interface.  Internal service ports are
 not exposed to the host, so an attacker with access to the host network
@@ -652,14 +653,14 @@ rule restricts inbound traffic to these two ports.
 
 \paragraph{Authentication.}
 Every request that enters the system through the \texttt{api-gateway}
-must carry a valid JWT in the \texttt{Authorization: Bearer} header.  The
+must carry a~valid JWT in the \texttt{Authorization: Bearer} header.  The
 only exception is the \texttt{POST /auth/register} and
 \texttt{POST /auth/login} endpoints, which are whitelisted at the gateway
 level to allow initial credential establishment.  JWTs are signed with
-HMAC-SHA256 using a secret read from the \texttt{JWT\_SECRET} environment
+HMAC-SHA256 using a~secret read from the \texttt{JWT\_SECRET} environment
 variable.  The default expiry is 1440 minutes (24 hours), configurable
 through \texttt{JWT\_EXPIRE\_MINUTES}.  The gateway validates the signature
-and expiry locally --- without a network call to the \texttt{auth} service ---
+and expiry locally --- without a~network call to the \texttt{auth} service ---
 by sharing the same \texttt{JWT\_SECRET}.  This design keeps the \texttt{auth}
 service off the hot path and ensures that authentication adds negligible
 latency.
@@ -668,20 +669,20 @@ The user record's \texttt{role} field is embedded in the JWT payload at
 issuance time.  The gateway reads this field and attaches it to the
 forwarded request as the \texttt{X-User-Role} header.  Services that
 implement role-based endpoints --- primarily \texttt{admin} --- inspect this
-header through a FastAPI dependency and return \texttt{403 Forbidden} if
+header through a~FastAPI dependency and return \texttt{403 Forbidden} if
 the role is insufficient, without issuing any additional database query.
 
 \paragraph{Password storage.}
 Passwords are hashed with \texttt{bcrypt} at cost factor 12 before storage.
 Bcrypt's adaptive work factor ensures that the time required to verify a
 password grows with hardware improvements, providing forward security against
-offline dictionary attacks on a leaked database dump.  The plaintext password
+offline dictionary attacks on a~leaked database dump.  The plaintext password
 is never written to any log, database, or message-queue payload.
 
 \paragraph{Data isolation.}
 Beyond authentication, the most important security property of \medrag{}
-is that a user must never be able to read documents or chunks that belong
-to a project they do not own or to which they have not been granted access.
+is that a~user must never be able to read documents or chunks that belong
+to a~project they do not own or to which they have not been granted access.
 This property is enforced at two levels.
 
 At the application level, the \texttt{orchestrator} verifies that the
@@ -697,17 +698,17 @@ At the data level, the \texttt{retrieval} service passes a
 \end{equation*}
 Because this filter is encoded inside the service and derived from the
 validated JWT payload --- never from user-supplied input --- it cannot be
-bypassed by a malicious query.  Even if an attacker could forge a valid
-project identifier for a project they do not own, the orchestrator-level
+bypassed by a~malicious query.  Even if an attacker could forge a~valid
+project identifier for a~project they do not own, the orchestrator-level
 ownership check would catch it first.  The combination of the two checks
-provides \emph{defence in depth}: neither layer alone is a single point
+provides \emph{defence in depth}: neither layer alone is a~single point
 of failure.
 
-MongoDB queries in all services include a \texttt{project\_id} condition
+MongoDB queries in all services include a~\texttt{project\_id} condition
 in the query filter for every collection that carries one
 (\texttt{documents}, \texttt{chunks}, \texttt{conversations},
-\texttt{eval\_results}).  This redundant filtering ensures that a bug in
-any one service that incorrectly assembles a Weaviate filter would not
+\texttt{eval\_results}).  This redundant filtering ensures that a~bug in
+any one service that incorrectly assembles a~Weaviate filter would not
 leak metadata through the MongoDB layer.
 
 \paragraph{Secrets management.}
@@ -723,9 +724,9 @@ without being visible in build logs.
 
 \paragraph{Transport security.}
 In the current prototype the internal Docker network uses unencrypted HTTP.
-For a production deployment, mutual TLS between services and HTTPS on the
+For a~production deployment, mutual TLS between services and HTTPS on the
 public endpoints would be required.  This is an explicit out-of-scope item:
-the system is designed for operation within a trusted research network,
+the system is designed for operation within a~trusted research network,
 and the threat model does not include an active man-in-the-middle adversary
 on the internal network.
 
@@ -735,7 +736,7 @@ on the internal network.
 
 The central design choice in \medrag{} is the \emph{strategy pattern} applied uniformly
 to chunking, embedding, and RAG mode selection: because all variant behaviour
-is expressed as a named string in a MongoDB document, the same running system
+is expressed as a~named string in a~MongoDB document, the same running system
 can participate in ablation experiments across all nine RAG architectures
 without any code deployment.  This property is central to the controlled
 evaluation in \cref{cha:evaluation}, where each RAG mode is benchmarked on

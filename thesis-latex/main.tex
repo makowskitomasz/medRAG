@@ -122,7 +122,7 @@
 \author{Tomasz Makowski}
 \shortauthor{T. Makowski}
 
-\titlePL{Retrieval-Augmented Generation w zastosowaniu do poprawy jakości dużych modeli językowych: Analiza technologiczna i projekt eksperymentalnego systemu doradczego}
+\titlePL{Technologia RAG dla poprawy funkcjonowania dużych modeli językowych. Analiza technologii, narzędzi, oraz projekt i implementacja eksperymentalnego systemu doradczego}
 \titleEN{Retrieval-Augmented Generation for Improving Large Language Models: Technology Analysis and Design of an Experimental Advisory System}
 
 \shorttitlePL{RAG dla LLM: Analiza technologiczna i projekt systemu doradczego}
@@ -143,7 +143,7 @@
 \facultyEN{Faculty of Electrical Engineering, Automatics, Computer Science and Biomedical Engineering}
 
 \acknowledgements{%
-  I would like to thank ...
+  I~would like to thank ...
 }
 
 \setlength{\cftsecnumwidth}{10mm}
@@ -155,36 +155,29 @@
 \makeatletter
 \renewcommand{\titlepages}{%
 \newpage \titlepage
+\thispagestyle{empty}
 
 \begin{center}
+\includegraphics[width=\textwidth]{logo_AGH.jpg}\\
+{\fontsize{12}{15}\selectfont\sffamily WYDZIAŁ ELEKTROTECHNIKI, AUTOMATYKI, INFORMATYKI I~INŻYNIERII\\ BIOMEDYCZNEJ}\\[22mm]
+%% ======================================================
+% {\fontsize{12}{15}\selectfont\sffamily\bfseries KATEDRA INFORMATYKI STOSOWANEJ}\\[20mm]
+%% ======================================================
+{\sffamily\Huge Praca dyplomowa}\\[16mm]
+%% ======================================================
+{\sffamily\fontsize{17.28}{21}\selectfont \@titleEN\\[2mm]}
+{\sffamily\fontsize{14.4}{18}\selectfont \@titlePL\\[14mm]}
 
-{\sffamily{\Large{\bfseries{\textsc AGH\\[2mm]
-University of Science and Technology in Krakow}}}
-
-\vspace*{1mm}\rule{\textwidth}{1mm}\vspace*{1mm}
-
-{\large \@facultyEN}}\\\vspace*{2mm}
-{\large\textsc{\@departmentEN}}\vspace*{1cm}
-
-\ifpdflatex\includegraphics[scale=0.3]{agh}
-\else\includegraphics[scale=0.7]{agh}
-\fi
-\vspace*{1cm}
-
-{\huge\scshape \@thesistypeEN}\\\vspace*{2cm}
-
-{\LARGE\scshape \@author}\\\vspace*{2cm}
-
-{\LARGE{\bfseries\scshape \@titleEN}}\\\vspace*{3cm}
-
-\begin{flushright}
-\begin{minipage}[!h]{6cm}
-\large{\scshape Supervisor:}\\ \@supervisorEN
-\end{minipage}
-\end{flushright}
-
-\vfill{\Large Krakow \@date}
-
+\end{center}
+{\sffamily\fontsize{12}{15}\selectfont
+\begin{tabular}{ll}
+Autor: & \@author\\
+Kierunek studiów: & Informatyka i Systemy Inteligentne\\
+Opiekun pracy: & \@supervisorPL\\
+\end{tabular}
+}\\[10mm]
+\begin{center}
+{\sffamily\fontsize{12}{15}\selectfont Kraków, \@date}
 \end{center}
 
 \clearpage \titlepage
@@ -206,7 +199,7 @@ University of Science and Technology in Krakow}}}
 % ---- Abstract ----------------------------------------------
 \begin{abstract}
 Large language models have made it genuinely possible to build useful question-answering
-and clinical decision-support tools --- something that seemed out of reach just a few
+and clinical decision-support tools --- something that seemed out of reach just a~few
 years ago.
 Getting these systems to actually be trustworthy, however, is considerably harder than
 it first appears.
@@ -222,16 +215,16 @@ Eight families of RAG architectures are surveyed, ranging from the basic
 retrieve-then-generate pipeline all the way to Self-RAG, Corrective RAG, and
 multi-agent debate systems.
 The thesis also introduces RARE-RAG (\textit{Risk-Aware Routed Evidence-graph RAG}),
-a novel architecture that classifies query complexity before deciding which pipeline
+a~novel architecture that classifies query complexity before deciding which pipeline
 to run, retrieves evidence using hybrid BM25-plus-vector search, picks the most
 complementary set of passages rather than just the top-ranked ones, and verifies
-grounding before returning a response --- or explicitly declines to answer when the
+grounding before returning a~response --- or explicitly declines to answer when the
 evidence is too thin.
 
 The nine architectures were evaluated on two benchmarks --- HotpotQA
-($9 \times 1{,}000$ question--answer pairs) and a purpose-built DDI benchmark
+($9 \times 1{,}000$ question--answer pairs) and a~purpose-built DDI benchmark
 ($9 \times 100$ queries across five clinical difficulty levels) --- with every
-comparison made as a paired, per-question contrast against a vanilla baseline and
+comparison made as a~paired, per-question contrast against a~vanilla baseline and
 tested for statistical significance.
 The central finding is that the benefit of architectural complexity scales with
 how hard the question is, and that it shows up in grounding rather than in
@@ -241,7 +234,7 @@ better on the hardest clinical questions, where Multi-Agent and Query Rewriting
 each improve faithfulness by roughly 18 points over the baseline.
 No architecture, however, made the system measurably more likely to be
 \emph{correct}.
-RARE-RAG is reported as a partial negative result: its complexity router is
+RARE-RAG is reported as a~partial negative result: its complexity router is
 supported by the difficulty-scaling finding, but its set-wise selection prunes
 evidence too aggressively on multi-drug questions, and it does not beat the vanilla
 baseline on either benchmark.
