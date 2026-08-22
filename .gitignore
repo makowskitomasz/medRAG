@@ -22,6 +22,7 @@ uv.lock   # keep this — do NOT ignore uv.lock
 node_modules/
 .next/
 out/
+*.tsbuildinfo
 frontend/.env
 frontend/.env.*
 !frontend/.env.example
@@ -48,6 +49,7 @@ tmp/uploads/
 # ignored directory, so a negation only works for a file sitting directly in it
 # (results/.gitkeep works; a nested docs/adr/.gitkeep could not be un-ignored).
 data/*
+scripts/data/
 results/*
 !results/.gitkeep
 docs/*
